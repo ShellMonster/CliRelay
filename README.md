@@ -144,18 +144,30 @@ CliRelay/
 └── codeProxy/       # 前端管理台（React + TypeScript）
 ```
 
-## 开发建议
+## 部署与开发
 
-### 后端
+### 后端使用 Docker 启动
 
 ```bash
 cd CliRelay
-go run ./cmd/cli-proxy-api
+cp config.example.yaml config.yaml
+docker compose up -d
 ```
 
-或按项目内 `docker-compose.yml` / Docker 方式启动。
+如在国内网络环境下需要镜像加速，可使用：
 
-### 前端
+```bash
+cd CliRelay
+cp .env.china-mirror .env
+cp config.example.yaml config.yaml
+docker compose up -d
+```
+
+后端默认管理接口地址：
+
+- `http://localhost:8317/v0/management`
+
+### 前端本地开发使用 Bun
 
 ```bash
 cd codeProxy
@@ -163,10 +175,9 @@ bun install
 bun run dev
 ```
 
-默认开发访问地址通常为：
+前端默认开发访问地址：
 
-- 前端管理台：`http://localhost:5273`
-- 后端管理接口：`http://localhost:8317/v0/management`
+- `http://localhost:5273`
 
 ## 说明
 
