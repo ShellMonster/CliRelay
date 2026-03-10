@@ -42,6 +42,8 @@ import {
   type QuotaState,
 } from "@/modules/quota/quota-helpers";
 
+const QUOTA_CACHE_TTL_MS = 5 * 60 * 1000;
+
 const resolveAntigravityProjectId = async (file: AuthFileItem): Promise<string> => {
   try {
     const text = await authFilesApi.downloadText(file.name);
@@ -266,6 +268,11 @@ export function QuotaPage() {
     return { ag, cx, gm, kr };
   }, [files]);
 
+  const isQuotaStateFresh = useCallback((state?: QuotaState) => {
+    if (!state?.updatedAt) return false;
+    return Date.now() - state.updatedAt < QUOTA_CACHE_TTL_MS;
+  }, []);
+
   const refreshOne = useCallback(
     async (type: "antigravity" | "codex" | "gemini-cli" | "kiro", file: AuthFileItem) => {
       const name = file.name;
@@ -318,6 +325,49 @@ export function QuotaPage() {
       });
     });
   }, [grouped, notify, refreshOne, startTransition]);
+
+  useEffect(() => {
+    if (loadingFiles) return;
+
+    const tasks: Promise<void>[] = [];
+
+    grouped.ag.forEach((file) => {
+      if (!isQuotaStateFresh(antigravity[file.name])) {
+        tasks.push(refreshOne("antigravity", file));
+      }
+    });
+    grouped.cx.forEach((file) => {
+      if (!isQuotaStateFresh(codex[file.name])) {
+        tasks.push(refreshOne("codex", file));
+      }
+    });
+    grouped.gm.forEach((file) => {
+      if (!isQuotaStateFresh(geminiCli[file.name])) {
+        tasks.push(refreshOne("gemini-cli", file));
+      }
+    });
+    grouped.kr.forEach((file) => {
+      if (!isQuotaStateFresh(kiro[file.name])) {
+        tasks.push(refreshOne("kiro", file));
+      }
+    });
+
+    if (tasks.length === 0) return;
+
+    startTransition(() => {
+      void Promise.allSettled(tasks);
+    });
+  }, [
+    antigravity,
+    codex,
+    geminiCli,
+    grouped,
+    isQuotaStateFresh,
+    kiro,
+    loadingFiles,
+    refreshOne,
+    startTransition,
+  ]);
 
   const renderSection = (
     title: string,
