@@ -1,0 +1,229 @@
+package management
+
+import (
+	"net/http"
+	"strconv"
+	"strings"
+
+	"github.com/gin-gonic/gin"
+	"github.com/router-for-me/CLIProxyAPI/v6/internal/usage"
+)
+
+// GetUsageLogs returns paginated, filterable request log entries from SQLite.
+// It enriches each log item with resolved api_key_name and channel_name
+// from the in-memory config, eliminating the need for multiple frontend API calls.
+func (h *Handler) GetUsageLogs(c *gin.Context) {
+	params := usage.LogQueryParams{
+		Page:   intQueryDefault(c, "page", 1),
+		Size:   intQueryDefault(c, "size", 50),
+		Days:   intQueryDefault(c, "days", 7),
+		APIKey: strings.TrimSpace(c.Query("api_key")),
+		Model:  strings.TrimSpace(c.Query("model")),
+		Status: strings.TrimSpace(c.Query("status")),
+	}
+
+	result, err := usage.QueryLogs(params)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if result.Items == nil {
+		result.Items = []usage.LogRow{}
+	}
+
+	filters, err := usage.QueryFilters(params.Days)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if filters.APIKeys == nil {
+		filters.APIKeys = []string{}
+	}
+	if filters.Models == nil {
+		filters.Models = []string{}
+	}
+	if filters.APIKeyNames == nil {
+		filters.APIKeyNames = map[string]string{}
+	}
+
+	stats, err := usage.QueryStats(params)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Build name maps from config
+	keyNameMap, channelNameMap := h.buildNameMaps()
+
+	// Enrich log items with resolved names
+	for i := range result.Items {
+		item := &result.Items[i]
+		if name, ok := keyNameMap[item.APIKey]; ok {
+			item.APIKeyName = name
+		}
+		// Fill in channel_name from config if not already set in the log
+		if item.ChannelName == "" {
+			if name, ok := channelNameMap[item.Source]; ok {
+				item.ChannelName = name
+			}
+		}
+	}
+
+	// Enrich filter options with key names
+	filters.APIKeyNames = make(map[string]string, len(filters.APIKeys))
+	for _, key := range filters.APIKeys {
+		if name, ok := keyNameMap[key]; ok {
+			filters.APIKeyNames[key] = name
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"items":   result.Items,
+		"total":   result.Total,
+		"page":    result.Page,
+		"size":    result.Size,
+		"filters": filters,
+		"stats":   stats,
+	})
+}
+
+// buildNameMaps builds two maps from the current config:
+//  1. keyNameMap:     user-facing api_key → display name (from api-key-entries)
+//  2. channelNameMap: provider_api_key → channel name (from provider config Name fields)
+func (h *Handler) buildNameMaps() (keyNameMap, channelNameMap map[string]string) {
+	keyNameMap = make(map[string]string)
+	channelNameMap = make(map[string]string)
+
+	cfg := h.cfg
+	if cfg == nil {
+		return
+	}
+
+	// User-facing API key names from api-key-entries
+	for _, entry := range cfg.APIKeyEntries {
+		if entry.Key != "" && entry.Name != "" {
+			keyNameMap[entry.Key] = entry.Name
+		}
+	}
+
+	// Channel names from provider configs (provider apiKey → channel name)
+	for _, k := range cfg.GeminiKey {
+		if k.APIKey != "" && k.Name != "" {
+			channelNameMap[k.APIKey] = k.Name
+		}
+	}
+	for _, k := range cfg.ClaudeKey {
+		if k.APIKey != "" && k.Name != "" {
+			channelNameMap[k.APIKey] = k.Name
+		}
+	}
+	for _, k := range cfg.CodexKey {
+		if k.APIKey != "" && k.Name != "" {
+			channelNameMap[k.APIKey] = k.Name
+		}
+	}
+	// Vertex keys: no Name field, skip
+
+	// OpenAI compatibility: provider name applies to all its API keys
+	for _, provider := range cfg.OpenAICompatibility {
+		if provider.Name == "" {
+			continue
+		}
+		for _, entry := range provider.APIKeyEntries {
+			if entry.APIKey != "" {
+				channelNameMap[entry.APIKey] = provider.Name
+			}
+		}
+	}
+
+	return
+}
+
+func intQueryDefault(c *gin.Context, key string, def int) int {
+	v := strings.TrimSpace(c.Query(key))
+	if v == "" {
+		return def
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 1 {
+		return def
+	}
+	return n
+}
+
+// GetLogContent returns the stored request/response content for a single log entry.
+func (h *Handler) GetLogContent(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseInt(strings.TrimSpace(idStr), 10, 64)
+	if err != nil || id < 1 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid log id"})
+		return
+	}
+
+	result, err := usage.QueryLogContent(id)
+	if err != nil {
+		if strings.Contains(err.Error(), "no rows") {
+			c.JSON(http.StatusNotFound, gin.H{"error": "log entry not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, result)
+}
+
+// GetPublicUsageLogs returns paginated request log entries for a specific API key.
+// This is a public endpoint (no management key required) that strips sensitive
+// fields (source/auth_index/channel_name) before returning.
+func (h *Handler) GetPublicUsageLogs(c *gin.Context) {
+	apiKey := strings.TrimSpace(c.Query("api_key"))
+	if apiKey == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "api_key parameter is required"})
+		return
+	}
+
+	params := usage.LogQueryParams{
+		Page:   intQueryDefault(c, "page", 1),
+		Size:   intQueryDefault(c, "size", 50),
+		Days:   intQueryDefault(c, "days", 7),
+		APIKey: apiKey,
+		Model:  strings.TrimSpace(c.Query("model")),
+		Status: strings.TrimSpace(c.Query("status")),
+	}
+
+	result, err := usage.QueryLogs(params)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	stats, err := usage.QueryStats(params)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// SECURITY: Strip sensitive fields from public response
+	for i := range result.Items {
+		result.Items[i].Source = ""
+		result.Items[i].AuthIndex = ""
+		result.Items[i].ChannelName = ""
+		result.Items[i].APIKey = ""
+		result.Items[i].APIKeyName = ""
+	}
+
+	// Model filter options (scoped to this api_key via QueryFilters with key filter)
+	models, _ := usage.QueryModelsForKey(apiKey, params.Days)
+
+	c.JSON(http.StatusOK, gin.H{
+		"items": result.Items,
+		"total": result.Total,
+		"page":  result.Page,
+		"size":  result.Size,
+		"stats": stats,
+		"filters": gin.H{
+			"models": models,
+		},
+	})
+}
