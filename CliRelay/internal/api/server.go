@@ -205,6 +205,9 @@ func NewServer(cfg *config.Config, authManager *auth.Manager, accessManager *sdk
 		gin.SetMode(gin.ReleaseMode)
 	}
 
+	usage.SetStatisticsEnabled(cfg.UsageStatisticsEnabled)
+	usage.SetLogContentEnabled(cfg.UsageLogContentEnabled)
+
 	// Create gin engine
 	engine := gin.New()
 	if optionState.engineConfigurator != nil {
@@ -535,6 +538,9 @@ func (s *Server) registerManagementRoutes() {
 		mgmt.GET("/usage-statistics-enabled", s.mgmt.GetUsageStatisticsEnabled)
 		mgmt.PUT("/usage-statistics-enabled", s.mgmt.PutUsageStatisticsEnabled)
 		mgmt.PATCH("/usage-statistics-enabled", s.mgmt.PutUsageStatisticsEnabled)
+		mgmt.GET("/usage-log-content-enabled", s.mgmt.GetUsageLogContentEnabled)
+		mgmt.PUT("/usage-log-content-enabled", s.mgmt.PutUsageLogContentEnabled)
+		mgmt.PATCH("/usage-log-content-enabled", s.mgmt.PutUsageLogContentEnabled)
 
 		mgmt.GET("/proxy-url", s.mgmt.GetProxyURL)
 		mgmt.PUT("/proxy-url", s.mgmt.PutProxyURL)
@@ -995,6 +1001,9 @@ func (s *Server) UpdateClients(cfg *config.Config) {
 
 	if oldCfg == nil || oldCfg.UsageStatisticsEnabled != cfg.UsageStatisticsEnabled {
 		usage.SetStatisticsEnabled(cfg.UsageStatisticsEnabled)
+	}
+	if oldCfg == nil || oldCfg.UsageLogContentEnabled != cfg.UsageLogContentEnabled {
+		usage.SetLogContentEnabled(cfg.UsageLogContentEnabled)
 	}
 
 	if s.requestLogger != nil && (oldCfg == nil || oldCfg.ErrorLogsMaxFiles != cfg.ErrorLogsMaxFiles) {

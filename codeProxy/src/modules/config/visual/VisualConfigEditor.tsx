@@ -987,6 +987,13 @@ export function VisualConfigEditor({
               onCheckedChange={(next) => update({ usageStatisticsEnabled: next })}
               disabled={disabled}
             />
+            <ToggleSwitch
+              label="存储请求/响应内容"
+              description="usage-log-content-enabled"
+              checked={values.usageLogContentEnabled}
+              onCheckedChange={(next) => update({ usageLogContentEnabled: next })}
+              disabled={disabled}
+            />
           </div>
         </Card>
 

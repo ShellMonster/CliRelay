@@ -152,6 +152,7 @@
     "quota_switch_preview": "Switch to Preview Model",
     "usage_statistics_title": "Usage Statistics",
     "usage_statistics_enable": "Enable usage statistics",
+    "usage_log_content_enable": "Store request/response content",
     "logging_title": "Logging",
     "logging_to_file_enable": "Enable logging to file",
     "logs_max_total_size_title": "Log Size Limit",

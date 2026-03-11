@@ -151,6 +151,7 @@
     "quota_switch_preview": "Переключаться на preview-модель",
     "usage_statistics_title": "Статистика использования",
     "usage_statistics_enable": "Включить статистику использования",
+    "usage_log_content_enable": "Сохранять содержимое запроса/ответа",
     "logging_title": "Журналирование",
     "logging_to_file_enable": "Включить журналирование в файл",
     "logs_max_total_size_title": "Лимит размера журналов",

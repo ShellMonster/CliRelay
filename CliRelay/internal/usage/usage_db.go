@@ -1443,10 +1443,12 @@ func QueryModelsForKey(apiKey string, days int) ([]string, error) {
 
 // LogContentResult holds the content detail for a single log entry.
 type LogContentResult struct {
-	ID            int64  `json:"id"`
-	InputContent  string `json:"input_content"`
-	OutputContent string `json:"output_content"`
-	Model         string `json:"model"`
+	ID              int64  `json:"id"`
+	InputContent    string `json:"input_content"`
+	OutputContent   string `json:"output_content"`
+	Model           string `json:"model"`
+	HasContent      bool   `json:"has_content"`
+	ContentDisabled bool   `json:"content_disabled"`
 }
 
 // QueryLogContent retrieves the stored request/response content for a single log entry.
@@ -1463,6 +1465,7 @@ func QueryLogContent(id int64) (LogContentResult, error) {
 	if err != nil {
 		return LogContentResult{}, fmt.Errorf("usage: query log content: %w", err)
 	}
+	result.HasContent = result.InputContent != "" || result.OutputContent != ""
 	return result, nil
 }
 

@@ -169,6 +169,7 @@ func (h *Handler) GetLogContent(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	result.ContentDisabled = !usage.LogContentEnabled()
 
 	c.JSON(http.StatusOK, result)
 }

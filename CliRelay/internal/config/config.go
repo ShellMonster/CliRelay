@@ -568,6 +568,7 @@ func LoadConfigOptional(configFile string, optional bool) (*Config, error) {
 	cfg.LogsMaxTotalSizeMB = 0
 	cfg.ErrorLogsMaxFiles = 10
 	cfg.UsageStatisticsEnabled = false
+	cfg.UsageLogContentEnabled = true
 	cfg.DisableCooling = false
 	cfg.Pprof.Enable = false
 	cfg.Pprof.Addr = DefaultPprofAddr

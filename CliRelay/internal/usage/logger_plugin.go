@@ -21,6 +21,7 @@ import (
 
 var (
 	statisticsEnabled atomic.Bool
+	logContentEnabled atomic.Bool
 	redisClient       *redis.Client
 	redisCtx          = context.Background()
 	redisCancel       context.CancelFunc
@@ -31,6 +32,7 @@ const redisUsageKey = "cliproxy:usage_stats_snapshot"
 
 func init() {
 	statisticsEnabled.Store(true)
+	logContentEnabled.Store(true)
 	coreusage.RegisterPlugin(NewLoggerPlugin())
 }
 
@@ -67,6 +69,12 @@ func SetStatisticsEnabled(enabled bool) { statisticsEnabled.Store(enabled) }
 
 // StatisticsEnabled reports the current recording state.
 func StatisticsEnabled() bool { return statisticsEnabled.Load() }
+
+// SetLogContentEnabled toggles whether request/response content is persisted to SQLite.
+func SetLogContentEnabled(enabled bool) { logContentEnabled.Store(enabled) }
+
+// LogContentEnabled reports whether request/response content persistence is enabled.
+func LogContentEnabled() bool { return logContentEnabled.Load() }
 
 // InitRedis initializes the Redis client for usage persistence and starts the sync loop.
 func InitRedis(cfg config.RedisConfig) {
@@ -351,9 +359,15 @@ func (s *RequestStatistics) Record(ctx context.Context, record coreusage.Record)
 	s.tokensByHour[hourKey] += totalTokens
 
 	// Write to SQLite (non-blocking, outside lock)
+	inputContent := record.InputContent
+	outputContent := record.OutputContent
+	if !LogContentEnabled() {
+		inputContent = ""
+		outputContent = ""
+	}
 	go InsertLog(statsKey, modelName, record.Source, record.ChannelName,
 		record.AuthIndex, failed, timestamp, record.LatencyMs, detail,
-		record.InputContent, record.OutputContent)
+		inputContent, outputContent)
 }
 
 func (s *RequestStatistics) updateAPIStats(stats *apiStats, model string, detail RequestDetail) {

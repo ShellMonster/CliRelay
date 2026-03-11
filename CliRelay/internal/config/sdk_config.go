@@ -17,6 +17,10 @@ type SDKConfig struct {
 	// RequestLog enables or disables detailed request logging functionality.
 	RequestLog bool `yaml:"request-log" json:"request-log"`
 
+	// UsageLogContentEnabled controls whether detailed request/response content
+	// is persisted to SQLite usage logs.
+	UsageLogContentEnabled bool `yaml:"usage-log-content-enabled" json:"usage-log-content-enabled"`
+
 	// APIKeys is a list of keys for authenticating clients to this proxy server.
 	APIKeys []string `yaml:"api-keys" json:"api-keys"`
 

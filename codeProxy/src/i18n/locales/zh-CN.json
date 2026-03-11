@@ -152,6 +152,7 @@
     "quota_switch_preview": "切换到预览模型",
     "usage_statistics_title": "使用统计",
     "usage_statistics_enable": "启用使用统计",
+    "usage_log_content_enable": "存储请求/响应内容",
     "logging_title": "日志记录",
     "logging_to_file_enable": "启用日志记录到文件",
     "logs_max_total_size_title": "日志容量限制",

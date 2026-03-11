@@ -19,6 +19,8 @@ export const configApi = {
     apiClient.put("/quota-exceeded/switch-preview-model", { value: enabled }),
   updateUsageStatistics: (enabled: boolean) =>
     apiClient.put("/usage-statistics-enabled", { value: enabled }),
+  updateUsageLogContent: (enabled: boolean) =>
+    apiClient.put("/usage-log-content-enabled", { value: enabled }),
   updateRequestLog: (enabled: boolean) => apiClient.put("/request-log", { value: enabled }),
   updateLoggingToFile: (enabled: boolean) => apiClient.put("/logging-to-file", { value: enabled }),
   getLogsMaxTotalSizeMb: async (): Promise<number> => {

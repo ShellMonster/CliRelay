@@ -107,6 +107,7 @@ function RuntimeConfigPanel() {
 
   const [debugEnabled, setDebugEnabled] = useState(false);
   const [usageStatisticsEnabled, setUsageStatisticsEnabled] = useState(false);
+  const [usageLogContentEnabled, setUsageLogContentEnabled] = useState(false);
   const [requestLogEnabled, setRequestLogEnabled] = useState(false);
   const [loggingToFileEnabled, setLoggingToFileEnabled] = useState(false);
   const [wsAuthEnabled, setWsAuthEnabled] = useState(false);
@@ -148,6 +149,9 @@ function RuntimeConfigPanel() {
       setUsageStatisticsEnabled(
         readBool(record, "usage-statistics-enabled", "usageStatisticsEnabled"),
       );
+      setUsageLogContentEnabled(
+        readBool(record, "usage-log-content-enabled", "usageLogContentEnabled"),
+      );
       setRequestLogEnabled(readBool(record, "request-log", "requestLog"));
       setLoggingToFileEnabled(readBool(record, "logging-to-file", "loggingToFile"));
       setWsAuthEnabled(readBool(record, "ws-auth", "wsAuth"));
@@ -186,6 +190,7 @@ function RuntimeConfigPanel() {
       try {
         if (key === "debug") await configApi.updateDebug(next);
         if (key === "usage") await configApi.updateUsageStatistics(next);
+        if (key === "usageLogContent") await configApi.updateUsageLogContent(next);
         if (key === "requestLog") await configApi.updateRequestLog(next);
         if (key === "loggingToFile") await configApi.updateLoggingToFile(next);
         if (key === "wsAuth") await configApi.updateWsAuth(next);
@@ -315,6 +320,17 @@ function RuntimeConfigPanel() {
                 setUsageStatisticsEnabled(next);
                 void updateToggle("usage", next).catch(() =>
                   setUsageStatisticsEnabled((prev) => !prev),
+                );
+              }}
+            />
+            <ToggleSwitch
+              label="存储请求/响应内容"
+              description="开启后会将请求与响应正文写入 SQLite，用于日志详情查看。"
+              checked={usageLogContentEnabled}
+              onCheckedChange={(next) => {
+                setUsageLogContentEnabled(next);
+                void updateToggle("usageLogContent", next).catch(() =>
+                  setUsageLogContentEnabled((prev) => !prev),
                 );
               }}
             />

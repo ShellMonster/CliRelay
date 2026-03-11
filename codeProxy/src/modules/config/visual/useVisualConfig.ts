@@ -312,6 +312,9 @@ export function useVisualConfig() {
         loggingToFile: Boolean(parsed["logging-to-file"]),
         logsMaxTotalSizeMb: String(parsed["logs-max-total-size-mb"] ?? ""),
         usageStatisticsEnabled: Boolean(parsed["usage-statistics-enabled"]),
+        usageLogContentEnabled: hasOwn(parsed, "usage-log-content-enabled")
+          ? Boolean(parsed["usage-log-content-enabled"])
+          : true,
 
         proxyUrl: typeof parsed["proxy-url"] === "string" ? parsed["proxy-url"] : "",
         forceModelPrefix: Boolean(parsed["force-model-prefix"]),
@@ -400,6 +403,7 @@ export function useVisualConfig() {
         setBoolean(parsed, "logging-to-file", values.loggingToFile);
         setIntFromString(parsed, "logs-max-total-size-mb", values.logsMaxTotalSizeMb);
         setBoolean(parsed, "usage-statistics-enabled", values.usageStatisticsEnabled);
+        setBoolean(parsed, "usage-log-content-enabled", values.usageLogContentEnabled);
 
         setString(parsed, "proxy-url", values.proxyUrl);
         setBoolean(parsed, "force-model-prefix", values.forceModelPrefix);
