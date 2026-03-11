@@ -288,7 +288,6 @@ const buildCodexQuotaWindows = (payload: CodexUsagePayload, t: TFunction): Codex
       }
     }
 
-    // For legacy payloads without window duration, fallback to primary/secondary ordering.
     if (allowOrderFallback) {
       if (!fiveHourWindow) {
         fiveHourWindow = primaryWindow && primaryWindow !== weeklyWindow ? primaryWindow : null;

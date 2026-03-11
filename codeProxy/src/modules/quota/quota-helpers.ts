@@ -618,27 +618,34 @@ const formatCodexResetLabel = (window?: CodexUsageWindow | null): string => {
 };
 
 export const buildCodexItems = (payload: CodexUsagePayload): QuotaItem[] => {
-  const FIVE_HOUR_SECONDS = 18000;
-  const WEEK_SECONDS = 604800;
+  const getWindowSeconds = (window?: CodexUsageWindow | null) =>
+    window ? normalizeNumberValue(window.limit_window_seconds ?? window.limitWindowSeconds) : null;
 
-  const pickWindows = (limitInfo?: CodexRateLimitInfo | null) => {
-    const rawWindows = [
-      limitInfo?.primary_window ?? limitInfo?.primaryWindow ?? null,
-      limitInfo?.secondary_window ?? limitInfo?.secondaryWindow ?? null,
-    ];
-    let fiveHour: CodexUsageWindow | null = null;
-    let weekly: CodexUsageWindow | null = null;
-
-    const getSeconds = (w?: CodexUsageWindow | null) =>
-      w ? normalizeNumberValue(w.limit_window_seconds ?? w.limitWindowSeconds) : null;
-
-    for (const window of rawWindows) {
-      if (!window) continue;
-      const seconds = getSeconds(window);
-      if (seconds === FIVE_HOUR_SECONDS && !fiveHour) fiveHour = window;
-      else if (seconds === WEEK_SECONDS && !weekly) weekly = window;
+  const formatDurationLabel = (secondsValue: number | null | undefined): string => {
+    if (secondsValue === null || secondsValue === undefined || !Number.isFinite(secondsValue)) {
+      return "窗口";
     }
-    return { fiveHour, weekly };
+
+    const seconds = Math.max(0, Math.round(secondsValue));
+    const minute = 60;
+    const hour = 3600;
+    const day = 86400;
+    const approxWeek = 7 * day;
+
+    if (Math.abs(seconds - approxWeek) <= 3600) return "7天";
+    if (Math.abs(seconds - 5 * hour) <= 300) return "5小时";
+    if (seconds % day === 0) return `${seconds / day}天`;
+    if (seconds % hour === 0) return `${seconds / hour}小时`;
+    if (seconds % minute === 0) return `${seconds / minute}分钟`;
+
+    const days = Math.floor(seconds / day);
+    const hours = Math.floor((seconds % day) / hour);
+    const minutes = Math.floor((seconds % hour) / minute);
+    const parts: string[] = [];
+    if (days > 0) parts.push(`${days}天`);
+    if (hours > 0) parts.push(`${hours}小时`);
+    if (minutes > 0) parts.push(`${minutes}分钟`);
+    return parts.length > 0 ? parts.join("") : `${seconds}秒`;
   };
 
   const items: QuotaItem[] = [];
@@ -646,7 +653,7 @@ export const buildCodexItems = (payload: CodexUsagePayload): QuotaItem[] => {
   const codeReview = payload.code_review_rate_limit ?? payload.codeReviewRateLimit ?? null;
 
   const addWindow = (
-    label: string,
+    labelPrefix: string,
     window?: CodexUsageWindow | null,
     limitInfo?: CodexRateLimitInfo | null,
   ) => {
@@ -657,6 +664,7 @@ export const buildCodexItems = (payload: CodexUsagePayload): QuotaItem[] => {
     const used =
       usedRaw !== null ? clampPercent(usedRaw) : allowed === false || limitReached ? 100 : null;
     const remaining = used === null ? null : clampPercent(100 - used);
+    const label = `${labelPrefix}${formatDurationLabel(getWindowSeconds(window))}`;
     items.push({
       label,
       percent: remaining,
@@ -664,13 +672,14 @@ export const buildCodexItems = (payload: CodexUsagePayload): QuotaItem[] => {
     });
   };
 
-  const rateWindows = pickWindows(rate);
-  addWindow("代码：5小时", rateWindows.fiveHour, rate);
-  addWindow("代码：周", rateWindows.weekly, rate);
-
-  const reviewWindows = pickWindows(codeReview);
-  addWindow("审查：5小时", reviewWindows.fiveHour, codeReview);
-  addWindow("审查：周", reviewWindows.weekly, codeReview);
+  addWindow("代码：", rate?.primary_window ?? rate?.primaryWindow ?? null, rate);
+  addWindow("代码：", rate?.secondary_window ?? rate?.secondaryWindow ?? null, rate);
+  addWindow("审查：", codeReview?.primary_window ?? codeReview?.primaryWindow ?? null, codeReview);
+  addWindow(
+    "审查：",
+    codeReview?.secondary_window ?? codeReview?.secondaryWindow ?? null,
+    codeReview,
+  );
 
   return items;
 };
