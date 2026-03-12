@@ -18,6 +18,7 @@
 <p align="center">
   <a href="https://help.router-for.me/cn/">📖 文档</a> ·
   <a href="https://github.com/kittors/codeProxy">🖥️ 管理面板</a> ·
+  <a href="docs/ai-deployment_CN.md">🤖 AI 部署指南</a> ·
   <a href="https://github.com/kittors/CliRelay/issues">🐛 报告问题</a> ·
   <a href="https://github.com/kittors/CliRelay/pulls">✨ 功能请求</a>
 </p>
@@ -152,6 +153,8 @@ CliRelay 让你可以将 AI 编程工具（Claude Code、Gemini CLI、OpenAI Cod
 ## 🚀 快速开始
 
 ### 1️⃣ 下载 & 配置
+
+> 如果是让 AI 辅助部署，建议先阅读 [docs/ai-deployment_CN.md](docs/ai-deployment_CN.md)。
 
 ```bash
 # 从 GitHub Releases 下载适合你平台的最新版本

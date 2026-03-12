@@ -18,6 +18,7 @@
 <p align="center">
   <a href="https://help.router-for.me/">📖 Docs</a> ·
   <a href="https://github.com/kittors/codeProxy">🖥️ Management Panel</a> ·
+  <a href="docs/ai-deployment.md">🤖 AI Deployment Guide</a> ·
   <a href="https://github.com/kittors/CliRelay/issues">🐛 Report Bug</a> ·
   <a href="https://github.com/kittors/CliRelay/pulls">✨ Request Feature</a>
 </p>
@@ -152,6 +153,8 @@ The **[codeProxy](https://github.com/kittors/codeProxy)** dashboard provides a s
 ## 🚀 Quick Start
 
 ### 1️⃣ Download & Configure
+
+> For AI-assisted or automated deployment, read [docs/ai-deployment.md](docs/ai-deployment.md) first.
 
 ```bash
 # Download the latest release for your platform from GitHub Releases
