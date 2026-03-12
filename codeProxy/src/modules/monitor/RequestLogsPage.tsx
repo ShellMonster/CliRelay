@@ -98,7 +98,7 @@ function buildLogColumns(
     {
       key: "timestamp",
       label: "时间",
-      width: "w-44",
+      width: "w-40",
       cellClassName:
         "font-mono text-xs tabular-nums text-slate-700 dark:text-slate-200",
       render: (row) => (
@@ -124,7 +124,7 @@ function buildLogColumns(
     {
       key: "model",
       label: "模型",
-      width: "w-36",
+      width: "w-48",
       render: (row) => (
         <OverflowTooltip content={row.model} className="block min-w-0">
           <span className="block min-w-0 truncate">{row.model}</span>
