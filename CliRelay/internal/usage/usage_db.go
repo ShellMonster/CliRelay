@@ -304,10 +304,7 @@ func QueryFilters(days int) (FilterOptions, error) {
 	if days < 1 {
 		days = 7
 	}
-
-	now := time.Now().UTC()
-	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-	cutoff := today.AddDate(0, 0, -(days - 1)).Format(time.RFC3339)
+	cutoff := localDayCutoff(days).Format(time.RFC3339)
 
 	keys, err := queryDistinct(db, "api_key", cutoff)
 	if err != nil {
@@ -526,10 +523,7 @@ func buildAggregateWhere(days int, apiKey string) (string, []any) {
 	if days < 1 {
 		days = 7
 	}
-
-	now := time.Now().UTC()
-	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-	cutoff := today.AddDate(0, 0, -(days - 1)).Format(time.RFC3339)
+	cutoff := localDayCutoff(days).Format(time.RFC3339)
 
 	clauses := []string{"timestamp >= ?"}
 	args := []any{cutoff}
@@ -1376,14 +1370,23 @@ func getDB() *sql.DB {
 	return usageDB
 }
 
+func localDayCutoff(days int) time.Time {
+	if days < 1 {
+		days = 7
+	}
+
+	now := time.Now()
+	loc := now.Location()
+	startOfTodayLocal := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
+	return startOfTodayLocal.AddDate(0, 0, -(days - 1)).UTC()
+}
+
 func buildWhereClause(params LogQueryParams) (string, []interface{}) {
 	conditions := make([]string, 0, 4)
 	args := make([]interface{}, 0, 4)
 
 	// Time range: days=1 means "today", days=7 means "last 7 days", etc.
-	now := time.Now().UTC()
-	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-	cutoff := today.AddDate(0, 0, -(params.Days - 1))
+	cutoff := localDayCutoff(params.Days)
 	conditions = append(conditions, "timestamp >= ?")
 	args = append(args, cutoff.Format(time.RFC3339))
 
@@ -1437,9 +1440,7 @@ func QueryModelsForKey(apiKey string, days int) ([]string, error) {
 	if days < 1 {
 		days = 7
 	}
-	now := time.Now().UTC()
-	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-	cutoff := today.AddDate(0, 0, -(days - 1)).Format(time.RFC3339)
+	cutoff := localDayCutoff(days).Format(time.RFC3339)
 
 	rows, err := db.Query(
 		"SELECT DISTINCT model FROM request_logs WHERE api_key = ? AND timestamp >= ? AND model != '' ORDER BY model",
