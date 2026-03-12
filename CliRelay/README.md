@@ -172,6 +172,19 @@ Edit `config.yaml` to add your API keys or OAuth credentials.
 
 #### Standard Deployment
 
+Before running Docker Compose, prepare the runtime config file first:
+
+```bash
+mkdir -p data
+cp config.example.yaml data/config.yaml
+```
+
+Important notes:
+- `docker-compose.yml` starts the server with `-config /data/config.yaml`, so `data/config.yaml` must exist before first startup.
+- The Management API is disabled by default when `remote-management.secret-key` is empty. In that case, all `/v0/management/*` routes return `404`.
+- If you want to use the `codeProxy` frontend, set `remote-management.secret-key` in `data/config.yaml` first.
+- If you want to access the Management API from another machine, also set `remote-management.allow-remote: true`.
+
 ```bash
 docker compose up -d
 ```
@@ -231,6 +244,45 @@ bun install
 bun run dev
 # Visit http://localhost:5173
 ```
+
+When logging into the frontend:
+- If your backend runs locally, use `http://localhost:8317`
+- Do not use `http://localhost:8317/v1`
+- Do not use `/v0/management` as the base URL; the frontend appends that automatically
+
+## 🔎 Deployment Troubleshooting
+
+### 1. Frontend login returns 404
+
+Usually one of these:
+- `remote-management.secret-key` is still empty, so `/v0/management/*` is not mounted
+- You entered the wrong backend base URL in the frontend
+- Your reverse proxy did not forward `/v0/management/*` to CliRelay
+
+### 2. Frontend login returns 403
+
+Usually:
+- `remote-management.allow-remote` is `false`
+- You are accessing the Management API from a non-localhost machine
+
+### 3. `http://localhost:8317/v1` does not work
+
+This is expected. `/v1` is not a health-check root path.
+
+Use these instead:
+- Server alive check: `http://localhost:8317/`
+- OpenAI-compatible API: `http://localhost:8317/v1/...`
+- Management API: `http://localhost:8317/v0/management/...`
+
+### 4. Clone worked but Docker still runs the wrong version
+
+Use local build explicitly:
+
+```bash
+docker compose up -d --build
+```
+
+This ensures Docker uses your checked-out source code instead of an older cached image.
 
 ## 📐 Architecture
 

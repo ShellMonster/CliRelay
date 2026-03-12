@@ -172,6 +172,19 @@ cp config.example.yaml config.yaml
 
 #### 标准部署
 
+在运行 Docker Compose 之前，先准备运行时配置文件：
+
+```bash
+mkdir -p data
+cp config.example.yaml data/config.yaml
+```
+
+重要说明：
+- `docker-compose.yml` 会用 `-config /data/config.yaml` 启动服务，所以第一次启动前必须先准备好 `data/config.yaml`
+- 当 `remote-management.secret-key` 为空时，管理 API 默认不启用，此时所有 `/v0/management/*` 都会返回 `404`
+- 如果你要使用 `codeProxy` 前端管理面板，必须先在 `data/config.yaml` 中设置 `remote-management.secret-key`
+- 如果你要从其他机器访问管理 API，还需要额外设置 `remote-management.allow-remote: true`
+
 ```bash
 docker compose up -d
 ```
@@ -233,6 +246,45 @@ bun install
 bun run dev
 # 访问 http://localhost:5173
 ```
+
+前端登录时请注意：
+- 如果后端跑在本机，填写 `http://localhost:8317`
+- 不要填 `http://localhost:8317/v1`
+- 也不要把 `/v0/management` 直接填进去，前端会自动拼接
+
+## 🔎 部署排查
+
+### 1. 前端登录返回 404
+
+通常是以下原因之一：
+- `remote-management.secret-key` 还是空的，导致 `/v0/management/*` 根本没挂载
+- 前端里填错了后端基础地址
+- 反向代理没有把 `/v0/management/*` 转发到 CliRelay
+
+### 2. 前端登录返回 403
+
+通常是：
+- `remote-management.allow-remote` 仍然是 `false`
+- 你正在从非 localhost 的机器访问管理 API
+
+### 3. `http://localhost:8317/v1` 打不开
+
+这是预期行为，`/v1` 不是探活根路径。
+
+正确的检查方式：
+- 服务是否启动：`http://localhost:8317/`
+- OpenAI 兼容 API：`http://localhost:8317/v1/...`
+- 管理 API：`http://localhost:8317/v0/management/...`
+
+### 4. 明明 clone 了代码，但 Docker 跑出来版本不对
+
+请显式使用本地源码重新构建：
+
+```bash
+docker compose up -d --build
+```
+
+这样可以确保 Docker 使用的是你当前检出的源码，而不是旧的缓存镜像。
 
 ## 📐 项目结构
 
