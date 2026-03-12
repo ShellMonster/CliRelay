@@ -2,6 +2,7 @@ package usage
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -18,6 +19,7 @@ type LogRow struct {
 	APIKey          string    `json:"api_key"`
 	APIKeyName      string    `json:"api_key_name"`
 	Model           string    `json:"model"`
+	ReasoningEffort string    `json:"reasoning_effort,omitempty"`
 	Source          string    `json:"source"`
 	ChannelName     string    `json:"channel_name"`
 	AuthIndex       string    `json:"auth_index"`
@@ -94,7 +96,8 @@ CREATE TABLE IF NOT EXISTS request_logs (
   cached_tokens    INTEGER NOT NULL DEFAULT 0,
   total_tokens     INTEGER NOT NULL DEFAULT 0,
   input_content    TEXT NOT NULL DEFAULT '',
-  output_content   TEXT NOT NULL DEFAULT ''
+  output_content   TEXT NOT NULL DEFAULT '',
+  request_meta     TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON request_logs(timestamp DESC);
@@ -106,7 +109,7 @@ CREATE INDEX IF NOT EXISTS idx_logs_failed ON request_logs(failed);
 // migrateContentColumns adds input_content/output_content columns to an
 // existing request_logs table that was created before this feature.
 func migrateContentColumns(db *sql.DB) {
-	for _, col := range []string{"input_content", "output_content"} {
+	for _, col := range []string{"input_content", "output_content", "request_meta"} {
 		_, err := db.Exec(fmt.Sprintf("ALTER TABLE request_logs ADD COLUMN %s TEXT NOT NULL DEFAULT ''", col))
 		if err != nil {
 			// "duplicate column name" is expected when already migrated
@@ -165,7 +168,7 @@ func CloseDB() {
 // It is safe to call concurrently.
 func InsertLog(apiKey, model, source, channelName, authIndex string,
 	failed bool, timestamp time.Time, latencyMs int64, tokens TokenStats,
-	inputContent, outputContent string) {
+	inputContent, outputContent string, requestMeta map[string]any) {
 
 	db := getDB()
 	if db == nil {
@@ -185,18 +188,27 @@ func InsertLog(apiKey, model, source, channelName, authIndex string,
 		outputContent = outputContent[:maxContentBytes] + "\n... (truncated)"
 	}
 
+	requestMetaJSON := ""
+	if len(requestMeta) > 0 {
+		if data, err := json.Marshal(requestMeta); err != nil {
+			log.Warnf("usage: marshal request_meta: %v", err)
+		} else {
+			requestMetaJSON = string(data)
+		}
+	}
+
 	_, err := db.Exec(
 		`INSERT INTO request_logs
 			(timestamp, api_key, model, source, channel_name, auth_index,
 			 failed, latency_ms, input_tokens, output_tokens, reasoning_tokens, cached_tokens, total_tokens,
-			 input_content, output_content)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			 input_content, output_content, request_meta)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		timestamp.UTC().Format(time.RFC3339Nano),
 		apiKey, model, source, channelName, authIndex,
 		failedInt, latencyMs,
 		tokens.InputTokens, tokens.OutputTokens, tokens.ReasoningTokens,
 		tokens.CachedTokens, tokens.TotalTokens,
-		inputContent, outputContent,
+		inputContent, outputContent, requestMetaJSON,
 	)
 	if err != nil {
 		log.Errorf("usage: insert log: %v", err)
@@ -237,7 +249,7 @@ func QueryLogs(params LogQueryParams) (LogQueryResult, error) {
 	offset := (params.Page - 1) * params.Size
 	querySQL := "SELECT id, timestamp, api_key, model, source, channel_name, auth_index, " +
 		"failed, latency_ms, input_tokens, output_tokens, reasoning_tokens, cached_tokens, total_tokens, " +
-		"(CASE WHEN length(input_content) > 0 OR length(output_content) > 0 THEN 1 ELSE 0 END) as has_content " +
+		"(CASE WHEN length(input_content) > 0 OR length(output_content) > 0 THEN 1 ELSE 0 END) as has_content, request_meta " +
 		"FROM request_logs" + where +
 		" ORDER BY timestamp DESC LIMIT ? OFFSET ?"
 	queryArgs := append(args, params.Size, offset)
@@ -251,19 +263,27 @@ func QueryLogs(params LogQueryParams) (LogQueryResult, error) {
 	items := make([]LogRow, 0, params.Size)
 	for rows.Next() {
 		var row LogRow
-		var ts string
+		var ts, requestMetaJSON string
 		var failedInt, hasContentInt int
 		if err := rows.Scan(
 			&row.ID, &ts, &row.APIKey, &row.Model, &row.Source, &row.ChannelName,
 			&row.AuthIndex, &failedInt, &row.LatencyMs,
 			&row.InputTokens, &row.OutputTokens, &row.ReasoningTokens,
-			&row.CachedTokens, &row.TotalTokens, &hasContentInt,
+			&row.CachedTokens, &row.TotalTokens, &hasContentInt, &requestMetaJSON,
 		); err != nil {
 			return LogQueryResult{}, fmt.Errorf("usage: scan row: %w", err)
 		}
 		row.Timestamp, _ = time.Parse(time.RFC3339Nano, ts)
 		row.Failed = failedInt != 0
 		row.HasContent = hasContentInt != 0
+		if strings.TrimSpace(requestMetaJSON) != "" {
+			var requestMeta map[string]any
+			if err := json.Unmarshal([]byte(requestMetaJSON), &requestMeta); err != nil {
+				log.Warnf("usage: unmarshal request_meta for log %d: %v", row.ID, err)
+			} else if value, ok := requestMeta["reasoning_effort"].(string); ok {
+				row.ReasoningEffort = strings.TrimSpace(value)
+			}
+		}
 		items = append(items, row)
 	}
 
@@ -453,12 +473,12 @@ type UsageAPIModelStats struct {
 }
 
 type UsageAPIStats struct {
-	Endpoint     string               `json:"endpoint"`
-	TotalRequests int64               `json:"total_requests"`
-	SuccessCount int64                `json:"success_count"`
-	FailureCount int64                `json:"failure_count"`
-	TotalTokens  int64                `json:"total_tokens"`
-	Models       []UsageAPIModelStats `json:"models"`
+	Endpoint      string               `json:"endpoint"`
+	TotalRequests int64                `json:"total_requests"`
+	SuccessCount  int64                `json:"success_count"`
+	FailureCount  int64                `json:"failure_count"`
+	TotalTokens   int64                `json:"total_tokens"`
+	Models        []UsageAPIModelStats `json:"models"`
 }
 
 type UsageModelStats struct {
@@ -492,13 +512,13 @@ type UsageServiceHealthPoint struct {
 }
 
 type UsageOverview struct {
-	Days           int                      `json:"days"`
-	Summary        DashboardSummary         `json:"summary"`
-	RequestTrend   []UsageSeriesPoint       `json:"request_trend"`
-	TokenBreakdown []UsageSeriesPoint       `json:"token_breakdown"`
-	APIs           []UsageAPIStats          `json:"apis"`
-	Models         []UsageModelStats        `json:"models"`
-	Credentials    []UsageCredentialStats   `json:"credentials"`
+	Days           int                       `json:"days"`
+	Summary        DashboardSummary          `json:"summary"`
+	RequestTrend   []UsageSeriesPoint        `json:"request_trend"`
+	TokenBreakdown []UsageSeriesPoint        `json:"token_breakdown"`
+	APIs           []UsageAPIStats           `json:"apis"`
+	Models         []UsageModelStats         `json:"models"`
+	Credentials    []UsageCredentialStats    `json:"credentials"`
 	ServiceHealth  []UsageServiceHealthPoint `json:"service_health"`
 }
 
@@ -1443,12 +1463,13 @@ func QueryModelsForKey(apiKey string, days int) ([]string, error) {
 
 // LogContentResult holds the content detail for a single log entry.
 type LogContentResult struct {
-	ID              int64  `json:"id"`
-	InputContent    string `json:"input_content"`
-	OutputContent   string `json:"output_content"`
-	Model           string `json:"model"`
-	HasContent      bool   `json:"has_content"`
-	ContentDisabled bool   `json:"content_disabled"`
+	ID              int64          `json:"id"`
+	InputContent    string         `json:"input_content"`
+	OutputContent   string         `json:"output_content"`
+	Model           string         `json:"model"`
+	HasContent      bool           `json:"has_content"`
+	ContentDisabled bool           `json:"content_disabled"`
+	RequestMeta     map[string]any `json:"request_meta,omitempty"`
 }
 
 // QueryLogContent retrieves the stored request/response content for a single log entry.
@@ -1459,13 +1480,19 @@ func QueryLogContent(id int64) (LogContentResult, error) {
 	}
 
 	var result LogContentResult
+	var requestMetaJSON string
 	err := db.QueryRow(
-		"SELECT id, model, input_content, output_content FROM request_logs WHERE id = ?", id,
-	).Scan(&result.ID, &result.Model, &result.InputContent, &result.OutputContent)
+		"SELECT id, model, input_content, output_content, request_meta FROM request_logs WHERE id = ?", id,
+	).Scan(&result.ID, &result.Model, &result.InputContent, &result.OutputContent, &requestMetaJSON)
 	if err != nil {
 		return LogContentResult{}, fmt.Errorf("usage: query log content: %w", err)
 	}
 	result.HasContent = result.InputContent != "" || result.OutputContent != ""
+	if strings.TrimSpace(requestMetaJSON) != "" {
+		if err := json.Unmarshal([]byte(requestMetaJSON), &result.RequestMeta); err != nil {
+			log.Warnf("usage: unmarshal request_meta for log %d: %v", id, err)
+		}
+	}
 	return result, nil
 }
 

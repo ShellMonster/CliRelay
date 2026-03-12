@@ -342,6 +342,7 @@ export interface UsageLogItem {
   api_key: string;
   api_key_name: string;
   model: string;
+  reasoning_effort?: string;
   source: string;
   channel_name: string;
   auth_index: string;
@@ -377,4 +378,5 @@ export interface LogContentResponse {
   input_content: string;
   output_content: string;
   model: string;
+  request_meta?: Record<string, unknown>;
 }

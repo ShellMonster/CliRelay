@@ -367,7 +367,7 @@ func (s *RequestStatistics) Record(ctx context.Context, record coreusage.Record)
 	}
 	go InsertLog(statsKey, modelName, record.Source, record.ChannelName,
 		record.AuthIndex, failed, timestamp, record.LatencyMs, detail,
-		inputContent, outputContent)
+		inputContent, outputContent, record.RequestMeta)
 }
 
 func (s *RequestStatistics) updateAPIStats(stats *apiStats, model string, detail RequestDetail) {

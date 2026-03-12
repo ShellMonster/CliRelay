@@ -29,6 +29,7 @@ type usageReporter struct {
 	// Content captured for log detail viewer
 	inputContent  string
 	outputContent string
+	requestMeta   map[string]any
 }
 
 func newUsageReporter(ctx context.Context, provider, model string, auth *cliproxyauth.Auth) *usageReporter {
@@ -55,6 +56,7 @@ func (r *usageReporter) publish(ctx context.Context, detail usage.Detail) {
 func (r *usageReporter) publishWithContent(ctx context.Context, detail usage.Detail, inputContent, outputContent string) {
 	r.inputContent = inputContent
 	r.outputContent = outputContent
+	r.requestMeta = buildRequestMeta(r.provider, r.model, inputContent, outputContent)
 	r.publishWithOutcome(ctx, detail, false)
 }
 
@@ -64,6 +66,7 @@ const maxReporterContentBytes = 100 * 1024 // 100 KB soft limit for accumulated 
 // Call before starting the streaming goroutine.
 func (r *usageReporter) setInputContent(content string) {
 	r.inputContent = content
+	r.requestMeta = buildRequestMeta(r.provider, r.model, content, r.outputContent)
 }
 
 // appendOutputChunk accumulates a streaming response line for inclusion in usage records.
@@ -73,6 +76,7 @@ func (r *usageReporter) appendOutputChunk(chunk []byte) {
 		return
 	}
 	r.outputContent += string(chunk) + "\n"
+	r.requestMeta = buildRequestMeta(r.provider, r.model, r.inputContent, r.outputContent)
 }
 
 func (r *usageReporter) publishFailure(ctx context.Context) {
@@ -102,6 +106,7 @@ func (r *usageReporter) publishWithOutcome(ctx context.Context, detail usage.Det
 		return
 	}
 	r.once.Do(func() {
+		r.requestMeta = buildRequestMeta(r.provider, r.model, r.inputContent, r.outputContent)
 		latencyMs := time.Since(r.requestedAt).Milliseconds()
 		if latencyMs < 0 {
 			latencyMs = 0
@@ -120,6 +125,7 @@ func (r *usageReporter) publishWithOutcome(ctx context.Context, detail usage.Det
 			Detail:        detail,
 			InputContent:  r.inputContent,
 			OutputContent: r.outputContent,
+			RequestMeta:   cloneRequestMeta(r.requestMeta),
 		})
 	})
 }
@@ -133,6 +139,7 @@ func (r *usageReporter) ensurePublished(ctx context.Context) {
 		return
 	}
 	r.once.Do(func() {
+		r.requestMeta = buildRequestMeta(r.provider, r.model, r.inputContent, r.outputContent)
 		latencyMs := time.Since(r.requestedAt).Milliseconds()
 		if latencyMs < 0 {
 			latencyMs = 0
@@ -151,8 +158,66 @@ func (r *usageReporter) ensurePublished(ctx context.Context) {
 			Detail:        usage.Detail{},
 			InputContent:  r.inputContent,
 			OutputContent: r.outputContent,
+			RequestMeta:   cloneRequestMeta(r.requestMeta),
 		})
 	})
+}
+
+func cloneRequestMeta(meta map[string]any) map[string]any {
+	if len(meta) == 0 {
+		return nil
+	}
+	out := make(map[string]any, len(meta))
+	for key, value := range meta {
+		out[key] = value
+	}
+	return out
+}
+
+func buildRequestMeta(provider, finalModel, inputContent, outputContent string) map[string]any {
+	meta := map[string]any{}
+
+	if trimmedProvider := strings.TrimSpace(provider); trimmedProvider != "" {
+		meta["provider"] = trimmedProvider
+	}
+	if trimmedModel := strings.TrimSpace(finalModel); trimmedModel != "" {
+		meta["final_model"] = trimmedModel
+	}
+
+	inputJSON := strings.TrimSpace(inputContent)
+	if gjson.Valid(inputJSON) {
+		root := gjson.Parse(inputJSON)
+		if value := strings.TrimSpace(root.Get("model").String()); value != "" {
+			meta["requested_model"] = value
+		}
+		if value := strings.TrimSpace(root.Get("reasoning_effort").String()); value != "" {
+			meta["reasoning_effort"] = value
+		}
+		if value := strings.TrimSpace(root.Get("reasoning.effort").String()); value != "" {
+			meta["reasoning_effort"] = value
+		}
+		if stream := root.Get("stream"); stream.Exists() {
+			meta["stream"] = stream.Bool()
+		}
+		if tools := root.Get("tools"); tools.Exists() && tools.IsArray() {
+			meta["has_tools"] = len(tools.Array()) > 0
+		}
+		if messages := root.Get("messages"); messages.Exists() && messages.IsArray() {
+			meta["source_format"] = "openai-chat-completions"
+		} else if input := root.Get("input"); input.Exists() {
+			meta["source_format"] = "responses"
+		}
+	}
+
+	outputJSON := strings.TrimSpace(outputContent)
+	if gjson.Valid(outputJSON) && meta["target_format"] == nil {
+		meta["target_format"] = "provider-response"
+	}
+
+	if len(meta) == 0 {
+		return nil
+	}
+	return meta
 }
 
 func apiKeyFromContext(ctx context.Context) string {

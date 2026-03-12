@@ -28,6 +28,7 @@ interface LogRow {
   channelName: string;
   maskedApiKey: string;
   model: string;
+  reasoningEffort: string;
   failed: boolean;
   latencyText: string;
   inputTokens: number;
@@ -97,7 +98,7 @@ function buildLogColumns(
     {
       key: "timestamp",
       label: "时间",
-      width: "w-52",
+      width: "w-44",
       cellClassName:
         "font-mono text-xs tabular-nums text-slate-700 dark:text-slate-200",
       render: (row) => (
@@ -109,7 +110,7 @@ function buildLogColumns(
     {
       key: "apiKeyName",
       label: "Key 名称",
-      width: "w-32",
+      width: "w-28",
       render: (row) => (
         <OverflowTooltip content={row.apiKeyName || "--"} className="block min-w-0">
           <span
@@ -123,7 +124,7 @@ function buildLogColumns(
     {
       key: "model",
       label: "模型",
-      width: "w-56",
+      width: "w-36",
       render: (row) => (
         <OverflowTooltip content={row.model} className="block min-w-0">
           <span className="block min-w-0 truncate">{row.model}</span>
@@ -131,9 +132,27 @@ function buildLogColumns(
       ),
     },
     {
+      key: "reasoningEffort",
+      label: "推理强度",
+      width: "w-20",
+      render: (row) => (
+        <OverflowTooltip content={row.reasoningEffort || "--"} className="block min-w-0">
+          <span
+            className={`block min-w-0 truncate text-xs font-medium ${
+              row.reasoningEffort
+                ? "text-amber-700 dark:text-amber-300"
+                : "text-slate-400 dark:text-white/30"
+            }`}
+          >
+            {row.reasoningEffort || "--"}
+          </span>
+        </OverflowTooltip>
+      ),
+    },
+    {
       key: "channelName",
       label: "渠道名",
-      width: "w-32",
+      width: "w-28",
       render: (row) => (
         <OverflowTooltip content={row.channelName || "--"} className="block min-w-0">
           <span
@@ -147,19 +166,19 @@ function buildLogColumns(
     {
       key: "status",
       label: "状态",
-      width: "w-20",
+      width: "w-16",
       render: (row) =>
         row.failed ? (
           <button
             type="button"
             onClick={() => onErrorClick?.(Number(row.id), row.model)}
-            className="inline-flex min-w-[52px] cursor-pointer justify-center rounded-full bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-600 transition hover:bg-rose-100 hover:shadow-sm dark:bg-rose-500/15 dark:text-rose-300 dark:hover:bg-rose-500/25"
+            className="inline-flex cursor-pointer justify-center rounded-full bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-600 transition hover:bg-rose-100 hover:shadow-sm dark:bg-rose-500/15 dark:text-rose-300 dark:hover:bg-rose-500/25"
             title="点击查看错误详情"
           >
             失败
           </button>
         ) : (
-          <span className="inline-flex min-w-[52px] justify-center rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-300">
+          <span className="inline-flex justify-center rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-300">
             成功
           </span>
         ),
@@ -167,7 +186,7 @@ function buildLogColumns(
     {
       key: "latency",
       label: "用时",
-      width: "w-24",
+      width: "w-20",
       headerClassName: "text-right",
       cellClassName:
         "text-right font-mono text-xs tabular-nums text-slate-700 dark:text-slate-200",
@@ -180,7 +199,7 @@ function buildLogColumns(
     {
       key: "inputTokens",
       label: "输入",
-      width: "w-24",
+      width: "w-20",
       headerClassName: "text-right",
       cellClassName:
         "text-right font-mono text-xs tabular-nums text-slate-700 dark:text-slate-200",
@@ -205,7 +224,7 @@ function buildLogColumns(
     {
       key: "cachedTokens",
       label: "缓存读取",
-      width: "w-24",
+      width: "w-20",
       headerClassName: "text-right",
       cellClassName: "text-right font-mono text-xs tabular-nums",
       render: (row) => (
@@ -221,7 +240,7 @@ function buildLogColumns(
     {
       key: "outputTokens",
       label: "输出",
-      width: "w-24",
+      width: "w-20",
       headerClassName: "text-right",
       cellClassName:
         "text-right font-mono text-xs tabular-nums text-slate-700 dark:text-slate-200",
@@ -246,7 +265,7 @@ function buildLogColumns(
     {
       key: "totalTokens",
       label: "总 Token",
-      width: "w-28",
+      width: "w-24",
       headerClassName: "text-right",
       cellClassName:
         "text-right font-mono text-xs tabular-nums text-slate-900 dark:text-white",
@@ -271,6 +290,7 @@ function toLogRow(item: UsageLogItem): LogRow {
     channelName: item.channel_name || "",
     maskedApiKey: maskApiKey(item.api_key),
     model: item.model,
+    reasoningEffort: item.reasoning_effort || "",
     failed: item.failed,
     latencyText: formatLatencyMs(item.latency_ms),
     inputTokens: item.input_tokens,

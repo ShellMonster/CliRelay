@@ -726,6 +726,7 @@ export function LogContentModal({ open, logId, initialTab = "input", onClose }: 
     const [inputContent, setInputContent] = useState("");
     const [outputContent, setOutputContent] = useState("");
     const [model, setModel] = useState("");
+    const [requestMeta, setRequestMeta] = useState<Record<string, unknown>>({});
     const [activeTab, setActiveTab] = useState<"input" | "output">(initialTab);
 
     useEffect(() => { setActiveTab(initialTab); }, [initialTab, logId]);
@@ -738,6 +739,11 @@ export function LogContentModal({ open, logId, initialTab = "input", onClose }: 
             setInputContent(result.input_content || "");
             setOutputContent(result.output_content || "");
             setModel(result.model || "");
+            setRequestMeta(
+                result.request_meta && typeof result.request_meta === "object"
+                    ? result.request_meta
+                    : {},
+            );
         } catch (err) {
             setError(err instanceof Error ? err.message : "加载失败");
         } finally {
@@ -829,6 +835,37 @@ export function LogContentModal({ open, logId, initialTab = "input", onClose }: 
         }
     };
 
+    const renderRequestMeta = () => {
+        const entries = Object.entries(requestMeta).filter(([, value]) => value !== undefined && value !== null && value !== "");
+        if (entries.length === 0) {
+            return null;
+        }
+
+        return (
+            <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50/70 p-4 dark:border-neutral-800 dark:bg-neutral-900/70">
+                <div className="mb-3 flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+                    <Settings size={15} />
+                    <span>请求元信息</span>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                    {entries.map(([key, value]) => (
+                        <div
+                            key={key}
+                            className="rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-neutral-800 dark:bg-neutral-950"
+                        >
+                            <div className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                {key}
+                            </div>
+                            <div className="mt-1 break-all text-sm text-slate-900 dark:text-slate-100">
+                                {typeof value === "string" ? value : JSON.stringify(value)}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+    };
+
     return (
         <ContentModal open={open} model={model} onClose={onClose} tabs={tabBar}>
             {loading ? (
@@ -842,6 +879,7 @@ export function LogContentModal({ open, logId, initialTab = "input", onClose }: 
                 </div>
             ) : (
                 <div className="min-h-[200px]">
+                    {renderRequestMeta()}
                     {activeTab === "input" ? renderInput() : renderOutput()}
                 </div>
             )}

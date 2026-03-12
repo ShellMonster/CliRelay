@@ -28,6 +28,7 @@ type Record struct {
 	// truncated to MaxContentBytes (default 100 KB) before persistence.
 	InputContent  string
 	OutputContent string
+	RequestMeta   map[string]any
 }
 
 // Detail holds the token usage breakdown.
