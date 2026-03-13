@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -552,6 +553,32 @@ type UsageOverview struct {
 	Models         []UsageModelStats         `json:"models"`
 	Credentials    []UsageCredentialStats    `json:"credentials"`
 	ServiceHealth  []UsageServiceHealthPoint `json:"service_health"`
+}
+
+type UsageModelDetailStats struct {
+	Model           string `json:"model"`
+	Requests        int64  `json:"requests"`
+	SuccessCount    int64  `json:"success_count"`
+	FailureCount    int64  `json:"failure_count"`
+	InputTokens     int64  `json:"input_tokens"`
+	OutputTokens    int64  `json:"output_tokens"`
+	ReasoningTokens int64  `json:"reasoning_tokens"`
+	CachedTokens    int64  `json:"cached_tokens"`
+	TotalTokens     int64  `json:"total_tokens"`
+	LastUsedAt      string `json:"last_used_at"`
+}
+
+type UsageSourceBlock struct {
+	SuccessCount int64 `json:"success_count"`
+	FailureCount int64 `json:"failure_count"`
+}
+
+type UsageSourceStats struct {
+	Source       string             `json:"source"`
+	AuthIndex    string             `json:"auth_index"`
+	SuccessCount int64              `json:"success_count"`
+	FailureCount int64              `json:"failure_count"`
+	Blocks       []UsageSourceBlock `json:"blocks"`
 }
 
 func buildAggregateWhere(days int, apiKey string, model string, channelName string) (string, []any) {
@@ -1166,6 +1193,181 @@ LIMIT ?`
 	return items, nil
 }
 
+func QueryUsageModelDetailStats(days int, limit int) ([]UsageModelDetailStats, error) {
+	db := getDB()
+	if db == nil {
+		return []UsageModelDetailStats{}, nil
+	}
+	if limit < 1 {
+		limit = 500
+	}
+	where, args := buildAggregateWhere(days, "", "", "")
+
+	query := `
+SELECT
+	model,
+	COUNT(*) AS requests,
+	COALESCE(SUM(CASE WHEN failed=0 THEN 1 ELSE 0 END), 0) AS success_count,
+	COALESCE(SUM(CASE WHEN failed=1 THEN 1 ELSE 0 END), 0) AS failure_count,
+	COALESCE(SUM(input_tokens), 0) AS input_tokens,
+	COALESCE(SUM(output_tokens), 0) AS output_tokens,
+	COALESCE(SUM(reasoning_tokens), 0) AS reasoning_tokens,
+	COALESCE(SUM(cached_tokens), 0) AS cached_tokens,
+	COALESCE(SUM(total_tokens), 0) AS total_tokens,
+	MAX(timestamp) AS last_used_at
+FROM request_logs` + where + `
+GROUP BY model
+HAVING model != ''
+ORDER BY requests DESC, total_tokens DESC, model ASC
+LIMIT ?`
+
+	rows, err := db.Query(query, append(args, limit)...)
+	if err != nil {
+		return nil, fmt.Errorf("usage: model detail stats query: %w", err)
+	}
+	defer rows.Close()
+
+	items := make([]UsageModelDetailStats, 0, limit)
+	for rows.Next() {
+		var item UsageModelDetailStats
+		if err := rows.Scan(
+			&item.Model,
+			&item.Requests,
+			&item.SuccessCount,
+			&item.FailureCount,
+			&item.InputTokens,
+			&item.OutputTokens,
+			&item.ReasoningTokens,
+			&item.CachedTokens,
+			&item.TotalTokens,
+			&item.LastUsedAt,
+		); err != nil {
+			return nil, fmt.Errorf("usage: model detail stats scan: %w", err)
+		}
+		items = append(items, item)
+	}
+	return items, nil
+}
+
+func QueryUsageSourceStats(days int, recentMinutes int, blockMinutes int) ([]UsageSourceStats, error) {
+	db := getDB()
+	if db == nil {
+		return []UsageSourceStats{}, nil
+	}
+	if days < 1 {
+		days = 30
+	}
+	if recentMinutes < 1 {
+		recentMinutes = 200
+	}
+	if blockMinutes < 1 {
+		blockMinutes = 10
+	}
+
+	blockCount := (recentMinutes + blockMinutes - 1) / blockMinutes
+	itemsByKey := make(map[string]*UsageSourceStats)
+
+	where, args := buildAggregateWhere(days, "", "", "")
+	totalsQuery := `
+SELECT
+	source,
+	auth_index,
+	COALESCE(SUM(CASE WHEN failed=0 THEN 1 ELSE 0 END), 0) AS success_count,
+	COALESCE(SUM(CASE WHEN failed=1 THEN 1 ELSE 0 END), 0) AS failure_count
+FROM request_logs` + where + `
+GROUP BY source, auth_index
+HAVING source != '' OR auth_index != ''`
+
+	totalRows, err := db.Query(totalsQuery, args...)
+	if err != nil {
+		return nil, fmt.Errorf("usage: source stats totals query: %w", err)
+	}
+	defer totalRows.Close()
+
+	for totalRows.Next() {
+		var item UsageSourceStats
+		if err := totalRows.Scan(&item.Source, &item.AuthIndex, &item.SuccessCount, &item.FailureCount); err != nil {
+			return nil, fmt.Errorf("usage: source stats totals scan: %w", err)
+		}
+		item.Blocks = make([]UsageSourceBlock, blockCount)
+		itemsByKey[usageSourceStatsKey(item.Source, item.AuthIndex)] = &item
+	}
+
+	now := time.Now().UTC()
+	windowStart := now.Add(-time.Duration(recentMinutes) * time.Minute)
+	recentQuery := `
+SELECT source, auth_index, timestamp, failed
+FROM request_logs
+WHERE timestamp >= ? AND (source != '' OR auth_index != '')
+ORDER BY timestamp ASC`
+
+	recentRows, err := db.Query(recentQuery, windowStart.Format(time.RFC3339))
+	if err != nil {
+		return nil, fmt.Errorf("usage: source stats recent query: %w", err)
+	}
+	defer recentRows.Close()
+
+	blockDuration := time.Duration(blockMinutes) * time.Minute
+	for recentRows.Next() {
+		var source, authIndex, timestampRaw string
+		var failedInt int
+		if err := recentRows.Scan(&source, &authIndex, &timestampRaw, &failedInt); err != nil {
+			return nil, fmt.Errorf("usage: source stats recent scan: %w", err)
+		}
+		key := usageSourceStatsKey(source, authIndex)
+		item := itemsByKey[key]
+		if item == nil {
+			item = &UsageSourceStats{
+				Source:    source,
+				AuthIndex: authIndex,
+				Blocks:    make([]UsageSourceBlock, blockCount),
+			}
+			itemsByKey[key] = item
+		}
+
+		ts, err := time.Parse(time.RFC3339Nano, timestampRaw)
+		if err != nil {
+			ts, err = time.Parse(time.RFC3339, timestampRaw)
+			if err != nil {
+				continue
+			}
+		}
+		if ts.Before(windowStart) || ts.After(now) {
+			continue
+		}
+
+		age := now.Sub(ts)
+		blockIndex := blockCount - 1 - int(age/blockDuration)
+		if blockIndex < 0 || blockIndex >= len(item.Blocks) {
+			continue
+		}
+		if failedInt != 0 {
+			item.Blocks[blockIndex].FailureCount++
+		} else {
+			item.Blocks[blockIndex].SuccessCount++
+		}
+	}
+
+	items := make([]UsageSourceStats, 0, len(itemsByKey))
+	for _, item := range itemsByKey {
+		items = append(items, *item)
+	}
+
+	sort.Slice(items, func(i, j int) bool {
+		leftTotal := items[i].SuccessCount + items[i].FailureCount
+		rightTotal := items[j].SuccessCount + items[j].FailureCount
+		if leftTotal != rightTotal {
+			return leftTotal > rightTotal
+		}
+		if items[i].Source != items[j].Source {
+			return items[i].Source < items[j].Source
+		}
+		return items[i].AuthIndex < items[j].AuthIndex
+	})
+
+	return items, nil
+}
+
 func QueryUsageCredentialStats(days int, apiKey string, limit int) ([]UsageCredentialStats, error) {
 	db := getDB()
 	if db == nil {
@@ -1521,6 +1723,10 @@ func queryDistinctFiltered(db *sql.DB, column, cutoff, apiKey, model, channelNam
 		}
 	}
 	return result, nil
+}
+
+func usageSourceStatsKey(source, authIndex string) string {
+	return source + "\x00" + authIndex
 }
 
 // QueryModelsForKey returns the distinct models used by a specific API key within the time range.

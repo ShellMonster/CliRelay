@@ -508,6 +508,8 @@ func (s *Server) registerManagementRoutes() {
 		mgmt.GET("/monitor/failure-stats", s.mgmt.GetMonitorFailureStats)
 		mgmt.GET("/usage/overview", s.mgmt.GetUsageOverview)
 		mgmt.GET("/usage/credential-health", s.mgmt.GetUsageCredentialHealth)
+		mgmt.GET("/usage/models/stats", s.mgmt.GetUsageModelStats)
+		mgmt.GET("/usage/source-stats", s.mgmt.GetUsageSourceStats)
 		mgmt.GET("/system-stats", s.mgmt.GetSystemStats)
 		mgmt.GET("/system-stats/ws", s.mgmt.SystemStatsWebSocket)
 		mgmt.GET("/usage", s.mgmt.GetUsageStatistics)

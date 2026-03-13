@@ -12,7 +12,8 @@ import {
     Power,
 } from "lucide-react";
 import { apiKeyEntriesApi, apiKeysApi, type ApiKeyEntry } from "@/lib/http/apis/api-keys";
-import { fetchFlatUsageEntries, type FlatUsageEntry } from "@/modules/usage/usageLogsIndex";
+import { usageApi } from "@/lib/http/apis";
+import type { UsageLogItem } from "@/lib/http/apis/usage";
 import { Card } from "@/modules/ui/Card";
 import { Button } from "@/modules/ui/Button";
 import { EmptyState } from "@/modules/ui/EmptyState";
@@ -77,20 +78,6 @@ const formatLatencyMs = (value: number): string => {
     return `${trimmed}s`;
 };
 
-const readLatencyText = (detail: Record<string, unknown>): string => {
-    const candidates = [
-        detail["latency_ms"],
-        detail["latencyMs"],
-        detail["duration_ms"],
-        detail["latency"],
-    ];
-    for (const candidate of candidates) {
-        if (typeof candidate === "number") return formatLatencyMs(candidate);
-        if (typeof candidate === "string" && candidate.trim()) return candidate.trim();
-    }
-    return "--";
-};
-
 /* ─── usage detail row type ─── */
 
 interface UsageLogRow {
@@ -104,25 +91,16 @@ interface UsageLogRow {
     totalTokens: number;
 }
 
-const buildUsageRows = (entries: FlatUsageEntry[], apiKey: string): UsageLogRow[] => {
-    return entries
-        .filter((entry) => entry.apiKey === apiKey)
-        .map((entry, index) => ({
-            id: `${index}`,
-            timestamp: entry.timestamp,
-            model: entry.model,
-            failed: entry.failed,
-            latencyText: "--",
-            inputTokens: entry.inputTokens,
-            outputTokens: entry.outputTokens,
-            totalTokens: entry.totalTokens,
-        }))
-        .sort((a, b) => {
-            const ta = a.timestamp ? new Date(a.timestamp).getTime() : 0;
-            const tb = b.timestamp ? new Date(b.timestamp).getTime() : 0;
-            return tb - ta;
-        });
-};
+const mapUsageLogRow = (item: UsageLogItem): UsageLogRow => ({
+    id: String(item.id),
+    timestamp: item.timestamp,
+    model: item.model,
+    failed: item.failed,
+    latencyText: formatLatencyMs(item.latency_ms),
+    inputTokens: item.input_tokens,
+    outputTokens: item.output_tokens,
+    totalTokens: item.total_tokens,
+});
 
 /* ─── types ─── */
 
@@ -147,8 +125,10 @@ export function ApiKeysPage() {
     const [usageViewKey, setUsageViewKey] = useState<string | null>(null);
     const [usageViewName, setUsageViewName] = useState<string>("");
     const [saving, setSaving] = useState(false);
-    const [usageEntries, setUsageEntries] = useState<FlatUsageEntry[]>([]);
+    const [usageRows, setUsageRows] = useState<UsageLogRow[]>([]);
     const [usageLoading, setUsageLoading] = useState(false);
+    const [usageTotal, setUsageTotal] = useState(0);
+    const [usagePage, setUsagePage] = useState(1);
     const [availableModels, setAvailableModels] = useState<MultiSelectOption[]>([]);
     const storeModels = useModelsStore((state) => state.models);
     const fetchModelsFromStore = useModelsStore((state) => state.fetchModels);
@@ -264,21 +244,29 @@ export function ApiKeysPage() {
         }
     }, [notify, loadModels]);
 
-    const loadUsage = useCallback(async () => {
+    const loadUsage = useCallback(async (apiKey: string, page = 1) => {
         setUsageLoading(true);
         try {
-            setUsageEntries(await fetchFlatUsageEntries(30, 200));
-        } catch {
-            // silent
+            const response = await usageApi.getUsageLogs({
+                page,
+                size: 100,
+                days: 30,
+                api_key: apiKey,
+            });
+            const rows = (response.items ?? []).map(mapUsageLogRow);
+            setUsageRows((prev) => (page === 1 ? rows : [...prev, ...rows]));
+            setUsageTotal(response.total ?? 0);
+            setUsagePage(page);
+        } catch (err: unknown) {
+            notify({ type: "error", message: err instanceof Error ? err.message : "加载调用记录失败" });
         } finally {
             setUsageLoading(false);
         }
-    }, []);
+    }, [notify]);
 
     useEffect(() => {
         void loadEntries();
-        void loadUsage();
-    }, [loadEntries, loadUsage]);
+    }, [loadEntries]);
 
     /* ─── toggle disable ─── */
 
@@ -417,13 +405,11 @@ export function ApiKeysPage() {
     const handleViewUsage = (entry: ApiKeyEntry) => {
         setUsageViewKey(entry.key);
         setUsageViewName(entry.name || "未命名");
-        void loadUsage();
+        setUsageRows([]);
+        setUsageTotal(0);
+        setUsagePage(1);
+        void loadUsage(entry.key, 1);
     };
-
-    const usageRows = useMemo<UsageLogRow[]>(() => {
-        if (!usageViewKey) return [];
-        return buildUsageRows(usageEntries, usageViewKey);
-    }, [usageEntries, usageViewKey]);
 
     /* ─── column definitions ─── */
 
@@ -637,6 +623,8 @@ export function ApiKeysPage() {
         },
     ], []);
 
+    const usageHasMore = usageRows.length < usageTotal;
+
     /* ─── render form ─── */
 
     const renderForm = () => (
@@ -840,7 +828,22 @@ export function ApiKeysPage() {
                 open={usageViewKey !== null}
                 onClose={() => setUsageViewKey(null)}
                 title={`调用情况 — ${usageViewName}`}
-                description={usageViewKey ? `Key: ${maskKey(usageViewKey)}  ·  共 ${usageRows.length} 条记录` : ""}
+                description={
+                    usageViewKey
+                        ? `Key: ${maskKey(usageViewKey)}  ·  已加载 ${usageRows.length} / ${usageTotal} 条记录`
+                        : ""
+                }
+                footer={
+                    usageViewKey && usageHasMore ? (
+                        <Button
+                            variant="secondary"
+                            onClick={() => void loadUsage(usageViewKey, usagePage + 1)}
+                            disabled={usageLoading}
+                        >
+                            {usageLoading ? "加载中..." : "加载更多"}
+                        </Button>
+                    ) : undefined
+                }
             >
                 {usageLoading ? (
                     <div className="py-8 text-center text-sm text-slate-500 dark:text-white/50">加载中...</div>

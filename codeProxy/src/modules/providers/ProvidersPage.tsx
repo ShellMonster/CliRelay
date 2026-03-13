@@ -17,6 +17,7 @@ import {
   ampcodeApi,
   apiCallApi,
   getApiCallErrorMessage,
+  modelsApi,
   providersApi,
   usageApi,
 } from "@/lib/http/apis";
@@ -36,9 +37,11 @@ import { ProviderStatusBar } from "@/modules/providers/ProviderStatusBar";
 import { ProviderKeyListCard } from "@/modules/providers/ProviderKeyListCard";
 import {
   buildCandidateUsageSourceIds,
-  calculateStatusBarData,
-  normalizeUsageSourceId,
+  calculateStatusBarDataFromBuckets,
+  createEmptyStatusBlockBuckets,
+  mergeStatusBlockBuckets,
   type KeyStatBucket,
+  type StatusBlockBucket,
   type StatusBarData,
 } from "@/modules/providers/provider-usage";
 import {
@@ -78,10 +81,9 @@ export function ProvidersPage() {
   const [vertexKeys, setVertexKeys] = useState<ProviderSimpleConfig[]>([]);
   const [openaiProviders, setOpenaiProviders] = useState<OpenAIProvider[]>([]);
 
-  const [usageEntries, setUsageEntries] = useState<
-    Array<{ timestamp: string; failed: boolean; source: string }>
-  >([]);
-  const [usageStatsBySource, setUsageStatsBySource] = useState<Record<string, KeyStatBucket>>({});
+  const [usageBySource, setUsageBySource] = useState<
+    Record<string, { stats: KeyStatBucket; blocks: StatusBlockBucket[] }>
+  >({});
 
   const [ampcode, setAmpcode] = useState<Record<string, unknown> | null>(null);
   const [ampUpstreamUrl, setAmpUpstreamUrl] = useState("");
@@ -96,6 +98,11 @@ export function ProvidersPage() {
   const [editKeyIndex, setEditKeyIndex] = useState<number | null>(null);
   const [keyDraft, setKeyDraft] = useState<ProviderKeyDraft>(() => buildProviderKeyDraft(null));
   const [keyDraftError, setKeyDraftError] = useState<string | null>(null);
+  const [keyDiscoveredModels, setKeyDiscoveredModels] = useState<{ id: string; owned_by?: string }[]>(
+    [],
+  );
+  const [keyDiscovering, setKeyDiscovering] = useState(false);
+  const [keyDiscoverSelected, setKeyDiscoverSelected] = useState<Set<string>>(new Set());
 
   const [editOpenAIOpen, setEditOpenAIOpen] = useState(false);
   const [editOpenAIIndex, setEditOpenAIIndex] = useState<number | null>(null);
@@ -183,26 +190,23 @@ export function ProvidersPage() {
   // Usage 统计单独加载一次
   const loadUsage = useCallback(async () => {
     try {
-      const response = await usageApi.getUsageLogs({ page: 1, size: 200, days: 30 }).catch(() => null);
-      if (!response) return;
-
-      const normalized = response.items
-        .map((detail) => {
-          const source = normalizeUsageSourceId(detail.source, maskApiKey);
-          if (!source) return null;
-          return { timestamp: detail.timestamp, failed: Boolean(detail.failed), source };
-        })
-        .filter(Boolean) as Array<{ timestamp: string; failed: boolean; source: string }>;
-
-      const stats: Record<string, KeyStatBucket> = {};
-      normalized.forEach((detail) => {
-        const bucket = (stats[detail.source] ??= { success: 0, failure: 0 });
-        if (detail.failed) bucket.failure += 1;
-        else bucket.success += 1;
+      const response = await usageApi.getUsageSourceStats(30, 200, 10);
+      const normalized: Record<string, { stats: KeyStatBucket; blocks: StatusBlockBucket[] }> = {};
+      response.items.forEach((item) => {
+        const source = item.source.trim();
+        if (!source) return;
+        normalized[source] = {
+          stats: {
+            success: item.success_count,
+            failure: item.failure_count,
+          },
+          blocks: item.blocks.map((block) => ({
+            success: block.success_count,
+            failure: block.failure_count,
+          })),
+        };
       });
-
-      setUsageEntries(normalized);
-      setUsageStatsBySource(stats);
+      setUsageBySource(normalized);
     } catch {
       // usage加载失败不影响主要功能
     }
@@ -247,6 +251,8 @@ export function ProvidersPage() {
       setEditKeyIndex(index);
       setKeyDraft(buildProviderKeyDraft(current));
       setKeyDraftError(null);
+      setKeyDiscoveredModels([]);
+      setKeyDiscoverSelected(new Set());
       setEditKeyOpen(true);
     },
     [claudeKeys, codexKeys, geminiKeys, vertexKeys],
@@ -341,6 +347,93 @@ export function ProvidersPage() {
     startTransition,
     vertexKeys,
   ]);
+
+  const discoverKeyModels = useCallback(async () => {
+    setKeyDiscovering(true);
+    setKeyDiscoveredModels([]);
+    setKeyDiscoverSelected(new Set());
+    try {
+      const headers = keyValueEntriesToRecord(keyDraft.headersEntries) ?? {};
+      const apiKey = keyDraft.apiKey.trim();
+      let list: { id: string; owned_by?: string }[] = [];
+
+      if (editKeyType === "codex") {
+        const baseUrl = keyDraft.baseUrl.trim();
+        if (!baseUrl) {
+          notify({ type: "info", message: "请先填写 baseUrl" });
+          return;
+        }
+        const hasAuthHeader = Boolean(headers.Authorization || headers.authorization);
+        if (!hasAuthHeader && apiKey) {
+          headers.Authorization = `Bearer ${apiKey}`;
+        }
+
+        const result: ApiCallResult = await apiCallApi.request({
+          method: "GET",
+          url: buildModelsEndpoint(baseUrl),
+          header: Object.keys(headers).length ? headers : undefined,
+        });
+        if (result.statusCode < 200 || result.statusCode >= 300) {
+          throw new Error(getApiCallErrorMessage(result));
+        }
+        list = normalizeDiscoveredModels(result.body ?? result.bodyText);
+      } else if (editKeyType === "claude") {
+        const models = await modelsApi.fetchClaudeModelsViaApiCall(
+          keyDraft.baseUrl.trim(),
+          apiKey,
+          headers,
+        );
+        list = models.map((model) => ({ id: model.name }));
+      } else if (editKeyType === "gemini") {
+        if (keyDraft.baseUrl.trim()) {
+          try {
+            const models = await modelsApi.fetchModelsViaApiCall(
+              keyDraft.baseUrl.trim(),
+              apiKey,
+              headers,
+            );
+            list = models.map((model) => ({ id: model.name }));
+          } catch {
+            const models = await modelsApi.getStaticModelDefinitions("gemini");
+            list = models.map((model) => ({ id: model.name }));
+          }
+        } else {
+          const models = await modelsApi.getStaticModelDefinitions("gemini");
+          list = models.map((model) => ({ id: model.name }));
+        }
+      } else {
+        return;
+      }
+      setKeyDiscoveredModels(list);
+      setKeyDiscoverSelected(new Set(list.map((model) => model.id)));
+    } catch (err: unknown) {
+      notify({ type: "error", message: err instanceof Error ? err.message : "获取模型失败" });
+    } finally {
+      setKeyDiscovering(false);
+    }
+  }, [editKeyType, keyDraft.apiKey, keyDraft.baseUrl, keyDraft.headersEntries, notify]);
+
+  const applyDiscoveredKeyModels = useCallback(() => {
+    const selected = new Set(keyDiscoverSelected);
+    const picked = keyDiscoveredModels.filter((model) => selected.has(model.id));
+    if (picked.length === 0) {
+      notify({ type: "info", message: "未选择任何模型" });
+      return;
+    }
+
+    const current = keyDraft.modelEntries;
+    const seen = new Set(current.map((entry) => entry.name.trim().toLowerCase()).filter(Boolean));
+    const merged = [...current];
+    for (const model of picked) {
+      const dedupeKey = model.id.toLowerCase();
+      if (seen.has(dedupeKey)) continue;
+      seen.add(dedupeKey);
+      merged.push({ ...createEmptyModelEntry(), name: model.id });
+    }
+
+    setKeyDraft((prev) => ({ ...prev, modelEntries: merged }));
+    notify({ type: "success", message: "已合并模型列表" });
+  }, [keyDiscoverSelected, keyDiscoveredModels, keyDraft.modelEntries, notify]);
 
   const deleteKey = useCallback(
     async (type: "gemini" | "claude" | "codex" | "vertex", index: number) => {
@@ -693,6 +786,14 @@ export function ProvidersPage() {
     [notify],
   );
 
+  const usageStatsBySource = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(usageBySource).map(([key, value]) => [key, value.stats]),
+      ) as Record<string, KeyStatBucket>,
+    [usageBySource],
+  );
+
   const getSimpleStats = useCallback(
     (config: ProviderSimpleConfig): KeyStatBucket => {
       const candidates = buildCandidateUsageSourceIds({
@@ -707,17 +808,23 @@ export function ProvidersPage() {
 
   const getSimpleStatusBar = useCallback(
     (config: ProviderSimpleConfig): StatusBarData => {
-      const candidates = new Set(
-        buildCandidateUsageSourceIds({
-          apiKey: config.apiKey,
-          prefix: config.prefix,
-          masker: maskApiKey,
-        }),
+      const candidates = Array.from(
+        new Set(
+          buildCandidateUsageSourceIds({
+            apiKey: config.apiKey,
+            prefix: config.prefix,
+            masker: maskApiKey,
+          }),
+        ),
       );
-      const details = candidates.size ? usageEntries.filter((d) => candidates.has(d.source)) : [];
-      return calculateStatusBarData(details);
+      const buckets = candidates.reduce<StatusBlockBucket[]>(
+        (acc, candidate) =>
+          mergeStatusBlockBuckets(acc, usageBySource[candidate]?.blocks ?? createEmptyStatusBlockBuckets()),
+        createEmptyStatusBlockBuckets(),
+      );
+      return calculateStatusBarDataFromBuckets(buckets);
     },
-    [usageEntries],
+    [usageBySource],
   );
 
   const getOpenAIProviderStats = useCallback(
@@ -747,10 +854,14 @@ export function ProvidersPage() {
           candidates.add(id),
         );
       });
-      const details = candidates.size ? usageEntries.filter((d) => candidates.has(d.source)) : [];
-      return calculateStatusBarData(details);
+      const buckets = Array.from(candidates).reduce<StatusBlockBucket[]>(
+        (acc, candidate) =>
+          mergeStatusBlockBuckets(acc, usageBySource[candidate]?.blocks ?? createEmptyStatusBlockBuckets()),
+        createEmptyStatusBlockBuckets(),
+      );
+      return calculateStatusBarDataFromBuckets(buckets);
     },
-    [usageEntries],
+    [usageBySource],
   );
 
   const editKeyEnabled = useMemo(() => {
@@ -1158,7 +1269,13 @@ export function ProvidersPage() {
         description={
           editKeyType === "vertex"
             ? "Vertex 的 models 必须填写 alias（name => alias）。Excluded Models 中使用 * 可一键禁用该配置。"
-            : "支持 Excluded Models（每行一个；用 * 一键禁用）、自定义 headers 与 models。"
+            : editKeyType === "codex"
+              ? "支持 Excluded Models、自定义 headers / models，以及通过 /models 拉取并合并 Codex 模型。"
+              : editKeyType === "claude"
+                ? "支持 Excluded Models、自定义 headers / models，以及通过 Claude /v1/models 拉取并合并模型。"
+                : editKeyType === "gemini"
+                  ? "支持 Excluded Models、自定义 headers / models，以及获取 Gemini 模型并合并到当前配置。"
+              : "支持 Excluded Models（每行一个；用 * 一键禁用）、自定义 headers 与 models。"
         }
         onClose={closeKeyEditor}
         footer={
@@ -1340,17 +1457,101 @@ export function ProvidersPage() {
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white/70 p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-950/60">
-            <ModelInputList
-              title={
-                editKeyType === "vertex"
-                  ? "Models（必须填写 alias：name => alias）"
-                  : "Models（可选）"
-              }
-              entries={keyDraft.modelEntries}
-              onChange={(next) => setKeyDraft((prev) => ({ ...prev, modelEntries: next }))}
-              showPriority
-              showTestModel={false}
-            />
+            {editKeyType === "codex" || editKeyType === "claude" || editKeyType === "gemini" ? (
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                    Models（可选）
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => void discoverKeyModels()}
+                      disabled={keyDiscovering}
+                    >
+                      <RefreshCw size={14} className={keyDiscovering ? "animate-spin" : ""} />
+                      获取模型
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={applyDiscoveredKeyModels}
+                      disabled={keyDiscoveredModels.length === 0}
+                    >
+                      <Check size={14} />
+                      合并所选
+                    </Button>
+                  </div>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-white/55">
+                  {editKeyType === "claude"
+                    ? `/v1/models 拉取地址：${modelsApi.buildClaudeModelsEndpoint(keyDraft.baseUrl)}`
+                    : editKeyType === "gemini"
+                      ? keyDraft.baseUrl.trim()
+                        ? `/models 拉取地址：${buildModelsEndpoint(keyDraft.baseUrl)}（失败时回退静态模型定义）`
+                        : "未填写 baseUrl：将回退使用静态模型定义"
+                      : `/models 拉取地址：${keyDraft.baseUrl.trim() ? buildModelsEndpoint(keyDraft.baseUrl) : "--"}`}
+                </p>
+                <ModelInputList
+                  title="模型列表（可选）"
+                  entries={keyDraft.modelEntries}
+                  onChange={(next) => setKeyDraft((prev) => ({ ...prev, modelEntries: next }))}
+                  showPriority
+                  showTestModel={false}
+                />
+                {keyDiscoveredModels.length ? (
+                  <div className="rounded-2xl border border-slate-200 bg-white/70 p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-950/60">
+                    <p className="text-xs text-slate-600 dark:text-white/65">
+                      发现 {keyDiscoveredModels.length} 个模型（默认全选）
+                    </p>
+                    <div className="mt-2 max-h-48 space-y-1 overflow-y-auto">
+                      {keyDiscoveredModels.map((model) => {
+                        const checked = keyDiscoverSelected.has(model.id);
+                        return (
+                          <label
+                            key={model.id}
+                            className={[
+                              "flex cursor-pointer items-center gap-2 rounded-xl px-2 py-1 text-xs font-mono",
+                              checked
+                                ? "bg-slate-900 text-white dark:bg-white dark:text-neutral-950"
+                                : "hover:bg-slate-50 dark:hover:bg-white/5",
+                            ].join(" ")}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => {
+                                setKeyDiscoverSelected((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(model.id)) next.delete(model.id);
+                                  else next.add(model.id);
+                                  return next;
+                                });
+                              }}
+                              className="h-4 w-4 rounded border-slate-300 text-slate-900 focus-visible:ring-2 focus-visible:ring-slate-400/35 dark:border-neutral-700 dark:bg-neutral-950 dark:text-white dark:focus-visible:ring-white/15"
+                            />
+                            <span className="truncate">{model.id}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <ModelInputList
+                title={
+                  editKeyType === "vertex"
+                    ? "Models（必须填写 alias：name => alias）"
+                    : "Models（可选）"
+                }
+                entries={keyDraft.modelEntries}
+                onChange={(next) => setKeyDraft((prev) => ({ ...prev, modelEntries: next }))}
+                showPriority
+                showTestModel={false}
+              />
+            )}
             {editKeyType === "vertex" ? (
               <p className="mt-2 text-xs text-slate-500 dark:text-white/55">
                 Vertex 需要把“下游模型名”映射成 Vertex 可识别的名称，所以每条都必须填 alias。

@@ -92,6 +92,38 @@ export interface UsageCredentialHealthResponse {
   }>;
 }
 
+export interface UsageModelStatsResponse {
+  days: number;
+  items: Array<{
+    model: string;
+    requests: number;
+    success_count: number;
+    failure_count: number;
+    input_tokens: number;
+    output_tokens: number;
+    reasoning_tokens: number;
+    cached_tokens: number;
+    total_tokens: number;
+    last_used_at: string;
+  }>;
+}
+
+export interface UsageSourceStatsResponse {
+  days: number;
+  recent_minutes: number;
+  block_minutes: number;
+  items: Array<{
+    source: string;
+    auth_index: string;
+    success_count: number;
+    failure_count: number;
+    blocks: Array<{
+      success_count: number;
+      failure_count: number;
+    }>;
+  }>;
+}
+
 export const usageApi = {
   async getUsageLogs(params: {
     page?: number;
@@ -175,6 +207,31 @@ export const usageApi = {
     if (apiKey?.trim()) query.set("api_key", apiKey.trim());
     return apiClient.get<UsageCredentialHealthResponse>(
       `/usage/credential-health?${query.toString()}`,
+    );
+  },
+
+  getUsageModelStats(days = 30, limit = 500): Promise<UsageModelStatsResponse> {
+    const query = new URLSearchParams({
+      days: String(days),
+      limit: String(limit),
+    });
+    return apiClient.get<UsageModelStatsResponse>(
+      `/usage/models/stats?${query.toString()}`,
+    );
+  },
+
+  getUsageSourceStats(
+    days = 30,
+    recentMinutes = 200,
+    blockMinutes = 10,
+  ): Promise<UsageSourceStatsResponse> {
+    const query = new URLSearchParams({
+      days: String(days),
+      recent_minutes: String(recentMinutes),
+      block_minutes: String(blockMinutes),
+    });
+    return apiClient.get<UsageSourceStatsResponse>(
+      `/usage/source-stats?${query.toString()}`,
     );
   },
 

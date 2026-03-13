@@ -5,8 +5,21 @@
 
 import type { ScriptableContext } from "chart.js";
 import { maskApiKey } from "./format";
-import type { FlatUsageEntry } from "@/modules/usage/usageLogsIndex";
 import type { UsageOverviewResponse } from "@/lib/http/apis/usage";
+
+export interface FlatUsageEntry {
+  timestamp: string;
+  failed: boolean;
+  source: string;
+  apiKey: string;
+  model: string;
+  authIndex: string;
+  inputTokens: number;
+  outputTokens: number;
+  reasoningTokens: number;
+  cachedTokens: number;
+  totalTokens: number;
+}
 
 export interface KeyStatBucket {
   success: number;

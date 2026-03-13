@@ -1,4 +1,5 @@
 import { apiCallApi, getApiCallErrorMessage } from "@/lib/http/apis/api-call";
+import { apiClient } from "@/lib/http/client";
 import { normalizeModelList } from "@/utils/models";
 import type { ModelInfo } from "@/utils/models";
 
@@ -60,6 +61,15 @@ const buildRequestSignature = (url: string, headers: Record<string, string>) => 
 
 export const modelsApi = {
   buildClaudeModelsEndpoint,
+
+  async getStaticModelDefinitions(channel: string) {
+    const normalized = String(channel ?? "").trim().toLowerCase();
+    if (!normalized) return [] as ModelInfo[];
+    const data = await apiClient.get<Record<string, unknown>>(
+      `/model-definitions/${encodeURIComponent(normalized)}`,
+    );
+    return normalizeModelList(data?.models ?? data, { dedupe: true });
+  },
 
   async fetchV1Models(baseUrl: string, apiKey?: string, headers: Record<string, string> = {}) {
     const endpoint = buildV1ModelsEndpoint(baseUrl);

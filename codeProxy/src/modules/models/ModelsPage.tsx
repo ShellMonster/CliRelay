@@ -5,7 +5,7 @@ import {
     DollarSign,
     Activity,
 } from "lucide-react";
-import { fetchFlatUsageEntries } from "@/modules/usage/usageLogsIndex";
+import { usageApi } from "@/lib/http/apis";
 import { Card } from "@/modules/ui/Card";
 import { Button } from "@/modules/ui/Button";
 import { EmptyState } from "@/modules/ui/EmptyState";
@@ -64,7 +64,19 @@ const emptyPricing: ModelPricing = { inputPricePerMillion: 0, outputPricePerMill
 export function ModelsPage() {
     const { notify } = useToast();
 
-    const [entries, setEntries] = useState<Awaited<ReturnType<typeof fetchFlatUsageEntries>>>([]);
+    const [entries, setEntries] = useState<
+        Array<{
+            model: string;
+            requests: number;
+            success_count: number;
+            failure_count: number;
+            input_tokens: number;
+            output_tokens: number;
+            cached_tokens: number;
+            total_tokens: number;
+            last_used_at: string;
+        }>
+    >([]);
     const [loading, setLoading] = useState(true);
     const [pricingMap, setPricingMap] = useState<Record<string, ModelPricing>>(loadPricing);
 
@@ -77,7 +89,8 @@ export function ModelsPage() {
     const loadUsage = useCallback(async () => {
         setLoading(true);
         try {
-            setEntries(await fetchFlatUsageEntries(30, 200));
+            const response = await usageApi.getUsageModelStats(30, 500);
+            setEntries(response.items ?? []);
         } catch (err: unknown) {
             notify({ type: "error", message: err instanceof Error ? err.message : "加载模型数据失败" });
         } finally {
@@ -90,48 +103,26 @@ export function ModelsPage() {
     }, [loadUsage]);
 
     const models = useMemo<ModelStats[]>(() => {
-        const modelMap = new Map<
-            string,
-            { requestCount: number; successCount: number; failedCount: number; inputTokens: number; outputTokens: number; cachedTokens: number; totalTokens: number; lastUsed: string }
-        >();
-
-        entries.forEach((entry) => {
-            const existing = modelMap.get(entry.model) || {
-                requestCount: 0,
-                successCount: 0,
-                failedCount: 0,
-                inputTokens: 0,
-                outputTokens: 0,
-                cachedTokens: 0,
-                totalTokens: 0,
-                lastUsed: "",
-            };
-
-            existing.requestCount++;
-            if (entry.failed) {
-                existing.failedCount++;
-            } else {
-                existing.successCount++;
-            }
-            existing.inputTokens += entry.inputTokens;
-            existing.outputTokens += entry.outputTokens;
-            existing.cachedTokens += entry.cachedTokens;
-            existing.totalTokens += entry.totalTokens;
-            if (entry.timestamp && entry.timestamp > existing.lastUsed) {
-                existing.lastUsed = entry.timestamp;
-            }
-
-            modelMap.set(entry.model, existing);
-        });
-
-        return Array.from(modelMap.entries())
-            .map(([id, stats]) => {
-                const pricing = pricingMap[id] || emptyPricing;
+        return entries
+            .map((entry) => {
+                const pricing = pricingMap[entry.model] || emptyPricing;
                 const estimatedCost =
-                    (stats.inputTokens / 1_000_000) * pricing.inputPricePerMillion +
-                    (stats.outputTokens / 1_000_000) * pricing.outputPricePerMillion +
-                    (stats.cachedTokens / 1_000_000) * pricing.cachedPricePerMillion;
-                return { id, ...stats, pricing, estimatedCost };
+                    (entry.input_tokens / 1_000_000) * pricing.inputPricePerMillion +
+                    (entry.output_tokens / 1_000_000) * pricing.outputPricePerMillion +
+                    (entry.cached_tokens / 1_000_000) * pricing.cachedPricePerMillion;
+                return {
+                    id: entry.model,
+                    requestCount: entry.requests,
+                    successCount: entry.success_count,
+                    failedCount: entry.failure_count,
+                    inputTokens: entry.input_tokens,
+                    outputTokens: entry.output_tokens,
+                    cachedTokens: entry.cached_tokens,
+                    totalTokens: entry.total_tokens,
+                    lastUsed: entry.last_used_at,
+                    pricing,
+                    estimatedCost,
+                };
             })
             .sort((a, b) => b.requestCount - a.requestCount);
     }, [entries, pricingMap]);

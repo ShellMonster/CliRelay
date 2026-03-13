@@ -14,9 +14,8 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import { authFilesApi } from "@/lib/http/apis";
+import { authFilesApi, modelsApi, usageApi } from "@/lib/http/apis";
 import type { AuthFileItem, OAuthModelAliasEntry } from "@/lib/http/types";
-import { fetchFlatUsageEntries, type FlatUsageEntry } from "@/modules/usage/usageLogsIndex";
 import { Button } from "@/modules/ui/Button";
 import { Card } from "@/modules/ui/Card";
 import { ConfirmModal } from "@/modules/ui/ConfirmModal";
@@ -30,8 +29,12 @@ import { HoverTooltip } from "@/modules/ui/Tooltip";
 import { ProviderStatusBar } from "@/modules/providers/ProviderStatusBar";
 import {
   calculateStatusBarData,
+  calculateStatusBarDataFromBuckets,
+  createEmptyStatusBlockBuckets,
+  mergeStatusBlockBuckets,
   normalizeUsageSourceId,
   type KeyStatBucket,
+  type StatusBlockBucket,
   type StatusBarData,
 } from "@/modules/providers/provider-usage";
 
@@ -167,59 +170,32 @@ const downloadTextAsFile = (content: string, filename: string) => {
   window.setTimeout(() => URL.revokeObjectURL(url), 800);
 };
 
-type UsageEntry = {
-  timestamp: string;
-  failed: boolean;
+type UsageSourceStatsItem = {
   source: string;
   authIndexKey: string | null;
+  stats: KeyStatBucket;
+  blocks: StatusBlockBucket[];
 };
 
 type UsageIndex = {
-  entriesBySource: Record<string, UsageEntry[]>;
-  entriesByAuthIndex: Record<string, UsageEntry[]>;
-  statsBySource: Record<string, KeyStatBucket>;
-  statsByAuthIndex: Record<string, KeyStatBucket>;
+  itemsBySource: Record<string, UsageSourceStatsItem[]>;
+  itemsByAuthIndex: Record<string, UsageSourceStatsItem[]>;
 };
 
-const buildUsageIndex = (flatEntries: FlatUsageEntry[]): { entries: UsageEntry[]; index: UsageIndex } => {
-  const entries = flatEntries
-    .map((detail) => {
-      const source = normalizeUsageSourceId(detail.source, (v) => v);
-      if (!source) return null;
-      const authIndexKey = normalizeAuthIndexValue(detail.authIndex);
-      return {
-        timestamp: detail.timestamp,
-        failed: Boolean(detail.failed),
-        source,
-        authIndexKey,
-      };
-    })
-    .filter(Boolean) as UsageEntry[];
+const buildUsageIndex = (items: UsageSourceStatsItem[]): UsageIndex => {
+  const itemsBySource: Record<string, UsageSourceStatsItem[]> = {};
+  const itemsByAuthIndex: Record<string, UsageSourceStatsItem[]> = {};
 
-  const entriesBySource: Record<string, UsageEntry[]> = {};
-  const entriesByAuthIndex: Record<string, UsageEntry[]> = {};
-  const statsBySource: Record<string, KeyStatBucket> = {};
-  const statsByAuthIndex: Record<string, KeyStatBucket> = {};
-
-  const bump = (bucket: KeyStatBucket, failed: boolean) => {
-    if (failed) bucket.failure += 1;
-    else bucket.success += 1;
-  };
-
-  entries.forEach((entry) => {
-    (entriesBySource[entry.source] ??= []).push(entry);
-    bump((statsBySource[entry.source] ??= { success: 0, failure: 0 }), entry.failed);
-
-    if (entry.authIndexKey) {
-      (entriesByAuthIndex[entry.authIndexKey] ??= []).push(entry);
-      bump((statsByAuthIndex[entry.authIndexKey] ??= { success: 0, failure: 0 }), entry.failed);
+  items.forEach((item) => {
+    if (item.source) {
+      (itemsBySource[item.source] ??= []).push(item);
+    }
+    if (item.authIndexKey) {
+      (itemsByAuthIndex[item.authIndexKey] ??= []).push(item);
     }
   });
 
-  return {
-    entries,
-    index: { entriesBySource, entriesByAuthIndex, statsBySource, statsByAuthIndex },
-  };
+  return { itemsBySource, itemsByAuthIndex };
 };
 
 const buildAuthFileSourceCandidates = (file: AuthFileItem): string[] => {
@@ -233,49 +209,76 @@ const buildAuthFileSourceCandidates = (file: AuthFileItem): string[] => {
   return Array.from(new Set(list));
 };
 
+const canLoadStaticModelDefinitions = (providerKey: string): boolean =>
+  [
+    "claude",
+    "gemini",
+    "vertex",
+    "gemini-cli",
+    "aistudio",
+    "codex",
+    "qwen",
+    "iflow",
+    "kimi",
+    "antigravity",
+  ].includes(normalizeProviderKey(providerKey));
+
+const dedupeUsageItems = (items: UsageSourceStatsItem[]): UsageSourceStatsItem[] => {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const key = `${item.source}::${item.authIndexKey ?? ""}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
+const mergeUsageItems = (
+  items: UsageSourceStatsItem[],
+): { stats: KeyStatBucket; blocks: StatusBlockBucket[] } =>
+  items.reduce(
+    (acc, item) => ({
+      stats: {
+        success: acc.stats.success + item.stats.success,
+        failure: acc.stats.failure + item.stats.failure,
+      },
+      blocks: mergeStatusBlockBuckets(acc.blocks, item.blocks),
+    }),
+    {
+      stats: { success: 0, failure: 0 },
+      blocks: createEmptyStatusBlockBuckets(),
+    },
+  );
+
 const resolveAuthFileStats = (file: AuthFileItem, index: UsageIndex): KeyStatBucket => {
   const authIndexKey = normalizeAuthIndexValue(
     file.auth_index ?? file.authIndex ?? file.authIndex ?? file.auth_index,
   );
-  if (authIndexKey && index.statsByAuthIndex[authIndexKey]) {
-    return index.statsByAuthIndex[authIndexKey];
+  if (authIndexKey && index.itemsByAuthIndex[authIndexKey]?.length) {
+    return mergeUsageItems(index.itemsByAuthIndex[authIndexKey]).stats;
   }
 
   const candidates = buildAuthFileSourceCandidates(file);
-  let bucket: KeyStatBucket = { success: 0, failure: 0 };
-  candidates.forEach((key) => {
-    const entry = index.statsBySource[key];
-    if (!entry) return;
-    bucket = { success: bucket.success + entry.success, failure: bucket.failure + entry.failure };
-  });
-  return bucket;
+  return mergeUsageItems(
+    dedupeUsageItems(candidates.flatMap((key) => index.itemsBySource[key] ?? [])),
+  ).stats;
 };
 
 const resolveAuthFileStatusBar = (file: AuthFileItem, index: UsageIndex): StatusBarData => {
   const authIndexKey = normalizeAuthIndexValue(
     file.auth_index ?? file.authIndex ?? file.authIndex ?? file.auth_index,
   );
-  if (authIndexKey && index.entriesByAuthIndex[authIndexKey]?.length) {
-    const details = index.entriesByAuthIndex[authIndexKey].map((e) => ({
-      timestamp: e.timestamp,
-      failed: e.failed,
-    }));
-    return calculateStatusBarData(details);
+  if (authIndexKey && index.itemsByAuthIndex[authIndexKey]?.length) {
+    return calculateStatusBarDataFromBuckets(
+      mergeUsageItems(index.itemsByAuthIndex[authIndexKey]).blocks,
+    );
   }
 
   const candidates = buildAuthFileSourceCandidates(file);
-  const merged: UsageEntry[] = [];
-  const seen = new Set<string>();
-  candidates.forEach((key) => {
-    const list = index.entriesBySource[key] ?? [];
-    list.forEach((item) => {
-      const dedupe = `${item.timestamp}::${item.failed ? 1 : 0}`;
-      if (seen.has(dedupe)) return;
-      seen.add(dedupe);
-      merged.push(item);
-    });
-  });
-  return calculateStatusBarData(merged.map((e) => ({ timestamp: e.timestamp, failed: e.failed })));
+  return calculateStatusBarDataFromBuckets(
+    mergeUsageItems(dedupeUsageItems(candidates.flatMap((key) => index.itemsBySource[key] ?? [])))
+      .blocks,
+  );
 };
 
 type PrefixProxyEditorState = {
@@ -328,9 +331,10 @@ export function AuthFilesPage() {
   const modelsCacheRef = useRef<Map<string, AuthFileModelItem[]>>(new Map());
 
   const [usageLoading, setUsageLoading] = useState(false);
-  const [usageEntries, setUsageEntries] = useState<FlatUsageEntry[]>([]);
+  const [usageStatsItems, setUsageStatsItems] = useState<UsageSourceStatsItem[]>([]);
+  const [usageLoadFailed, setUsageLoadFailed] = useState(false);
 
-  const { index: usageIndex } = useMemo(() => buildUsageIndex(usageEntries), [usageEntries]);
+  const usageIndex = useMemo(() => buildUsageIndex(usageStatsItems), [usageStatsItems]);
 
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailFile, setDetailFile] = useState<AuthFileItem | null>(null);
@@ -339,8 +343,10 @@ export function AuthFilesPage() {
 
   const [modelsOpen, setModelsOpen] = useState(false);
   const [modelsLoading, setModelsLoading] = useState(false);
+  const [modelsCurrentFile, setModelsCurrentFile] = useState<AuthFileItem | null>(null);
   const [modelsFileName, setModelsFileName] = useState("");
   const [modelsFileType, setModelsFileType] = useState("");
+  const [modelsSourceLabel, setModelsSourceLabel] = useState("");
   const [modelsList, setModelsList] = useState<AuthFileModelItem[]>([]);
   const [modelsError, setModelsError] = useState<string | null>(null);
 
@@ -376,28 +382,59 @@ export function AuthFilesPage() {
   const [importSearch, setImportSearch] = useState("");
   const [importSelected, setImportSelected] = useState<Set<string>>(new Set());
 
-  const loadAll = useCallback(async () => {
+  const loadFiles = useCallback(async () => {
     setLoading(true);
-    setUsageLoading(true);
     try {
-      const [filesRes, flatEntries] = await Promise.all([
-        authFilesApi.list(),
-        fetchFlatUsageEntries(30, 200).catch(() => []),
-      ]);
+      const filesRes = await authFilesApi.list();
       const list = Array.isArray(filesRes?.files) ? filesRes.files : [];
       setFiles(list);
-      setUsageEntries(flatEntries);
     } catch (err: unknown) {
       notify({ type: "error", message: err instanceof Error ? err.message : "加载认证文件失败" });
     } finally {
       setLoading(false);
-      setUsageLoading(false);
     }
   }, [notify]);
 
+  const loadUsageEntries = useCallback(async () => {
+    setUsageLoading(true);
+    setUsageLoadFailed(false);
+    try {
+      const response = await usageApi.getUsageSourceStats(30, 200, 10);
+      const items = response.items
+        .map((item) => {
+          const source = normalizeUsageSourceId(item.source, (v) => v);
+          if (!source && !normalizeAuthIndexValue(item.auth_index)) return null;
+          return {
+            source,
+            authIndexKey: normalizeAuthIndexValue(item.auth_index),
+            stats: {
+              success: item.success_count,
+              failure: item.failure_count,
+            },
+            blocks: item.blocks.map((block) => ({
+              success: block.success_count,
+              failure: block.failure_count,
+            })),
+          };
+        })
+        .filter(Boolean) as UsageSourceStatsItem[];
+      setUsageStatsItems(items);
+    } catch {
+      setUsageStatsItems([]);
+      setUsageLoadFailed(true);
+    } finally {
+      setUsageLoading(false);
+    }
+  }, []);
+
+  const refreshAll = useCallback(async () => {
+    await Promise.all([loadFiles(), loadUsageEntries()]);
+  }, [loadFiles, loadUsageEntries]);
+
   useEffect(() => {
-    void loadAll();
-  }, [loadAll]);
+    void loadFiles();
+    void loadUsageEntries();
+  }, [loadFiles, loadUsageEntries]);
 
   useEffect(() => {
     const state = readAuthFilesUiState();
@@ -491,9 +528,12 @@ export function AuthFilesPage() {
 
   const openModels = useCallback(
     async (file: AuthFileItem) => {
+      const typeKey = resolveFileType(file);
       setModelsOpen(true);
+      setModelsCurrentFile(file);
       setModelsFileName(file.name);
-      setModelsFileType(resolveFileType(file));
+      setModelsFileType(typeKey);
+      setModelsSourceLabel("");
       setModelsLoading(true);
       setModelsList([]);
       setModelsError(null);
@@ -501,21 +541,88 @@ export function AuthFilesPage() {
       const cached = modelsCacheRef.current.get(file.name);
       if (cached) {
         setModelsList(cached);
+        setModelsSourceLabel("缓存");
         setModelsLoading(false);
         return;
       }
 
       try {
         const list = await authFilesApi.getModelsForAuthFile(file.name);
-        modelsCacheRef.current.set(file.name, list);
-        setModelsList(list);
+        if (list.length > 0) {
+          modelsCacheRef.current.set(file.name, list);
+          setModelsList(list);
+          setModelsSourceLabel("已注册模型");
+          return;
+        }
+        if (canLoadStaticModelDefinitions(typeKey)) {
+          const staticModels = await modelsApi.getStaticModelDefinitions(typeKey);
+          const normalized = staticModels.map((model) => ({
+            id: model.name,
+            display_name: model.alias,
+          }));
+          modelsCacheRef.current.set(file.name, normalized);
+          setModelsList(normalized);
+          setModelsSourceLabel("静态模型定义");
+          return;
+        }
+        setModelsError("unsupported");
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : "";
+        if (/404|not found/i.test(message) && canLoadStaticModelDefinitions(typeKey)) {
+          try {
+            const staticModels = await modelsApi.getStaticModelDefinitions(typeKey);
+            const normalized = staticModels.map((model) => ({
+              id: model.name,
+              display_name: model.alias,
+            }));
+            modelsCacheRef.current.set(file.name, normalized);
+            setModelsList(normalized);
+            setModelsSourceLabel("静态模型定义");
+            return;
+          } catch {
+            setModelsError("unsupported");
+            return;
+          }
+        }
         if (/404|not found/i.test(message)) {
           setModelsError("unsupported");
           return;
         }
         notify({ type: "error", message: message || "获取模型列表失败" });
+      } finally {
+        setModelsLoading(false);
+      }
+    },
+    [notify],
+  );
+
+  const loadStaticModels = useCallback(
+    async (file: AuthFileItem) => {
+      const typeKey = resolveFileType(file);
+      if (!canLoadStaticModelDefinitions(typeKey)) {
+        setModelsError("unsupported");
+        return;
+      }
+
+      setModelsOpen(true);
+      setModelsCurrentFile(file);
+      setModelsFileName(file.name);
+      setModelsFileType(typeKey);
+      setModelsSourceLabel("");
+      setModelsLoading(true);
+      setModelsError(null);
+      try {
+        const staticModels = await modelsApi.getStaticModelDefinitions(typeKey);
+        const normalized = staticModels.map((model) => ({
+          id: model.name,
+          display_name: model.alias,
+        }));
+        modelsCacheRef.current.set(file.name, normalized);
+        setModelsList(normalized);
+        setModelsSourceLabel("静态模型定义");
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "";
+        notify({ type: "error", message: message || "拉取模型定义失败" });
       } finally {
         setModelsLoading(false);
       }
@@ -572,7 +679,7 @@ export function AuthFilesPage() {
           });
         }
 
-        await loadAll();
+        await loadFiles();
       } catch (err: unknown) {
         notify({ type: "error", message: err instanceof Error ? err.message : "上传失败" });
       } finally {
@@ -582,7 +689,7 @@ export function AuthFilesPage() {
         }
       }
     },
-    [loadAll, notify],
+    [loadFiles, notify],
   );
 
   const handleDelete = useCallback(
@@ -795,7 +902,7 @@ export function AuthFilesPage() {
       const file = new File([payload], name, { type: "application/json" });
       await authFilesApi.upload(file);
       notify({ type: "success", message: "已保存" });
-      await loadAll();
+      await loadFiles();
       setPrefixProxyEditor({
         open: false,
         fileName: "",
@@ -811,7 +918,7 @@ export function AuthFilesPage() {
       setPrefixProxyEditor((prev) => ({ ...prev, saving: false }));
     }
   }, [
-    loadAll,
+    loadFiles,
     notify,
     prefixProxyDirty,
     prefixProxyEditor.fileName,
@@ -1128,7 +1235,7 @@ export function AuthFilesPage() {
                 <Button
                   variant="secondary"
                   size="sm"
-                  onClick={() => void loadAll()}
+                  onClick={() => void refreshAll()}
                   disabled={loading || usageLoading}
                 >
                   <RefreshCw size={14} className={loading || usageLoading ? "animate-spin" : ""} />
@@ -1455,11 +1562,15 @@ export function AuthFilesPage() {
                 </div>
               </div>
 
-              {usageEntries.length > 0 ? null : (
+              {usageLoading ? (
+                <p className="text-xs text-slate-500 dark:text-white/55">
+                  正在后台加载使用统计，文件列表可先正常操作。
+                </p>
+              ) : usageLoadFailed ? (
                 <p className="text-xs text-slate-500 dark:text-white/55">
                   使用统计加载失败：不会影响文件管理，但成功/失败与状态条将显示为 0。
                 </p>
-              )}
+              ) : null}
             </div>
           </TabsContent>
 
@@ -1823,9 +1934,31 @@ export function AuthFilesPage() {
         title={`模型列表：${modelsFileName || "--"}${modelsFileType ? ` (${modelsFileType})` : ""}`}
         onClose={() => setModelsOpen(false)}
         footer={
-          <Button variant="secondary" onClick={() => setModelsOpen(false)}>
-            关闭
-          </Button>
+          <div className="flex items-center gap-2">
+            {modelsCurrentFile ? (
+              <Button
+                variant="secondary"
+                onClick={() => void openModels(modelsCurrentFile)}
+                disabled={modelsLoading}
+              >
+                <RefreshCw size={14} className={modelsLoading ? "animate-spin" : ""} />
+                刷新
+              </Button>
+            ) : null}
+            {modelsCurrentFile && canLoadStaticModelDefinitions(modelsFileType) ? (
+              <Button
+                variant="secondary"
+                onClick={() => void loadStaticModels(modelsCurrentFile)}
+                disabled={modelsLoading}
+              >
+                <ShieldCheck size={14} />
+                拉取模型
+              </Button>
+            ) : null}
+            <Button variant="secondary" onClick={() => setModelsOpen(false)}>
+              关闭
+            </Button>
+          </div>
         }
       >
         {modelsLoading ? (
@@ -1842,6 +1975,9 @@ export function AuthFilesPage() {
           />
         ) : (
           <div className="space-y-2">
+            {modelsSourceLabel ? (
+              <p className="text-xs text-slate-500 dark:text-white/55">来源：{modelsSourceLabel}</p>
+            ) : null}
             {modelsList.map((model) => (
               <div
                 key={model.id}

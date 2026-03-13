@@ -9,6 +9,11 @@ export type StatusBarData = {
   totalFailure: number;
 };
 
+export type StatusBlockBucket = {
+  success: number;
+  failure: number;
+};
+
 const USAGE_SOURCE_PREFIX_KEY = "k:";
 const USAGE_SOURCE_PREFIX_MASKED = "m:";
 const USAGE_SOURCE_PREFIX_TEXT = "t:";
@@ -177,6 +182,52 @@ export function calculateStatusBarData(
     if (stat.success === 0 && stat.failure === 0) return "idle";
     if (stat.failure === 0) return "success";
     if (stat.success === 0) return "failure";
+    return "mixed";
+  });
+
+  const total = totalSuccess + totalFailure;
+  const successRate = total > 0 ? (totalSuccess / total) * 100 : 100;
+
+  return {
+    blocks,
+    successRate,
+    totalSuccess,
+    totalFailure,
+  };
+}
+
+export function createEmptyStatusBlockBuckets(count = 20): StatusBlockBucket[] {
+  return Array.from({ length: count }, () => ({ success: 0, failure: 0 }));
+}
+
+export function mergeStatusBlockBuckets(
+  left: StatusBlockBucket[],
+  right: StatusBlockBucket[],
+): StatusBlockBucket[] {
+  const count = Math.max(left.length, right.length);
+  const next = createEmptyStatusBlockBuckets(count);
+  for (let i = 0; i < count; i += 1) {
+    const leftBucket = left[i];
+    const rightBucket = right[i];
+    next[i] = {
+      success: (leftBucket?.success ?? 0) + (rightBucket?.success ?? 0),
+      failure: (leftBucket?.failure ?? 0) + (rightBucket?.failure ?? 0),
+    };
+  }
+  return next;
+}
+
+export function calculateStatusBarDataFromBuckets(buckets: StatusBlockBucket[]): StatusBarData {
+  const normalized = buckets.length ? buckets : createEmptyStatusBlockBuckets();
+  let totalSuccess = 0;
+  let totalFailure = 0;
+
+  const blocks: StatusBlockState[] = normalized.map((bucket) => {
+    totalSuccess += bucket.success;
+    totalFailure += bucket.failure;
+    if (bucket.success === 0 && bucket.failure === 0) return "idle";
+    if (bucket.failure === 0) return "success";
+    if (bucket.success === 0) return "failure";
     return "mixed";
   });
 
