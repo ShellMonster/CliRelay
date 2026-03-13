@@ -51,7 +51,7 @@ func (h *Handler) GetDashboardSummary(c *gin.Context) {
 		days = v
 	}
 
-	usageSummary, err := usage.QueryDashboardSummary(days, "")
+	usageSummary, err := usage.QueryDashboardSummary(days, "", "", "")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

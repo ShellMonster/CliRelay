@@ -109,9 +109,9 @@ export const usageApi = {
     if (params.model) qs.set("model", params.model);
     if (params.status) qs.set("status", params.status);
     const query = qs.toString();
-    const response = await apiClient.get<Partial<UsageLogsResponse> | undefined>(
-      `/usage/logs${query ? `?${query}` : ""}`,
-    );
+    const response = await apiClient.get<
+      Partial<UsageLogsResponse> | undefined
+    >(`/usage/logs${query ? `?${query}` : ""}`);
 
     const rawItems = Array.isArray(response?.items) ? response.items : [];
     const rawFilters = response?.filters;
@@ -120,20 +120,33 @@ export const usageApi = {
     return {
       items: rawItems,
       total: typeof response?.total === "number" ? response.total : 0,
-      page: typeof response?.page === "number" ? response.page : params.page ?? 1,
-      size: typeof response?.size === "number" ? response.size : params.size ?? 50,
+      page:
+        typeof response?.page === "number" ? response.page : (params.page ?? 1),
+      size:
+        typeof response?.size === "number"
+          ? response.size
+          : (params.size ?? 50),
       filters: {
-        api_keys: Array.isArray(rawFilters?.api_keys) ? rawFilters.api_keys : [],
+        api_keys: Array.isArray(rawFilters?.api_keys)
+          ? rawFilters.api_keys
+          : [],
         api_key_names:
-          rawFilters?.api_key_names && typeof rawFilters.api_key_names === "object"
+          rawFilters?.api_key_names &&
+          typeof rawFilters.api_key_names === "object"
             ? rawFilters.api_key_names
             : {},
         models: Array.isArray(rawFilters?.models) ? rawFilters.models : [],
       },
       stats: {
         total: typeof rawStats?.total === "number" ? rawStats.total : 0,
-        success_rate: typeof rawStats?.success_rate === "number" ? rawStats.success_rate : 0,
-        total_tokens: typeof rawStats?.total_tokens === "number" ? rawStats.total_tokens : 0,
+        success_rate:
+          typeof rawStats?.success_rate === "number"
+            ? rawStats.success_rate
+            : 0,
+        total_tokens:
+          typeof rawStats?.total_tokens === "number"
+            ? rawStats.total_tokens
+            : 0,
       },
     };
   },
@@ -149,56 +162,117 @@ export const usageApi = {
   getUsageOverview(days = 30, apiKey?: string): Promise<UsageOverviewResponse> {
     const query = new URLSearchParams({ days: String(days) });
     if (apiKey?.trim()) query.set("api_key", apiKey.trim());
-    return apiClient.get<UsageOverviewResponse>(`/usage/overview?${query.toString()}`);
+    return apiClient.get<UsageOverviewResponse>(
+      `/usage/overview?${query.toString()}`,
+    );
   },
 
-  getUsageCredentialHealth(days = 30, apiKey?: string): Promise<UsageCredentialHealthResponse> {
+  getUsageCredentialHealth(
+    days = 30,
+    apiKey?: string,
+  ): Promise<UsageCredentialHealthResponse> {
     const query = new URLSearchParams({ days: String(days) });
     if (apiKey?.trim()) query.set("api_key", apiKey.trim());
-    return apiClient.get<UsageCredentialHealthResponse>(`/usage/credential-health?${query.toString()}`);
+    return apiClient.get<UsageCredentialHealthResponse>(
+      `/usage/credential-health?${query.toString()}`,
+    );
   },
 
   getDashboardSummary(days = 7): Promise<DashboardSummary> {
     return apiClient.get<DashboardSummary>(`/dashboard-summary?days=${days}`);
   },
 
-  getMonitorSummary(days = 7, apiKey?: string): Promise<MonitorSummaryResponse> {
+  getMonitorFilters(
+    days = 7,
+    apiKey?: string,
+    channelName?: string,
+  ): Promise<MonitorFiltersResponse> {
     const query = new URLSearchParams({ days: String(days) });
     if (apiKey?.trim()) query.set("api_key", apiKey.trim());
-    return apiClient.get<MonitorSummaryResponse>(`/monitor/summary?${query.toString()}`);
+    if (channelName?.trim()) query.set("channel_name", channelName.trim());
+    return apiClient.get<MonitorFiltersResponse>(
+      `/monitor/filters?${query.toString()}`,
+    );
+  },
+
+  getMonitorSummary(
+    days = 7,
+    apiKey?: string,
+    model?: string,
+    channelName?: string,
+  ): Promise<MonitorSummaryResponse> {
+    const query = new URLSearchParams({ days: String(days) });
+    if (apiKey?.trim()) query.set("api_key", apiKey.trim());
+    if (model?.trim()) query.set("model", model.trim());
+    if (channelName?.trim()) query.set("channel_name", channelName.trim());
+    return apiClient.get<MonitorSummaryResponse>(
+      `/monitor/summary?${query.toString()}`,
+    );
   },
 
   getMonitorModelDistribution(
     days = 7,
     limit = 10,
     apiKey?: string,
+    model?: string,
+    channelName?: string,
   ): Promise<MonitorModelDistributionResponse> {
-    const query = new URLSearchParams({ days: String(days), limit: String(limit) });
+    const query = new URLSearchParams({
+      days: String(days),
+      limit: String(limit),
+    });
     if (apiKey?.trim()) query.set("api_key", apiKey.trim());
+    if (model?.trim()) query.set("model", model.trim());
+    if (channelName?.trim()) query.set("channel_name", channelName.trim());
     return apiClient.get<MonitorModelDistributionResponse>(
       `/monitor/model-distribution?${query.toString()}`,
     );
   },
 
-  getMonitorDailyTrend(days = 7, apiKey?: string): Promise<MonitorDailyTrendResponse> {
+  getMonitorDailyTrend(
+    days = 7,
+    apiKey?: string,
+    model?: string,
+    channelName?: string,
+  ): Promise<MonitorDailyTrendResponse> {
     const query = new URLSearchParams({ days: String(days) });
     if (apiKey?.trim()) query.set("api_key", apiKey.trim());
-    return apiClient.get<MonitorDailyTrendResponse>(`/monitor/daily-trend?${query.toString()}`);
+    if (model?.trim()) query.set("model", model.trim());
+    if (channelName?.trim()) query.set("channel_name", channelName.trim());
+    return apiClient.get<MonitorDailyTrendResponse>(
+      `/monitor/daily-trend?${query.toString()}`,
+    );
   },
 
-  getMonitorHourly(hours = 24, apiKey?: string): Promise<MonitorHourlyResponse> {
+  getMonitorHourly(
+    hours = 24,
+    apiKey?: string,
+    model?: string,
+    channelName?: string,
+  ): Promise<MonitorHourlyResponse> {
     const query = new URLSearchParams({ hours: String(hours) });
     if (apiKey?.trim()) query.set("api_key", apiKey.trim());
-    return apiClient.get<MonitorHourlyResponse>(`/monitor/hourly?${query.toString()}`);
+    if (model?.trim()) query.set("model", model.trim());
+    if (channelName?.trim()) query.set("channel_name", channelName.trim());
+    return apiClient.get<MonitorHourlyResponse>(
+      `/monitor/hourly?${query.toString()}`,
+    );
   },
 
   getMonitorChannelStats(
     days = 7,
     limit = 10,
     apiKey?: string,
+    model?: string,
+    channelName?: string,
   ): Promise<MonitorChannelStatsResponse> {
-    const query = new URLSearchParams({ days: String(days), limit: String(limit) });
+    const query = new URLSearchParams({
+      days: String(days),
+      limit: String(limit),
+    });
     if (apiKey?.trim()) query.set("api_key", apiKey.trim());
+    if (model?.trim()) query.set("model", model.trim());
+    if (channelName?.trim()) query.set("channel_name", channelName.trim());
     return apiClient.get<MonitorChannelStatsResponse>(
       `/monitor/channel-stats?${query.toString()}`,
     );
@@ -208,9 +282,16 @@ export const usageApi = {
     days = 7,
     limit = 10,
     apiKey?: string,
+    model?: string,
+    channelName?: string,
   ): Promise<MonitorFailureStatsResponse> {
-    const query = new URLSearchParams({ days: String(days), limit: String(limit) });
+    const query = new URLSearchParams({
+      days: String(days),
+      limit: String(limit),
+    });
     if (apiKey?.trim()) query.set("api_key", apiKey.trim());
+    if (model?.trim()) query.set("model", model.trim());
+    if (channelName?.trim()) query.set("channel_name", channelName.trim());
     return apiClient.get<MonitorFailureStatsResponse>(
       `/monitor/failure-stats?${query.toString()}`,
     );
@@ -258,6 +339,16 @@ export interface MonitorSummaryResponse {
     ReasoningTokens: number;
     CachedTokens: number;
     TotalTokens: number;
+  };
+}
+
+export interface MonitorFiltersResponse {
+  days: number;
+  filters: {
+    api_keys: string[];
+    api_key_names: Record<string, string>;
+    models: string[];
+    channels: string[];
   };
 }
 

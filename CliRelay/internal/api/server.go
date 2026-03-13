@@ -499,6 +499,7 @@ func (s *Server) registerManagementRoutes() {
 	mgmt.Use(s.managementAvailabilityMiddleware(), s.mgmt.Middleware())
 	{
 		mgmt.GET("/dashboard-summary", s.mgmt.GetDashboardSummary)
+		mgmt.GET("/monitor/filters", s.mgmt.GetMonitorFilters)
 		mgmt.GET("/monitor/summary", s.mgmt.GetMonitorSummary)
 		mgmt.GET("/monitor/model-distribution", s.mgmt.GetMonitorModelDistribution)
 		mgmt.GET("/monitor/daily-trend", s.mgmt.GetMonitorDailyTrend)

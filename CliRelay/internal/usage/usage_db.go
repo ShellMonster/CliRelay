@@ -56,6 +56,7 @@ type FilterOptions struct {
 	APIKeys     []string          `json:"api_keys"`
 	APIKeyNames map[string]string `json:"api_key_names"`
 	Models      []string          `json:"models"`
+	Channels    []string          `json:"channels"`
 }
 
 // LogStats holds aggregated stats over the filtered result set.
@@ -314,8 +315,42 @@ func QueryFilters(days int) (FilterOptions, error) {
 	if err != nil {
 		return FilterOptions{}, err
 	}
+	channels, err := queryDistinct(db, "channel_name", cutoff)
+	if err != nil {
+		return FilterOptions{}, err
+	}
 
-	return FilterOptions{APIKeys: keys, Models: models}, nil
+	return FilterOptions{APIKeys: keys, Models: models, Channels: channels}, nil
+}
+
+func QueryMonitorFilters(days int, apiKey string, channelName string) (FilterOptions, error) {
+	db := getDB()
+	if db == nil {
+		return FilterOptions{}, nil
+	}
+	if days < 1 {
+		days = 7
+	}
+	cutoff := localDayCutoff(days).Format(time.RFC3339)
+
+	keys, err := queryDistinct(db, "api_key", cutoff)
+	if err != nil {
+		return FilterOptions{}, err
+	}
+	channels, err := queryDistinctFiltered(db, "channel_name", cutoff, apiKey, "", "")
+	if err != nil {
+		return FilterOptions{}, err
+	}
+	models, err := queryDistinctFiltered(db, "model", cutoff, apiKey, "", channelName)
+	if err != nil {
+		return FilterOptions{}, err
+	}
+
+	return FilterOptions{
+		APIKeys:  keys,
+		Models:   models,
+		Channels: channels,
+	}, nil
 }
 
 // QueryStats returns aggregated statistics over the filtered dataset.
@@ -519,7 +554,7 @@ type UsageOverview struct {
 	ServiceHealth  []UsageServiceHealthPoint `json:"service_health"`
 }
 
-func buildAggregateWhere(days int, apiKey string) (string, []any) {
+func buildAggregateWhere(days int, apiKey string, model string, channelName string) (string, []any) {
 	if days < 1 {
 		days = 7
 	}
@@ -531,17 +566,25 @@ func buildAggregateWhere(days int, apiKey string) (string, []any) {
 		clauses = append(clauses, "api_key = ?")
 		args = append(args, strings.TrimSpace(apiKey))
 	}
+	if strings.TrimSpace(model) != "" {
+		clauses = append(clauses, "model = ?")
+		args = append(args, strings.TrimSpace(model))
+	}
+	if strings.TrimSpace(channelName) != "" {
+		clauses = append(clauses, "channel_name = ?")
+		args = append(args, strings.TrimSpace(channelName))
+	}
 
 	return " WHERE " + strings.Join(clauses, " AND "), args
 }
 
 // QueryDashboardSummary returns time-filtered dashboard KPI data from SQLite.
-func QueryDashboardSummary(days int, apiKey string) (DashboardSummary, error) {
+func QueryDashboardSummary(days int, apiKey string, model string, channelName string) (DashboardSummary, error) {
 	db := getDB()
 	if db == nil {
 		return DashboardSummary{}, nil
 	}
-	where, args := buildAggregateWhere(days, apiKey)
+	where, args := buildAggregateWhere(days, apiKey, model, channelName)
 
 	sqlText := `
 SELECT
@@ -589,7 +632,7 @@ FROM request_logs
 	}, nil
 }
 
-func QueryModelDistribution(days int, limit int, apiKey string) ([]ModelDistributionPoint, error) {
+func QueryModelDistribution(days int, limit int, apiKey string, model string, channelName string) ([]ModelDistributionPoint, error) {
 	db := getDB()
 	if db == nil {
 		return []ModelDistributionPoint{}, nil
@@ -597,7 +640,7 @@ func QueryModelDistribution(days int, limit int, apiKey string) ([]ModelDistribu
 	if limit < 1 {
 		limit = 10
 	}
-	where, args := buildAggregateWhere(days, apiKey)
+	where, args := buildAggregateWhere(days, apiKey, model, channelName)
 
 	query := `
 SELECT model, COUNT(*) AS requests, COALESCE(SUM(total_tokens), 0) AS tokens
@@ -623,12 +666,12 @@ LIMIT ?`
 	return points, nil
 }
 
-func QueryDailyTrend(days int, apiKey string) ([]DailyTrendPoint, error) {
+func QueryDailyTrend(days int, apiKey string, model string, channelName string) ([]DailyTrendPoint, error) {
 	db := getDB()
 	if db == nil {
 		return []DailyTrendPoint{}, nil
 	}
-	where, args := buildAggregateWhere(days, apiKey)
+	where, args := buildAggregateWhere(days, apiKey, model, channelName)
 
 	query := `
 SELECT
@@ -667,7 +710,7 @@ ORDER BY day ASC`
 	return points, nil
 }
 
-func QueryHourlySeries(hours int, apiKey string) ([]HourlySeriesPoint, error) {
+func QueryHourlySeries(hours int, apiKey string, model string, channelName string) ([]HourlySeriesPoint, error) {
 	db := getDB()
 	if db == nil {
 		return []HourlySeriesPoint{}, nil
@@ -682,6 +725,14 @@ func QueryHourlySeries(hours int, apiKey string) ([]HourlySeriesPoint, error) {
 	if strings.TrimSpace(apiKey) != "" {
 		clauses = append(clauses, "api_key = ?")
 		args = append(args, strings.TrimSpace(apiKey))
+	}
+	if strings.TrimSpace(model) != "" {
+		clauses = append(clauses, "model = ?")
+		args = append(args, strings.TrimSpace(model))
+	}
+	if strings.TrimSpace(channelName) != "" {
+		clauses = append(clauses, "channel_name = ?")
+		args = append(args, strings.TrimSpace(channelName))
 	}
 
 	query := `
@@ -724,7 +775,7 @@ ORDER BY hour ASC, model ASC`
 	return points, nil
 }
 
-func QueryChannelStats(days int, apiKey string, limit int) ([]ChannelStatsPoint, []ChannelModelStatsPoint, error) {
+func QueryChannelStats(days int, apiKey string, model string, channelName string, limit int) ([]ChannelStatsPoint, []ChannelModelStatsPoint, error) {
 	db := getDB()
 	if db == nil {
 		return []ChannelStatsPoint{}, []ChannelModelStatsPoint{}, nil
@@ -732,7 +783,7 @@ func QueryChannelStats(days int, apiKey string, limit int) ([]ChannelStatsPoint,
 	if limit < 1 {
 		limit = 10
 	}
-	where, args := buildAggregateWhere(days, apiKey)
+	where, args := buildAggregateWhere(days, apiKey, model, channelName)
 
 	channelQuery := `
 SELECT
@@ -827,7 +878,7 @@ ORDER BY source ASC, requests DESC, last_request_at DESC, model ASC`
 	return channels, models, nil
 }
 
-func QueryFailureStats(days int, apiKey string, limit int) ([]FailureChannelPoint, []FailureModelPoint, error) {
+func QueryFailureStats(days int, apiKey string, model string, channelName string, limit int) ([]FailureChannelPoint, []FailureModelPoint, error) {
 	db := getDB()
 	if db == nil {
 		return []FailureChannelPoint{}, []FailureModelPoint{}, nil
@@ -835,7 +886,7 @@ func QueryFailureStats(days int, apiKey string, limit int) ([]FailureChannelPoin
 	if limit < 1 {
 		limit = 10
 	}
-	where, args := buildAggregateWhere(days, apiKey)
+	where, args := buildAggregateWhere(days, apiKey, model, channelName)
 
 	channelQuery := `
 SELECT
@@ -924,7 +975,7 @@ func QueryUsageRequestTrend(days int, apiKey string) ([]UsageSeriesPoint, error)
 	if db == nil {
 		return []UsageSeriesPoint{}, nil
 	}
-	where, args := buildAggregateWhere(days, apiKey)
+	where, args := buildAggregateWhere(days, apiKey, "", "")
 
 	query := `
 SELECT
@@ -972,7 +1023,7 @@ func QueryUsageAPIStats(days int, apiKey string, limit int) ([]UsageAPIStats, er
 	if limit < 1 {
 		limit = 20
 	}
-	where, args := buildAggregateWhere(days, apiKey)
+	where, args := buildAggregateWhere(days, apiKey, "", "")
 
 	apiQuery := `
 SELECT
@@ -1077,7 +1128,7 @@ func QueryUsageModelStats(days int, apiKey string, limit int) ([]UsageModelStats
 	if limit < 1 {
 		limit = 50
 	}
-	where, args := buildAggregateWhere(days, apiKey)
+	where, args := buildAggregateWhere(days, apiKey, "", "")
 
 	query := `
 SELECT
@@ -1123,7 +1174,7 @@ func QueryUsageCredentialStats(days int, apiKey string, limit int) ([]UsageCrede
 	if limit < 1 {
 		limit = 200
 	}
-	where, args := buildAggregateWhere(days, apiKey)
+	where, args := buildAggregateWhere(days, apiKey, "", "")
 
 	query := `
 SELECT
@@ -1258,7 +1309,7 @@ ORDER BY auth_index ASC, bucket ASC`
 }
 
 func QueryUsageOverview(days int, apiKey string) (UsageOverview, error) {
-	summary, err := QueryDashboardSummary(days, apiKey)
+	summary, err := QueryDashboardSummary(days, apiKey, "", "")
 	if err != nil {
 		return UsageOverview{}, err
 	}
@@ -1425,6 +1476,47 @@ func queryDistinct(db *sql.DB, column, cutoff string) ([]string, error) {
 			return nil, err
 		}
 		if v != "" {
+			result = append(result, v)
+		}
+	}
+	return result, nil
+}
+
+func queryDistinctFiltered(db *sql.DB, column, cutoff, apiKey, model, channelName string) ([]string, error) {
+	clauses := []string{"timestamp >= ?"}
+	args := []any{cutoff}
+	if strings.TrimSpace(apiKey) != "" {
+		clauses = append(clauses, "api_key = ?")
+		args = append(args, strings.TrimSpace(apiKey))
+	}
+	if strings.TrimSpace(model) != "" {
+		clauses = append(clauses, "model = ?")
+		args = append(args, strings.TrimSpace(model))
+	}
+	if strings.TrimSpace(channelName) != "" {
+		clauses = append(clauses, "channel_name = ?")
+		args = append(args, strings.TrimSpace(channelName))
+	}
+
+	q := fmt.Sprintf(
+		"SELECT DISTINCT %s FROM request_logs WHERE %s ORDER BY %s",
+		column,
+		strings.Join(clauses, " AND "),
+		column,
+	)
+	rows, err := db.Query(q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("usage: distinct filtered %s: %w", column, err)
+	}
+	defer rows.Close()
+
+	var result []string
+	for rows.Next() {
+		var v string
+		if err := rows.Scan(&v); err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(v) != "" {
 			result = append(result, v)
 		}
 	}

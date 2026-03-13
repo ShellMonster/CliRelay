@@ -11,23 +11,25 @@ import {
   Coins,
   Filter,
   RefreshCw,
-  Search,
   ShieldCheck,
   Sigma,
 } from "lucide-react";
 import { usageApi } from "@/lib/http/apis/usage";
-import {
-  formatNumber,
-  formatRate,
-} from "@/modules/monitor/monitor-utils";
+import { formatNumber, formatRate } from "@/modules/monitor/monitor-utils";
 import { AnimatedNumber } from "@/modules/ui/AnimatedNumber";
-import { TextInput } from "@/modules/ui/Input";
 import { Reveal } from "@/modules/ui/Reveal";
+import { SearchableSelect } from "@/modules/ui/SearchableSelect";
 import { EChart } from "@/modules/ui/charts/EChart";
 import { ChartLegend } from "@/modules/ui/charts/ChartLegend";
 import { useTheme } from "@/modules/ui/ThemeProvider";
-import type { HourWindow, TimeRange } from "@/modules/monitor/monitor-constants";
-import { CHART_COLOR_CLASSES, HOURLY_MODEL_COLORS } from "@/modules/monitor/monitor-constants";
+import type {
+  HourWindow,
+  TimeRange,
+} from "@/modules/monitor/monitor-constants";
+import {
+  CHART_COLOR_CLASSES,
+  HOURLY_MODEL_COLORS,
+} from "@/modules/monitor/monitor-constants";
 import {
   formatCompact,
   formatMonthDay,
@@ -53,17 +55,23 @@ export function MonitorPage() {
     state: { mode },
   } = useTheme();
   const isDark = mode === "dark";
-  const [dailyLegendSelected, setDailyLegendSelected] = useState<Record<string, boolean>>({
+  const [dailyLegendSelected, setDailyLegendSelected] = useState<
+    Record<string, boolean>
+  >({
     "输入 Token": true,
     "输出 Token": true,
     请求数: true,
   });
 
-  const [hourlyModelSelected, setHourlyModelSelected] = useState<Record<string, boolean>>({
+  const [hourlyModelSelected, setHourlyModelSelected] = useState<
+    Record<string, boolean>
+  >({
     总请求: true,
   });
 
-  const [hourlyTokenSelected, setHourlyTokenSelected] = useState<Record<string, boolean>>({
+  const [hourlyTokenSelected, setHourlyTokenSelected] = useState<
+    Record<string, boolean>
+  >({
     输入: true,
     输出: true,
     推理: true,
@@ -72,11 +80,28 @@ export function MonitorPage() {
   });
 
   const [timeRange, setTimeRange] = useState<TimeRange>(7);
-  const [apiFilterInput, setApiFilterInput] = useState("");
+  const [filterOptions, setFilterOptions] = useState<{
+    api_keys: string[];
+    api_key_names: Record<string, string>;
+    models: string[];
+    channels: string[];
+  }>({
+    api_keys: [],
+    api_key_names: {},
+    models: [],
+    channels: [],
+  });
+  const [pendingApiFilter, setPendingApiFilter] = useState("");
+  const [pendingModelFilter, setPendingModelFilter] = useState("");
+  const [pendingChannelFilter, setPendingChannelFilter] = useState("");
   const [apiFilter, setApiFilter] = useState("");
+  const [modelFilter, setModelFilter] = useState("");
+  const [channelFilter, setChannelFilter] = useState("");
   const [modelHourWindow, setModelHourWindow] = useState<HourWindow>(24);
   const [tokenHourWindow, setTokenHourWindow] = useState<HourWindow>(24);
-  const [modelMetric, setModelMetric] = useState<"requests" | "tokens">("requests");
+  const [modelMetric, setModelMetric] = useState<"requests" | "tokens">(
+    "requests",
+  );
   const [error, setError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(true);
   const [isPending, startTransition] = useTransition();
@@ -89,13 +114,30 @@ export function MonitorPage() {
     inputTokens: 0,
     outputTokens: 0,
   });
-  const [modelDistributionData, setModelDistributionData] = useState<Array<{ name: string; value: number; requests: number; tokens: number }>>([]);
-  const [dailySeries, setDailySeries] = useState<Array<{ label: string; requests: number; inputTokens: number; outputTokens: number; totalTokens: number }>>([]);
+  const [modelDistributionData, setModelDistributionData] = useState<
+    Array<{ name: string; value: number; requests: number; tokens: number }>
+  >([]);
+  const [dailySeries, setDailySeries] = useState<
+    Array<{
+      label: string;
+      requests: number;
+      inputTokens: number;
+      outputTokens: number;
+      totalTokens: number;
+    }>
+  >([]);
   const [hourlySeries, setHourlySeries] = useState<{
     modelKeys: string[];
-    modelPoints: Array<{ label: string; stacks: Array<{ key: string; value: number }>; successRate: number }>;
+    modelPoints: Array<{
+      label: string;
+      stacks: Array<{ key: string; value: number }>;
+      successRate: number;
+    }>;
     tokenKeys: string[];
-    tokenPoints: Array<{ label: string; stacks: Array<{ key: string; value: number }> }>;
+    tokenPoints: Array<{
+      label: string;
+      stacks: Array<{ key: string; value: number }>;
+    }>;
   }>({
     modelKeys: [],
     modelPoints: [],
@@ -107,12 +149,29 @@ export function MonitorPage() {
     setIsRefreshing(true);
     setError(null);
     try {
-      const [summaryRes, distributionRes, dailyRes, hourlyRes] = await Promise.all([
-        usageApi.getMonitorSummary(timeRange, apiFilter),
-        usageApi.getMonitorModelDistribution(timeRange, 10, apiFilter),
-        usageApi.getMonitorDailyTrend(timeRange, apiFilter),
-        usageApi.getMonitorHourly(24, apiFilter),
-      ]);
+      const [summaryRes, distributionRes, dailyRes, hourlyRes] =
+        await Promise.all([
+          usageApi.getMonitorSummary(
+            timeRange,
+            apiFilter,
+            modelFilter,
+            channelFilter,
+          ),
+          usageApi.getMonitorModelDistribution(
+            timeRange,
+            10,
+            apiFilter,
+            modelFilter,
+            channelFilter,
+          ),
+          usageApi.getMonitorDailyTrend(
+            timeRange,
+            apiFilter,
+            modelFilter,
+            channelFilter,
+          ),
+          usageApi.getMonitorHourly(24, apiFilter, modelFilter, channelFilter),
+        ]);
       startTransition(() => {
         setSummary({
           requestCount: summaryRes.summary.TotalRequests,
@@ -125,13 +184,19 @@ export function MonitorPage() {
         });
 
         const sortedModels = [...distributionRes.items].sort((left, right) => {
-          const leftValue = modelMetric === "requests" ? left.requests : left.tokens;
-          const rightValue = modelMetric === "requests" ? right.requests : right.tokens;
-          return rightValue - leftValue || left.model.localeCompare(right.model);
+          const leftValue =
+            modelMetric === "requests" ? left.requests : left.tokens;
+          const rightValue =
+            modelMetric === "requests" ? right.requests : right.tokens;
+          return (
+            rightValue - leftValue || left.model.localeCompare(right.model)
+          );
         });
         const top = sortedModels.slice(0, 10);
         const otherValue = sortedModels.slice(10).reduce((acc, item) => {
-          return acc + (modelMetric === "requests" ? item.requests : item.tokens);
+          return (
+            acc + (modelMetric === "requests" ? item.requests : item.tokens)
+          );
         }, 0);
         const nextModelDistribution = top.map((item) => ({
           name: item.model,
@@ -140,7 +205,12 @@ export function MonitorPage() {
           tokens: item.tokens,
         }));
         if (otherValue > 0) {
-          nextModelDistribution.push({ name: "其他", value: otherValue, requests: 0, tokens: 0 });
+          nextModelDistribution.push({
+            name: "其他",
+            value: otherValue,
+            requests: 0,
+            tokens: 0,
+          });
         }
         setModelDistributionData(nextModelDistribution);
 
@@ -158,12 +228,14 @@ export function MonitorPage() {
         const now = Date.now();
         const endHour = Math.floor(now / 3_600_000);
         const startHour = endHour - hourWindow + 1;
-        const hourLabels = Array.from({ length: hourWindow }).map((_, index) => {
-          const hour = startHour + index;
-          const date = new Date(hour * 3_600_000);
-          const label = `${String(date.getHours()).padStart(2, "0")}:00`;
-          return { hour, label };
-        });
+        const hourLabels = Array.from({ length: hourWindow }).map(
+          (_, index) => {
+            const hour = startHour + index;
+            const date = new Date(hour * 3_600_000);
+            const label = `${String(date.getHours()).padStart(2, "0")}:00`;
+            return { hour, label };
+          },
+        );
 
         const modelBuckets = new Map<number, Map<string, number>>();
         const tokenBuckets = new Map<
@@ -177,10 +249,18 @@ export function MonitorPage() {
           if (hour < startHour || hour > endHour) return;
 
           const modelMap = modelBuckets.get(hour) ?? new Map<string, number>();
-          modelMap.set(item.model, (modelMap.get(item.model) ?? 0) + item.requests);
+          modelMap.set(
+            item.model,
+            (modelMap.get(item.model) ?? 0) + item.requests,
+          );
           modelBuckets.set(hour, modelMap);
 
-          const tokens = tokenBuckets.get(hour) ?? { input: 0, output: 0, reasoning: 0, cached: 0 };
+          const tokens = tokenBuckets.get(hour) ?? {
+            input: 0,
+            output: 0,
+            reasoning: 0,
+            cached: 0,
+          };
           tokenBuckets.set(hour, {
             input: tokens.input + item.input_tokens,
             output: tokens.output + item.output_tokens,
@@ -190,7 +270,11 @@ export function MonitorPage() {
         });
 
         const rankedModels = [...distributionRes.items]
-          .sort((left, right) => right.requests - left.requests || left.model.localeCompare(right.model))
+          .sort(
+            (left, right) =>
+              right.requests - left.requests ||
+              left.model.localeCompare(right.model),
+          )
           .slice(0, 5)
           .map((item) => item.model);
         const modelKeys = [...rankedModels, "其他"];
@@ -210,7 +294,12 @@ export function MonitorPage() {
         });
 
         const tokenPoints = hourLabels.map(({ hour, label }) => {
-          const totals = tokenBuckets.get(hour) ?? { input: 0, output: 0, reasoning: 0, cached: 0 };
+          const totals = tokenBuckets.get(hour) ?? {
+            input: 0,
+            output: 0,
+            reasoning: 0,
+            cached: 0,
+          };
           return {
             label,
             stacks: [
@@ -230,28 +319,109 @@ export function MonitorPage() {
         });
       });
     } catch (requestError) {
-      const message = requestError instanceof Error ? requestError.message : "数据获取失败";
+      const message =
+        requestError instanceof Error ? requestError.message : "数据获取失败";
       setError(message);
     } finally {
       setIsRefreshing(false);
     }
-  }, [apiFilter, modelMetric, timeRange]);
+  }, [apiFilter, channelFilter, modelFilter, modelMetric, timeRange]);
 
   const applyFilter = useCallback(() => {
-    setApiFilter(apiFilterInput);
-  }, [apiFilterInput]);
+    setApiFilter(pendingApiFilter.trim());
+    setModelFilter(pendingModelFilter.trim());
+    setChannelFilter(pendingChannelFilter.trim());
+  }, [pendingApiFilter, pendingChannelFilter, pendingModelFilter]);
+
+  const fetchFilterOptions = useCallback(async () => {
+    try {
+      const response = await usageApi.getMonitorFilters(
+        timeRange,
+        pendingApiFilter || undefined,
+        pendingChannelFilter || undefined,
+      );
+      const nextFilters = response.filters ?? {
+        api_keys: [],
+        api_key_names: {},
+        models: [],
+        channels: [],
+      };
+
+      const normalized = {
+        api_keys: Array.isArray(nextFilters.api_keys)
+          ? nextFilters.api_keys
+          : [],
+        api_key_names:
+          nextFilters.api_key_names &&
+          typeof nextFilters.api_key_names === "object"
+            ? nextFilters.api_key_names
+            : {},
+        models: Array.isArray(nextFilters.models) ? nextFilters.models : [],
+        channels: Array.isArray(nextFilters.channels)
+          ? nextFilters.channels
+          : [],
+      };
+      setFilterOptions(normalized);
+
+      const modelExists = (value: string) =>
+        !value || normalized.models.includes(value);
+      const channelExists = (value: string) =>
+        !value || normalized.channels.includes(value);
+      if (!modelExists(pendingModelFilter)) {
+        setPendingModelFilter("");
+      }
+      if (!channelExists(pendingChannelFilter)) {
+        setPendingChannelFilter("");
+      }
+      if (
+        pendingApiFilter.trim() === apiFilter.trim() &&
+        !modelExists(modelFilter)
+      ) {
+        setModelFilter("");
+      }
+      if (
+        pendingApiFilter.trim() === apiFilter.trim() &&
+        !channelExists(channelFilter)
+      ) {
+        setChannelFilter("");
+      }
+    } catch (requestError) {
+      const message =
+        requestError instanceof Error ? requestError.message : "筛选项获取失败";
+      notify({ type: "error", message });
+    }
+  }, [
+    apiFilter,
+    channelFilter,
+    modelFilter,
+    notify,
+    pendingApiFilter,
+    pendingChannelFilter,
+    pendingModelFilter,
+    timeRange,
+  ]);
 
   const toggleDailyLegend = useCallback((key: string) => {
-    if (key !== "输入 Token" && key !== "输出 Token" && key !== "请求数") return;
-    setDailyLegendSelected((prev) => ({ ...prev, [key]: !(prev[key] ?? true) }));
+    if (key !== "输入 Token" && key !== "输出 Token" && key !== "请求数")
+      return;
+    setDailyLegendSelected((prev) => ({
+      ...prev,
+      [key]: !(prev[key] ?? true),
+    }));
   }, []);
 
   const toggleHourlyModelLegend = useCallback((key: string) => {
-    setHourlyModelSelected((prev) => ({ ...prev, [key]: !(prev[key] ?? true) }));
+    setHourlyModelSelected((prev) => ({
+      ...prev,
+      [key]: !(prev[key] ?? true),
+    }));
   }, []);
 
   const toggleHourlyTokenLegend = useCallback((key: string) => {
-    setHourlyTokenSelected((prev) => ({ ...prev, [key]: !(prev[key] ?? true) }));
+    setHourlyTokenSelected((prev) => ({
+      ...prev,
+      [key]: !(prev[key] ?? true),
+    }));
   }, []);
 
   const hasData = summary.requestCount > 0;
@@ -268,11 +438,45 @@ export function MonitorPage() {
     window.setTimeout(() => URL.revokeObjectURL(url), 800);
   };
 
-
-
   useEffect(() => {
     void refreshData();
   }, [refreshData]);
+
+  useEffect(() => {
+    void fetchFilterOptions();
+  }, [fetchFilterOptions]);
+
+  const keyOptions = useMemo(() => {
+    const names = filterOptions.api_key_names ?? {};
+    return [
+      { value: "", label: "全部 Key" },
+      ...filterOptions.api_keys.map((key) => ({
+        value: key,
+        label: names[key] || key,
+        searchText: `${names[key] || ""} ${key}`,
+      })),
+    ];
+  }, [filterOptions.api_key_names, filterOptions.api_keys]);
+
+  const modelOptions = useMemo(() => {
+    return [
+      { value: "", label: "全部模型" },
+      ...filterOptions.models.map((item) => ({
+        value: item,
+        label: item,
+      })),
+    ];
+  }, [filterOptions.models]);
+
+  const channelOptions = useMemo(() => {
+    return [
+      { value: "", label: "全部渠道" },
+      ...filterOptions.channels.map((item) => ({
+        value: item,
+        label: item,
+      })),
+    ];
+  }, [filterOptions.channels]);
 
   const hourlyModelPalette = useMemo(() => {
     const palette = [
@@ -343,13 +547,15 @@ export function MonitorPage() {
   }, [hourlySeries.tokenKeys]);
 
   const modelDistributionOption = useMemo(
-    () => createModelDistributionOption({ isDark, data: modelDistributionData }),
+    () =>
+      createModelDistributionOption({ isDark, data: modelDistributionData }),
     [isDark, modelDistributionData],
   );
 
   const dailyLegendAvailability = useMemo(() => {
     const points = dailySeries.filter(
-      (item) => item.requests > 0 || item.inputTokens > 0 || item.outputTokens > 0,
+      (item) =>
+        item.requests > 0 || item.inputTokens > 0 || item.outputTokens > 0,
     );
     const visiblePoints = points.length > 0 ? points : dailySeries;
     const requestY = visiblePoints.map((item) => item.requests);
@@ -371,7 +577,9 @@ export function MonitorPage() {
 
     return modelDistributionData.map((item, index) => {
       const colorClass =
-        index < CHART_COLOR_CLASSES.length ? CHART_COLOR_CLASSES[index] : "bg-slate-400";
+        index < CHART_COLOR_CLASSES.length
+          ? CHART_COLOR_CLASSES[index]
+          : "bg-slate-400";
       const value = Number(item.value ?? 0);
       const percent = total > 0 ? (value / total) * 100 : 0;
 
@@ -428,7 +636,10 @@ export function MonitorPage() {
   );
 
   const modelActions = (
-    <Tabs value={modelMetric} onValueChange={(next) => setModelMetric(next as "requests" | "tokens")}>
+    <Tabs
+      value={modelMetric}
+      onValueChange={(next) => setModelMetric(next as "requests" | "tokens")}
+    >
       <TabsList>
         <TabsTrigger value="requests">请求</TabsTrigger>
         <TabsTrigger value="tokens">Token</TabsTrigger>
@@ -442,22 +653,42 @@ export function MonitorPage() {
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-900 dark:text-white">
-              <ChartSpline size={18} className="text-slate-900 dark:text-white" />
+              <ChartSpline
+                size={18}
+                className="text-slate-900 dark:text-white"
+              />
               <span>监控中心</span>
             </h2>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <TimeRangeSelector value={timeRange} onChange={setTimeRange} />
-            <div className="inline-flex items-center gap-1.5 rounded-2xl border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm dark:border-neutral-800 dark:bg-neutral-950/60">
-              <Search size={14} className="text-slate-500 dark:text-white/55" />
-              <TextInput
-                value={apiFilterInput}
-                onChange={(event) => setApiFilterInput(event.target.value)}
-                variant="ghost"
-                className="w-36"
-                placeholder="按 API key 过滤"
-              />
-            </div>
+            <SearchableSelect
+              value={pendingApiFilter}
+              onChange={setPendingApiFilter}
+              options={keyOptions}
+              placeholder="全部 Key"
+              searchPlaceholder="搜索 Key…"
+              aria-label="按 Key 名称过滤"
+              className="min-w-[180px] justify-between"
+            />
+            <SearchableSelect
+              value={pendingModelFilter}
+              onChange={setPendingModelFilter}
+              options={modelOptions}
+              placeholder="全部模型"
+              searchPlaceholder="搜索模型…"
+              aria-label="按模型过滤"
+              className="min-w-[200px] justify-between"
+            />
+            <SearchableSelect
+              value={pendingChannelFilter}
+              onChange={setPendingChannelFilter}
+              options={channelOptions}
+              placeholder="全部渠道"
+              searchPlaceholder="搜索渠道…"
+              aria-label="按渠道名称过滤"
+              className="min-w-[200px] justify-between"
+            />
             <button
               type="button"
               onClick={applyFilter}
@@ -473,7 +704,10 @@ export function MonitorPage() {
               aria-busy={isLoading}
               className="inline-flex min-w-[96px] items-center justify-center gap-1.5 rounded-2xl bg-slate-900 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70 dark:bg-white dark:text-neutral-950 dark:hover:bg-slate-200"
             >
-              <RefreshCw size={14} className={isLoading ? "animate-spin" : ""} />
+              <RefreshCw
+                size={14}
+                className={isLoading ? "animate-spin" : ""}
+              />
               <span className="grid">
                 <span
                   className={
@@ -505,30 +739,46 @@ export function MonitorPage() {
         ) : null}
       </section>
 
-
       <Reveal>
         <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <KpiCard
             title="总请求"
-            value={<AnimatedNumber value={summary.requestCount} format={formatNumber} />}
+            value={
+              <AnimatedNumber
+                value={summary.requestCount}
+                format={formatNumber}
+              />
+            }
             hint="已按时间范围过滤"
             icon={Activity}
           />
           <KpiCard
             title="成功率"
-            value={<AnimatedNumber value={summary.successRate} format={formatRate} />}
+            value={
+              <AnimatedNumber value={summary.successRate} format={formatRate} />
+            }
             hint={`成功 ${formatNumber(summary.successCount)} / 失败 ${formatNumber(summary.failedCount)}`}
             icon={ShieldCheck}
           />
           <KpiCard
             title="总 Token"
-            value={<AnimatedNumber value={summary.totalTokens} format={formatNumber} />}
+            value={
+              <AnimatedNumber
+                value={summary.totalTokens}
+                format={formatNumber}
+              />
+            }
             hint="输入 + 输出 + 推理 + 缓存"
             icon={Sigma}
           />
           <KpiCard
             title="输出 Token"
-            value={<AnimatedNumber value={summary.outputTokens} format={formatNumber} />}
+            value={
+              <AnimatedNumber
+                value={summary.outputTokens}
+                format={formatNumber}
+              />
+            }
             hint={`输入 Token：${formatNumber(summary.inputTokens)}`}
             icon={Coins}
           />
@@ -542,7 +792,9 @@ export function MonitorPage() {
               <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900/5 text-slate-700 dark:bg-white/10 dark:text-white/70">
                 <ChartSpline size={20} />
               </div>
-              <p className="text-sm font-semibold text-slate-900 dark:text-white">暂无监控数据</p>
+              <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                暂无监控数据
+              </p>
               <p className="text-sm text-slate-600 dark:text-white/65">
                 可以点击上方“刷新”重新拉取数据。
               </p>
@@ -568,7 +820,10 @@ export function MonitorPage() {
                 loading={isRefreshing}
               >
                 <div className="grid h-72 grid-cols-[minmax(0,1fr)_220px] gap-4">
-                  <EChart option={modelDistributionOption} className="h-72 min-w-0" />
+                  <EChart
+                    option={modelDistributionOption}
+                    className="h-72 min-w-0"
+                  />
                   <div className="flex h-72 flex-col justify-center gap-2 overflow-y-auto pr-1">
                     {modelDistributionLegend.map((item) => (
                       <div
@@ -611,36 +866,38 @@ export function MonitorPage() {
                     items={[
                       ...(dailyLegendAvailability.hasInput
                         ? [
-                          {
-                            key: "输入 Token",
-                            label: "输入 Token",
-                            colorClass: "bg-violet-400",
-                            enabled: dailyLegendSelected["输入 Token"] ?? true,
-                            onToggle: toggleDailyLegend,
-                          },
-                        ]
+                            {
+                              key: "输入 Token",
+                              label: "输入 Token",
+                              colorClass: "bg-violet-400",
+                              enabled:
+                                dailyLegendSelected["输入 Token"] ?? true,
+                              onToggle: toggleDailyLegend,
+                            },
+                          ]
                         : []),
                       ...(dailyLegendAvailability.hasOutput
                         ? [
-                          {
-                            key: "输出 Token",
-                            label: "输出 Token",
-                            colorClass: "bg-emerald-400",
-                            enabled: dailyLegendSelected["输出 Token"] ?? true,
-                            onToggle: toggleDailyLegend,
-                          },
-                        ]
+                            {
+                              key: "输出 Token",
+                              label: "输出 Token",
+                              colorClass: "bg-emerald-400",
+                              enabled:
+                                dailyLegendSelected["输出 Token"] ?? true,
+                              onToggle: toggleDailyLegend,
+                            },
+                          ]
                         : []),
                       ...(dailyLegendAvailability.hasRequests
                         ? [
-                          {
-                            key: "请求数",
-                            label: "请求数",
-                            colorClass: "bg-blue-500",
-                            enabled: dailyLegendSelected["请求数"] ?? true,
-                            onToggle: toggleDailyLegend,
-                          },
-                        ]
+                            {
+                              key: "请求数",
+                              label: "请求数",
+                              colorClass: "bg-blue-500",
+                              enabled: dailyLegendSelected["请求数"] ?? true,
+                              onToggle: toggleDailyLegend,
+                            },
+                          ]
                         : []),
                     ]}
                   />
@@ -653,7 +910,12 @@ export function MonitorPage() {
             <Card
               title="每小时模型请求分布"
               description="按小时聚合（Top5 模型 + 其他）"
-              actions={<HourWindowSelector value={modelHourWindow} onChange={setModelHourWindow} />}
+              actions={
+                <HourWindowSelector
+                  value={modelHourWindow}
+                  onChange={setModelHourWindow}
+                />
+              }
               loading={isRefreshing}
             >
               <div className="flex h-72 flex-col overflow-hidden">
@@ -668,14 +930,17 @@ export function MonitorPage() {
                     ...hourlySeries.modelKeys.map((key) => ({
                       key,
                       label: key,
-                      colorClass: hourlyModelPalette.classByKey[key] ?? "bg-slate-400",
+                      colorClass:
+                        hourlyModelPalette.classByKey[key] ?? "bg-slate-400",
                       enabled: hourlyModelSelected[key] ?? true,
                       onToggle: toggleHourlyModelLegend,
                     })),
                     {
                       key: "总请求",
                       label: "总请求",
-                      colorClass: hourlyModelPalette.classByKey["总请求"] ?? "bg-blue-500",
+                      colorClass:
+                        hourlyModelPalette.classByKey["总请求"] ??
+                        "bg-blue-500",
                       enabled: hourlyModelSelected["总请求"] ?? true,
                       onToggle: toggleHourlyModelLegend,
                     },
@@ -689,7 +954,12 @@ export function MonitorPage() {
             <Card
               title="每小时 Token 用量"
               description="按小时聚合（输入 / 输出 / 推理 / 缓存）"
-              actions={<HourWindowSelector value={tokenHourWindow} onChange={setTokenHourWindow} />}
+              actions={
+                <HourWindowSelector
+                  value={tokenHourWindow}
+                  onChange={setTokenHourWindow}
+                />
+              }
               loading={isRefreshing}
             >
               <div className="flex h-72 flex-col overflow-hidden">
@@ -704,14 +974,17 @@ export function MonitorPage() {
                     ...hourlySeries.tokenKeys.map((key) => ({
                       key,
                       label: key,
-                      colorClass: hourlyTokenPalette.classByKey[key] ?? "bg-slate-400",
+                      colorClass:
+                        hourlyTokenPalette.classByKey[key] ?? "bg-slate-400",
                       enabled: hourlyTokenSelected[key] ?? true,
                       onToggle: toggleHourlyTokenLegend,
                     })),
                     {
                       key: "总 Token",
                       label: "总 Token",
-                      colorClass: hourlyTokenPalette.classByKey["总 Token"] ?? "bg-blue-500",
+                      colorClass:
+                        hourlyTokenPalette.classByKey["总 Token"] ??
+                        "bg-blue-500",
                       enabled: hourlyTokenSelected["总 Token"] ?? true,
                       onToggle: toggleHourlyTokenLegend,
                     },
