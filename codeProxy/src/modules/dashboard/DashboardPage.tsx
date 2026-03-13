@@ -8,11 +8,12 @@ import { EmptyState } from "@/modules/ui/EmptyState";
 import { Tabs, TabsList, TabsTrigger } from "@/modules/ui/Tabs";
 import { useToast } from "@/modules/ui/ToastProvider";
 
-type DashboardRange = 1 | 7 | 30;
+type DashboardRange = 1 | 7 | 14 | 30;
 
 const RANGE_OPTIONS: ReadonlyArray<{ value: DashboardRange; label: string }> = [
   { value: 1, label: "今天" },
   { value: 7, label: "近 7 天" },
+  { value: 14, label: "近 14 天" },
   { value: 30, label: "近 30 天" },
 ];
 
