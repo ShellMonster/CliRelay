@@ -61,3 +61,34 @@ func TestSanitizeOpenAICompatibility_NormalizesAPIKeyEntryHeaders(t *testing.T) 
 		t.Fatalf("expected empty header to be dropped")
 	}
 }
+
+func TestSanitizeGeminiKeys_PreservesModels(t *testing.T) {
+	cfg := &Config{
+		GeminiKey: []GeminiKey{
+			{
+				APIKey: " gem-key ",
+				Models: []GeminiModel{
+					{Name: " gemini-2.5-pro ", Alias: " gemini-2.5-pro "},
+					{Name: " gemini-2.5-flash ", Alias: " flash "},
+					{Name: "   ", Alias: "   "},
+				},
+			},
+		},
+	}
+
+	cfg.SanitizeGeminiKeys()
+
+	if len(cfg.GeminiKey) != 1 {
+		t.Fatalf("expected 1 gemini key, got %d", len(cfg.GeminiKey))
+	}
+	models := cfg.GeminiKey[0].Models
+	if len(models) != 2 {
+		t.Fatalf("expected 2 sanitized gemini models, got %d", len(models))
+	}
+	if models[0].Name != "gemini-2.5-pro" || models[0].Alias != "gemini-2.5-pro" {
+		t.Fatalf("unexpected first model after sanitize: %+v", models[0])
+	}
+	if models[1].Name != "gemini-2.5-flash" || models[1].Alias != "flash" {
+		t.Fatalf("unexpected second model after sanitize: %+v", models[1])
+	}
+}

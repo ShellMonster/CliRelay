@@ -77,6 +77,8 @@ const serializeGeminiKey = (config: GeminiKeyConfig) => {
   if (config.proxyUrl) payload["proxy-url"] = config.proxyUrl;
   const headers = serializeHeaders(config.headers);
   if (headers) payload.headers = headers;
+  const models = serializeModelAliases(config.models);
+  if (models && models.length) payload.models = models;
   if (config.excludedModels?.length) payload["excluded-models"] = config.excludedModels;
   return payload;
 };

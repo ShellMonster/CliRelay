@@ -275,13 +275,14 @@ func (h *Handler) PutGeminiKeys(c *gin.Context) {
 }
 func (h *Handler) PatchGeminiKey(c *gin.Context) {
 	type geminiKeyPatch struct {
-		Name           *string            `json:"name"`
-		APIKey         *string            `json:"api-key"`
-		Prefix         *string            `json:"prefix"`
-		BaseURL        *string            `json:"base-url"`
-		ProxyURL       *string            `json:"proxy-url"`
-		Headers        *map[string]string `json:"headers"`
-		ExcludedModels *[]string          `json:"excluded-models"`
+		Name           *string               `json:"name"`
+		APIKey         *string               `json:"api-key"`
+		Prefix         *string               `json:"prefix"`
+		BaseURL        *string               `json:"base-url"`
+		ProxyURL       *string               `json:"proxy-url"`
+		Models         *[]config.GeminiModel `json:"models"`
+		Headers        *map[string]string    `json:"headers"`
+		ExcludedModels *[]string             `json:"excluded-models"`
 	}
 	var body struct {
 		Index *int            `json:"index"`
@@ -334,6 +335,9 @@ func (h *Handler) PatchGeminiKey(c *gin.Context) {
 	}
 	if body.Value.ProxyURL != nil {
 		entry.ProxyURL = strings.TrimSpace(*body.Value.ProxyURL)
+	}
+	if body.Value.Models != nil {
+		entry.Models = append([]config.GeminiModel(nil), (*body.Value.Models)...)
 	}
 	if body.Value.Headers != nil {
 		entry.Headers = config.NormalizeHeaders(*body.Value.Headers)

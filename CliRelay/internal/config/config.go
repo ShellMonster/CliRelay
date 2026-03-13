@@ -850,6 +850,19 @@ func (cfg *Config) SanitizeGeminiKeys() {
 		entry.ProxyURL = strings.TrimSpace(entry.ProxyURL)
 		entry.Headers = NormalizeHeaders(entry.Headers)
 		entry.ExcludedModels = NormalizeExcludedModels(entry.ExcludedModels)
+		if len(entry.Models) > 0 {
+			normalized := make([]GeminiModel, 0, len(entry.Models))
+			for j := range entry.Models {
+				model := entry.Models[j]
+				model.Name = strings.TrimSpace(model.Name)
+				model.Alias = strings.TrimSpace(model.Alias)
+				if model.Name == "" && model.Alias == "" {
+					continue
+				}
+				normalized = append(normalized, model)
+			}
+			entry.Models = normalized
+		}
 		if _, exists := seen[entry.APIKey]; exists {
 			continue
 		}
