@@ -102,6 +102,7 @@ const serializeOpenAIProvider = (provider: OpenAIProviderConfig) => {
   if (headers) payload.headers = headers;
   const models = serializeModelAliases(provider.models);
   if (models && models.length) payload.models = models;
+  if (provider.excludedModels?.length) payload["excluded-models"] = provider.excludedModels;
   if (provider.priority !== undefined) payload.priority = provider.priority;
   if (provider.testModel) payload["test-model"] = provider.testModel;
   return payload;
@@ -207,6 +208,9 @@ export const providersApi = {
     const payload: Record<string, unknown> = {};
     if (value.models !== undefined) {
       payload.models = serializeModelAliases(value.models);
+    }
+    if (value.excludedModels !== undefined) {
+      payload["excluded-models"] = value.excludedModels;
     }
     return apiClient.patch("/openai-compatibility", { name, value: payload });
   },

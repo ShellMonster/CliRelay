@@ -207,6 +207,50 @@ func TestSnapshotCoreAuths_ConfigAndAuthFiles(t *testing.T) {
 	}
 }
 
+func TestSnapshotCoreAuths_OpenAICompatIncludesExcludedModels(t *testing.T) {
+	authDir := t.TempDir()
+	cfg := &config.Config{
+		AuthDir: authDir,
+		OpenAICompatibility: []config.OpenAICompatibility{
+			{
+				Name:           "OpenRouter",
+				BaseURL:        "https://openrouter.ai/api/v1",
+				ExcludedModels: []string{" GPT-4.1 ", "*", "gpt-4.1"},
+				APIKeyEntries: []config.OpenAICompatibilityAPIKey{
+					{APIKey: "or-key"},
+				},
+			},
+		},
+	}
+
+	w := &Watcher{authDir: authDir}
+	w.SetConfig(cfg)
+
+	auths := w.SnapshotCoreAuths()
+	if len(auths) != 1 {
+		t.Fatalf("expected 1 auth entry, got %d", len(auths))
+	}
+
+	auth := auths[0]
+	if auth.Provider != "openrouter" {
+		t.Fatalf("expected provider=openrouter, got %s", auth.Provider)
+	}
+	expectedHash := diff.ComputeExcludedModelsHash([]string{"gpt-4.1", "*"})
+	if auth.Attributes["excluded_models_hash"] != expectedHash {
+		t.Fatalf(
+			"expected excluded_models_hash=%s, got %s",
+			expectedHash,
+			auth.Attributes["excluded_models_hash"],
+		)
+	}
+	if auth.Attributes["excluded_models"] != "*,gpt-4.1" {
+		t.Fatalf("expected excluded_models=*,gpt-4.1, got %s", auth.Attributes["excluded_models"])
+	}
+	if auth.Attributes["auth_kind"] != "apikey" {
+		t.Fatalf("expected auth_kind=apikey, got %s", auth.Attributes["auth_kind"])
+	}
+}
+
 func TestReloadConfigIfChanged_TriggersOnChangeAndSkipsUnchanged(t *testing.T) {
 	tmpDir := t.TempDir()
 	authDir := filepath.Join(tmpDir, "auth")

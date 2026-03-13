@@ -368,6 +368,7 @@ export function AiProvidersOpenAIEditLayout() {
           proxyUrl: entry.proxyUrl?.trim() || undefined,
           headers: entry.headers,
         })),
+        excludedModels: initialData?.excludedModels,
       };
       const resolvedTestModel = testModel.trim();
       if (resolvedTestModel) payload.testModel = resolvedTestModel;

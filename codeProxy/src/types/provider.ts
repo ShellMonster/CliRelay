@@ -45,6 +45,7 @@ export interface OpenAIProviderConfig {
   apiKeyEntries: ApiKeyEntry[];
   headers?: Record<string, string>;
   models?: ModelAlias[];
+  excludedModels?: string[];
   priority?: number;
   testModel?: string;
   [key: string]: unknown;

@@ -491,6 +491,9 @@ type OpenAICompatibility struct {
 
 	// Headers optionally adds extra HTTP headers for requests sent to this provider.
 	Headers map[string]string `yaml:"headers,omitempty" json:"headers,omitempty"`
+
+	// ExcludedModels lists model IDs that should be excluded for this provider.
+	ExcludedModels []string `yaml:"excluded-models,omitempty" json:"excluded-models,omitempty"`
 }
 
 // OpenAICompatibilityAPIKey represents an API key configuration with optional proxy setting.
@@ -783,6 +786,7 @@ func (cfg *Config) SanitizeOpenAICompatibility() {
 		e.Prefix = normalizeModelPrefix(e.Prefix)
 		e.BaseURL = strings.TrimSpace(e.BaseURL)
 		e.Headers = NormalizeHeaders(e.Headers)
+		e.ExcludedModels = NormalizeExcludedModels(e.ExcludedModels)
 		for j := range e.APIKeyEntries {
 			e.APIKeyEntries[j].APIKey = strings.TrimSpace(e.APIKeyEntries[j].APIKey)
 			e.APIKeyEntries[j].ProxyURL = strings.TrimSpace(e.APIKeyEntries[j].ProxyURL)

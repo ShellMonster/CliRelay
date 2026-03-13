@@ -167,7 +167,7 @@ export function AiProvidersPage() {
   };
 
   const setConfigEnabled = async (
-    provider: "gemini" | "codex" | "claude",
+    provider: "gemini" | "codex" | "claude" | "openai",
     index: number,
     enabled: boolean,
   ) => {
@@ -200,6 +200,42 @@ export function AiProvidersPage() {
         setGeminiKeys(previousList);
         updateConfigValue("gemini-api-key", previousList);
         clearCache("gemini-api-key");
+        showNotification(`${t("notification.update_failed")}: ${message}`, "error");
+      } finally {
+        setConfigSwitchingKey(null);
+      }
+      return;
+    }
+
+    if (provider === "openai") {
+      const current = openaiProviders[index];
+      if (!current) return;
+
+      const switchingKey = `${provider}:${current.name}`;
+      setConfigSwitchingKey(switchingKey);
+
+      const previousList = openaiProviders;
+      const nextExcluded = enabled
+        ? withoutDisableAllModelsRule(current.excludedModels)
+        : withDisableAllModelsRule(current.excludedModels);
+      const nextItem: OpenAIProviderConfig = { ...current, excludedModels: nextExcluded };
+      const nextList = previousList.map((item, idx) => (idx === index ? nextItem : item));
+
+      setOpenaiProviders(nextList);
+      updateConfigValue("openai-compatibility", nextList);
+      clearCache("openai-compatibility");
+
+      try {
+        await providersApi.saveOpenAIProviders(nextList);
+        showNotification(
+          enabled ? t("notification.config_enabled") : t("notification.config_disabled"),
+          "success",
+        );
+      } catch (err: unknown) {
+        const message = getErrorMessage(err);
+        setOpenaiProviders(previousList);
+        updateConfigValue("openai-compatibility", previousList);
+        clearCache("openai-compatibility");
         showNotification(`${t("notification.update_failed")}: ${message}`, "error");
       } finally {
         setConfigSwitchingKey(null);
@@ -430,6 +466,7 @@ export function AiProvidersPage() {
             onAdd={() => openEditor("/ai-providers/openai/new")}
             onEdit={(index) => openEditor(`/ai-providers/openai/${index}`)}
             onDelete={deleteOpenai}
+            onToggle={(index, enabled) => void setConfigEnabled("openai", index, enabled)}
           />
         </div>
       </div>

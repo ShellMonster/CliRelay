@@ -2,6 +2,7 @@ import { Fragment } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { ToggleSwitch } from "@/components/ui/ToggleSwitch";
 import { IconCheck, IconX } from "@/components/ui/icons";
 import iconOpenaiLight from "@/assets/icons/openai-light.svg";
 import iconOpenaiDark from "@/assets/icons/openai-dark.svg";
@@ -11,7 +12,7 @@ import { calculateStatusBarData, type KeyStats, type StatusBarData } from "@/uti
 import styles from "@/pages/AiProvidersPage.module.scss";
 import { ProviderList } from "../ProviderList";
 import { ProviderStatusBar } from "../ProviderStatusBar";
-import { getOpenAIProviderStats, getStatsBySource } from "../utils";
+import { getOpenAIProviderStats, getStatsBySource, hasDisableAllModelsRule } from "../utils";
 
 interface OpenAISectionProps {
   configs: OpenAIProviderConfig[];
@@ -24,6 +25,7 @@ interface OpenAISectionProps {
   onAdd: () => void;
   onEdit: (index: number) => void;
   onDelete: (index: number) => void;
+  onToggle: (index: number, enabled: boolean) => void;
 }
 
 export function OpenAISection({
@@ -37,9 +39,11 @@ export function OpenAISection({
   onAdd,
   onEdit,
   onDelete,
+  onToggle,
 }: OpenAISectionProps) {
   const { t } = useTranslation();
   const actionsDisabled = disableControls || loading || isSwitching;
+  const toggleDisabled = disableControls || loading || isSwitching;
 
   return (
     <>
@@ -69,11 +73,22 @@ export function OpenAISection({
           onEdit={onEdit}
           onDelete={onDelete}
           actionsDisabled={actionsDisabled}
+          getRowDisabled={(item) => hasDisableAllModelsRule(item.excludedModels)}
+          renderExtraActions={(item, index) => (
+            <ToggleSwitch
+              label={t("ai_providers.config_toggle_label")}
+              checked={!hasDisableAllModelsRule(item.excludedModels)}
+              disabled={toggleDisabled}
+              onChange={(value) => void onToggle(index, value)}
+            />
+          )}
           renderContent={(item) => {
             const stats = getOpenAIProviderStats(item.apiKeyEntries, keyStats, item.prefix);
             const headerEntries = Object.entries(item.headers || {});
             const apiKeyEntries = item.apiKeyEntries || [];
             const statusData = statusBarCache.get(item.name) || calculateStatusBarData([]);
+            const configDisabled = hasDisableAllModelsRule(item.excludedModels);
+            const excludedModels = item.excludedModels ?? [];
 
             return (
               <Fragment>
@@ -95,6 +110,11 @@ export function OpenAISection({
                         <strong>{key}:</strong> {value}
                       </span>
                     ))}
+                  </div>
+                )}
+                {configDisabled && (
+                  <div className="status-badge warning" style={{ marginTop: 8, marginBottom: 0 }}>
+                    {t("ai_providers.config_disabled_badge")}
                   </div>
                 )}
                 {apiKeyEntries.length > 0 && (
@@ -148,6 +168,23 @@ export function OpenAISection({
                         )}
                       </span>
                     ))}
+                  </div>
+                ) : null}
+                {excludedModels.length ? (
+                  <div className={styles.excludedModelsSection}>
+                    <div className={styles.excludedModelsLabel}>
+                      {t("ai_providers.excluded_models_count", { count: excludedModels.length })}
+                    </div>
+                    <div className={styles.modelTagList}>
+                      {excludedModels.map((model) => (
+                        <span
+                          key={model}
+                          className={`${styles.modelTag} ${styles.excludedModelTag}`}
+                        >
+                          <span className={styles.modelName}>{model}</span>
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 ) : null}
                 {item.testModel && (

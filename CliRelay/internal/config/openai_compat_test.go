@@ -6,9 +6,10 @@ func TestSanitizeOpenAICompatibility_NormalizesAPIKeyEntryHeaders(t *testing.T) 
 	cfg := &Config{
 		OpenAICompatibility: []OpenAICompatibility{
 			{
-				Name:    " custom ",
-				Prefix:  " team-a ",
-				BaseURL: " https://example.com ",
+				Name:           " custom ",
+				Prefix:         " team-a ",
+				BaseURL:        " https://example.com ",
+				ExcludedModels: []string{" ", " model-a ", "*", "model-a", "*"},
 				Headers: map[string]string{
 					" X-Provider ": " provider ",
 				},
@@ -40,6 +41,9 @@ func TestSanitizeOpenAICompatibility_NormalizesAPIKeyEntryHeaders(t *testing.T) 
 	}
 	if entry.BaseURL != "https://example.com" {
 		t.Fatalf("expected sanitized base url, got %q", entry.BaseURL)
+	}
+	if len(entry.ExcludedModels) != 2 || entry.ExcludedModels[0] != "model-a" || entry.ExcludedModels[1] != "*" {
+		t.Fatalf("expected sanitized excluded models, got %+v", entry.ExcludedModels)
 	}
 	if got := entry.Headers["X-Provider"]; got != "provider" {
 		t.Fatalf("expected sanitized provider header, got %q", got)
