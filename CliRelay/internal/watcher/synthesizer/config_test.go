@@ -293,9 +293,10 @@ func TestConfigSynthesizer_CodexKeys_SkipsEmptyAndHeaders(t *testing.T) {
 
 func TestConfigSynthesizer_OpenAICompat(t *testing.T) {
 	tests := []struct {
-		name    string
-		compat  []config.OpenAICompatibility
-		wantLen int
+		name     string
+		compat   []config.OpenAICompatibility
+		wantLen  int
+		validate func(*testing.T, []*coreauth.Auth)
 	}{
 		{
 			name: "with APIKeyEntries",
@@ -303,13 +304,33 @@ func TestConfigSynthesizer_OpenAICompat(t *testing.T) {
 				{
 					Name:    "CustomProvider",
 					BaseURL: "https://custom.api.com",
+					Headers: map[string]string{
+						"X-Provider": "provider-header",
+					},
 					APIKeyEntries: []config.OpenAICompatibilityAPIKey{
-						{APIKey: "key-1"},
+						{
+							APIKey: "key-1",
+							Headers: map[string]string{
+								"X-Provider": "key-header",
+								"X-Key":      "entry-header",
+							},
+						},
 						{APIKey: "key-2"},
 					},
 				},
 			},
 			wantLen: 2,
+			validate: func(t *testing.T, auths []*coreauth.Auth) {
+				if got := auths[0].Attributes["header:X-Provider"]; got != "key-header" {
+					t.Fatalf("expected key header to override provider header, got %q", got)
+				}
+				if got := auths[0].Attributes["header:X-Key"]; got != "entry-header" {
+					t.Fatalf("expected per-key header to be synthesized, got %q", got)
+				}
+				if got := auths[1].Attributes["header:X-Provider"]; got != "provider-header" {
+					t.Fatalf("expected provider header on second key auth, got %q", got)
+				}
+			},
 		},
 		{
 			name: "empty APIKeyEntries included (legacy)",
@@ -364,6 +385,9 @@ func TestConfigSynthesizer_OpenAICompat(t *testing.T) {
 			}
 			if len(auths) != tt.wantLen {
 				t.Fatalf("expected %d auths, got %d", tt.wantLen, len(auths))
+			}
+			if tt.validate != nil {
+				tt.validate(t, auths)
 			}
 		})
 	}

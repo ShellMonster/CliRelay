@@ -17,6 +17,7 @@ export function ProviderKeyListCard({
   icon: Icon,
   title,
   description,
+  loading = false,
   items,
   onAdd,
   onEdit,
@@ -28,6 +29,7 @@ export function ProviderKeyListCard({
   icon: LucideIcon;
   title: string;
   description: string;
+  loading?: boolean;
   items: ProviderSimpleConfig[];
   onAdd: () => void;
   onEdit: (index: number) => void;
@@ -41,8 +43,9 @@ export function ProviderKeyListCard({
     <Card
       title={title}
       description={description}
+      loading={loading}
       actions={
-        <Button variant="primary" size="sm" onClick={onAdd}>
+        <Button variant="primary" size="sm" onClick={onAdd} disabled={loading}>
           <Plus size={14} />
           新增
         </Button>

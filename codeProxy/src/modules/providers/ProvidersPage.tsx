@@ -934,6 +934,7 @@ export function ProvidersPage() {
             icon={Globe}
             title="Gemini Keys"
             description="API Key / Prefix / Base URL / Excluded Models / Headers / Models"
+            loading={loading}
             items={geminiKeys}
             onAdd={() => openKeyEditor("gemini", null)}
             onEdit={(idx) => openKeyEditor("gemini", idx)}
@@ -949,6 +950,7 @@ export function ProvidersPage() {
             icon={Bot}
             title="Claude Keys"
             description="支持 proxyUrl / 自定义 headers / 模型别名 / Excluded Models（用 * 一键禁用）。"
+            loading={loading}
             items={claudeKeys}
             onAdd={() => openKeyEditor("claude", null)}
             onEdit={(idx) => openKeyEditor("claude", idx)}
@@ -964,6 +966,7 @@ export function ProvidersPage() {
             icon={FileKey}
             title="Codex Keys"
             description="支持 baseUrl / proxyUrl / headers / models 等配置。"
+            loading={loading}
             items={codexKeys}
             onAdd={() => openKeyEditor("codex", null)}
             onEdit={(idx) => openKeyEditor("codex", idx)}
@@ -979,6 +982,7 @@ export function ProvidersPage() {
             icon={Database}
             title="Vertex Keys"
             description="models 必须维护 name=>alias，用于将下游模型名映射到 Vertex。"
+            loading={loading}
             items={vertexKeys}
             onAdd={() => openKeyEditor("vertex", null)}
             onEdit={(idx) => openKeyEditor("vertex", idx)}
@@ -992,8 +996,14 @@ export function ProvidersPage() {
           <Card
             title="OpenAI 兼容提供商"
             description="多密钥、headers、模型别名与 /models 发现。"
+            loading={loading}
             actions={
-              <Button variant="primary" size="sm" onClick={() => openOpenAIEditor(null)}>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => openOpenAIEditor(null)}
+                disabled={loading}
+              >
                 <Plus size={14} />
                 新增提供商
               </Button>
@@ -1152,6 +1162,7 @@ export function ProvidersPage() {
           <Card
             title="Ampcode 集成"
             description="配置上游 URL / API Key、模型映射与强制映射开关。"
+            loading={loading}
             actions={
               <Button
                 variant="primary"
