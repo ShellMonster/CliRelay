@@ -162,6 +162,8 @@ const normalizeGeminiKeyConfig = (item: unknown): GeminiKeyConfig | null => {
   if (proxyUrl) config.proxyUrl = String(proxyUrl);
   const headers = normalizeHeaders(record?.headers);
   if (headers) config.headers = headers;
+  const models = normalizeModelAliases(record?.models);
+  if (models.length) config.models = models;
   const excludedModels = normalizeExcludedModels(
     record?.["excluded-models"] ?? record?.excludedModels,
   );

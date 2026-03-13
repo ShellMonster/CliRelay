@@ -57,7 +57,6 @@ export function ProviderKeyListCard({
         <div className="space-y-3">
           {items.map((item, idx) => {
             const disabled = hasDisableAllModelsRule(item.excludedModels);
-            const headerEntries = Object.entries(item.headers || {});
             const excludedModels = stripDisableAllModelsRule(item.excludedModels);
             const models = item.models || [];
             const stats = getStats(item);
@@ -91,23 +90,10 @@ export function ProviderKeyListCard({
                         <p className="truncate font-mono">proxyUrl：{item.proxyUrl}</p>
                       ) : null}
                       <p className="tabular-nums">
-                        models：{models.length} · excluded：{excludedModels.length} · headers：
-                        {headerEntries.length} · 成功：{stats.success} · 失败：{stats.failure}
+                        models：{models.length} · excluded：{excludedModels.length} · 成功：
+                        {stats.success} · 失败：{stats.failure}
                       </p>
                     </div>
-
-                    {headerEntries.length ? (
-                      <div className="mt-2 flex flex-wrap gap-1">
-                        {headerEntries.map(([k, v]) => (
-                          <span
-                            key={k}
-                            className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-700 dark:border-neutral-800 dark:bg-neutral-950/60 dark:text-white/75"
-                          >
-                            <span className="font-semibold">{k}:</span> {String(v)}
-                          </span>
-                        ))}
-                      </div>
-                    ) : null}
 
                     {models.length ? (
                       <div className="mt-2 flex flex-wrap gap-1">

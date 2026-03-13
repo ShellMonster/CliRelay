@@ -1014,7 +1014,6 @@ export function ProvidersPage() {
             ) : (
               <div className="space-y-3">
                 {openaiProviders.map((provider, idx) => {
-                  const headerEntries = Object.entries(provider.headers || {});
                   const stats = getOpenAIProviderStats(provider);
                   const statusData = getOpenAIProviderStatusBar(provider);
 
@@ -1036,19 +1035,6 @@ export function ProvidersPage() {
                           <p className="mt-1 truncate font-mono text-xs text-slate-700 dark:text-slate-200">
                             baseUrl：{provider.baseUrl || "--"}
                           </p>
-
-                          {headerEntries.length ? (
-                            <div className="mt-2 flex flex-wrap gap-1">
-                              {headerEntries.map(([k, v]) => (
-                                <span
-                                  key={k}
-                                  className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-700 dark:border-neutral-800 dark:bg-neutral-950/60 dark:text-white/75"
-                                >
-                                  <span className="font-semibold">{k}:</span> {String(v)}
-                                </span>
-                              ))}
-                            </div>
-                          ) : null}
 
                           {provider.apiKeyEntries?.length ? (
                             <div className="mt-2 space-y-1">
