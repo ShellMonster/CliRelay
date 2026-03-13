@@ -17,6 +17,7 @@ import {
 import { usageApi } from "@/lib/http/apis/usage";
 import { formatNumber, formatRate } from "@/modules/monitor/monitor-utils";
 import { AnimatedNumber } from "@/modules/ui/AnimatedNumber";
+import { MultiSelect } from "@/modules/ui/MultiSelect";
 import { Reveal } from "@/modules/ui/Reveal";
 import { SearchableSelect } from "@/modules/ui/SearchableSelect";
 import { EChart } from "@/modules/ui/charts/EChart";
@@ -93,10 +94,10 @@ export function MonitorPage() {
   });
   const [pendingApiFilter, setPendingApiFilter] = useState("");
   const [pendingModelFilter, setPendingModelFilter] = useState("");
-  const [pendingChannelFilter, setPendingChannelFilter] = useState("");
+  const [pendingChannelFilter, setPendingChannelFilter] = useState<string[]>([]);
   const [apiFilter, setApiFilter] = useState("");
   const [modelFilter, setModelFilter] = useState("");
-  const [channelFilter, setChannelFilter] = useState("");
+  const [channelFilter, setChannelFilter] = useState<string[]>([]);
   const [modelHourWindow, setModelHourWindow] = useState<HourWindow>(24);
   const [tokenHourWindow, setTokenHourWindow] = useState<HourWindow>(24);
   const [modelMetric, setModelMetric] = useState<"requests" | "tokens">(
@@ -330,7 +331,9 @@ export function MonitorPage() {
   const applyFilter = useCallback(() => {
     setApiFilter(pendingApiFilter.trim());
     setModelFilter(pendingModelFilter.trim());
-    setChannelFilter(pendingChannelFilter.trim());
+    setChannelFilter(
+      pendingChannelFilter.map((item) => item.trim()).filter(Boolean),
+    );
   }, [pendingApiFilter, pendingChannelFilter, pendingModelFilter]);
 
   const fetchFilterOptions = useCallback(async () => {
@@ -338,7 +341,7 @@ export function MonitorPage() {
       const response = await usageApi.getMonitorFilters(
         timeRange,
         pendingApiFilter || undefined,
-        pendingChannelFilter || undefined,
+        pendingChannelFilter,
       );
       const nextFilters = response.filters ?? {
         api_keys: [],
@@ -365,13 +368,16 @@ export function MonitorPage() {
 
       const modelExists = (value: string) =>
         !value || normalized.models.includes(value);
-      const channelExists = (value: string) =>
-        !value || normalized.channels.includes(value);
+      const normalizeChannelSelection = (value: string[]) =>
+        value.filter((item) => normalized.channels.includes(item));
       if (!modelExists(pendingModelFilter)) {
         setPendingModelFilter("");
       }
-      if (!channelExists(pendingChannelFilter)) {
-        setPendingChannelFilter("");
+      const nextPendingChannelFilter = normalizeChannelSelection(
+        pendingChannelFilter,
+      );
+      if (nextPendingChannelFilter.length !== pendingChannelFilter.length) {
+        setPendingChannelFilter(nextPendingChannelFilter);
       }
       if (
         pendingApiFilter.trim() === apiFilter.trim() &&
@@ -379,11 +385,11 @@ export function MonitorPage() {
       ) {
         setModelFilter("");
       }
-      if (
-        pendingApiFilter.trim() === apiFilter.trim() &&
-        !channelExists(channelFilter)
-      ) {
-        setChannelFilter("");
+      if (pendingApiFilter.trim() === apiFilter.trim()) {
+        const nextChannelFilter = normalizeChannelSelection(channelFilter);
+        if (nextChannelFilter.length !== channelFilter.length) {
+          setChannelFilter(nextChannelFilter);
+        }
       }
     } catch (requestError) {
       const message =
@@ -469,13 +475,10 @@ export function MonitorPage() {
   }, [filterOptions.models]);
 
   const channelOptions = useMemo(() => {
-    return [
-      { value: "", label: "全部渠道" },
-      ...filterOptions.channels.map((item) => ({
-        value: item,
-        label: item,
-      })),
-    ];
+    return filterOptions.channels.map((item) => ({
+      value: item,
+      label: item,
+    }));
   }, [filterOptions.channels]);
 
   const hourlyModelPalette = useMemo(() => {
@@ -680,14 +683,16 @@ export function MonitorPage() {
               aria-label="按模型过滤"
               className="min-w-[200px] justify-between"
             />
-            <SearchableSelect
+            <MultiSelect
               value={pendingChannelFilter}
               onChange={setPendingChannelFilter}
               options={channelOptions}
               placeholder="全部渠道"
+              emptyLabel="全部渠道"
+              selectAllLabel="全部渠道"
               searchPlaceholder="搜索渠道…"
-              aria-label="按渠道名称过滤"
-              className="min-w-[200px] justify-between"
+              emptyResultLabel="无匹配渠道"
+              className="min-w-[240px]"
             />
             <button
               type="button"

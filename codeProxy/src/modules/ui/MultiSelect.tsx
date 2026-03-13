@@ -12,6 +12,9 @@ interface MultiSelectProps {
     onChange: (selected: string[]) => void;
     placeholder?: string;
     emptyLabel?: string;
+    searchPlaceholder?: string;
+    selectAllLabel?: string;
+    emptyResultLabel?: string;
     searchable?: boolean;
     disabled?: boolean;
     className?: string;
@@ -23,6 +26,9 @@ export function MultiSelect({
     onChange,
     placeholder = "选择...",
     emptyLabel = "全部",
+    searchPlaceholder = "搜索...",
+    selectAllLabel = "全部",
+    emptyResultLabel = "无匹配结果",
     searchable = true,
     disabled = false,
     className = "",
@@ -130,7 +136,7 @@ export function MultiSelect({
                         type="text"
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
-                        placeholder="搜索模型..."
+                        placeholder={searchPlaceholder}
                         className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400 dark:text-white dark:placeholder:text-white/30"
                     />
                 </div>
@@ -153,14 +159,14 @@ export function MultiSelect({
                     >
                         {value.length === 0 && <Check size={12} className="text-white dark:text-black" />}
                     </div>
-                    <span className="font-medium">全部模型</span>
+                    <span className="font-medium">{selectAllLabel}</span>
                 </button>
 
                 <div className="mx-3 my-1 h-px bg-slate-100 dark:bg-neutral-800" />
 
                 {filteredOptions.length === 0 ? (
                     <div className="px-3 py-4 text-center text-xs text-slate-400 dark:text-white/30">
-                        无匹配结果
+                        {emptyResultLabel}
                     </div>
                 ) : (
                     filteredOptions.map((opt) => {

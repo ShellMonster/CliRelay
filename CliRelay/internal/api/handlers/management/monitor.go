@@ -8,12 +8,37 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/usage"
 )
 
+func multiQueryValues(c *gin.Context, key string) []string {
+	raw := c.QueryArray(key)
+	if len(raw) == 0 {
+		if single := strings.TrimSpace(c.Query(key)); single != "" {
+			raw = []string{single}
+		}
+	}
+	seen := make(map[string]struct{}, len(raw))
+	values := make([]string, 0, len(raw))
+	for _, item := range raw {
+		for _, part := range strings.Split(item, ",") {
+			trimmed := strings.TrimSpace(part)
+			if trimmed == "" {
+				continue
+			}
+			if _, ok := seen[trimmed]; ok {
+				continue
+			}
+			seen[trimmed] = struct{}{}
+			values = append(values, trimmed)
+		}
+	}
+	return values
+}
+
 func (h *Handler) GetMonitorSummary(c *gin.Context) {
 	days := intQueryDefault(c, "days", 7)
 	apiKey := strings.TrimSpace(c.Query("api_key"))
 	model := strings.TrimSpace(c.Query("model"))
-	channelName := strings.TrimSpace(c.Query("channel_name"))
-	summary, err := usage.QueryDashboardSummary(days, apiKey, model, channelName)
+	channelNames := multiQueryValues(c, "channel_name")
+	summary, err := usage.QueryDashboardSummary(days, apiKey, model, channelNames)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -26,8 +51,8 @@ func (h *Handler) GetMonitorModelDistribution(c *gin.Context) {
 	limit := intQueryDefault(c, "limit", 10)
 	apiKey := strings.TrimSpace(c.Query("api_key"))
 	model := strings.TrimSpace(c.Query("model"))
-	channelName := strings.TrimSpace(c.Query("channel_name"))
-	points, err := usage.QueryModelDistribution(days, limit, apiKey, model, channelName)
+	channelNames := multiQueryValues(c, "channel_name")
+	points, err := usage.QueryModelDistribution(days, limit, apiKey, model, channelNames)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -39,8 +64,8 @@ func (h *Handler) GetMonitorDailyTrend(c *gin.Context) {
 	days := intQueryDefault(c, "days", 7)
 	apiKey := strings.TrimSpace(c.Query("api_key"))
 	model := strings.TrimSpace(c.Query("model"))
-	channelName := strings.TrimSpace(c.Query("channel_name"))
-	points, err := usage.QueryDailyTrend(days, apiKey, model, channelName)
+	channelNames := multiQueryValues(c, "channel_name")
+	points, err := usage.QueryDailyTrend(days, apiKey, model, channelNames)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -52,8 +77,8 @@ func (h *Handler) GetMonitorHourlySeries(c *gin.Context) {
 	hours := intQueryDefault(c, "hours", 24)
 	apiKey := strings.TrimSpace(c.Query("api_key"))
 	model := strings.TrimSpace(c.Query("model"))
-	channelName := strings.TrimSpace(c.Query("channel_name"))
-	points, err := usage.QueryHourlySeries(hours, apiKey, model, channelName)
+	channelNames := multiQueryValues(c, "channel_name")
+	points, err := usage.QueryHourlySeries(hours, apiKey, model, channelNames)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -66,8 +91,8 @@ func (h *Handler) GetMonitorChannelStats(c *gin.Context) {
 	limit := intQueryDefault(c, "limit", 10)
 	apiKey := strings.TrimSpace(c.Query("api_key"))
 	model := strings.TrimSpace(c.Query("model"))
-	channelName := strings.TrimSpace(c.Query("channel_name"))
-	channels, models, err := usage.QueryChannelStats(days, apiKey, model, channelName, limit)
+	channelNames := multiQueryValues(c, "channel_name")
+	channels, models, err := usage.QueryChannelStats(days, apiKey, model, channelNames, limit)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -84,8 +109,8 @@ func (h *Handler) GetMonitorFailureStats(c *gin.Context) {
 	limit := intQueryDefault(c, "limit", 10)
 	apiKey := strings.TrimSpace(c.Query("api_key"))
 	model := strings.TrimSpace(c.Query("model"))
-	channelName := strings.TrimSpace(c.Query("channel_name"))
-	channels, models, err := usage.QueryFailureStats(days, apiKey, model, channelName, limit)
+	channelNames := multiQueryValues(c, "channel_name")
+	channels, models, err := usage.QueryFailureStats(days, apiKey, model, channelNames, limit)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -100,9 +125,9 @@ func (h *Handler) GetMonitorFailureStats(c *gin.Context) {
 func (h *Handler) GetMonitorFilters(c *gin.Context) {
 	days := intQueryDefault(c, "days", 7)
 	apiKey := strings.TrimSpace(c.Query("api_key"))
-	channelName := strings.TrimSpace(c.Query("channel_name"))
+	channelNames := multiQueryValues(c, "channel_name")
 
-	filters, err := usage.QueryMonitorFilters(days, apiKey, channelName)
+	filters, err := usage.QueryMonitorFilters(days, apiKey, channelNames)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

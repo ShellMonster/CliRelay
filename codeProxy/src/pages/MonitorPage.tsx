@@ -1,3 +1,5 @@
+// Deprecated: 默认前端入口已切换到 `src/app/AppRouter.tsx` + `src/modules/monitor/MonitorPage.tsx`。
+// 这里保留仅用于历史兼容；新增功能或修复请优先修改 modules 目录下的新监控页。
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import {

@@ -1,5 +1,16 @@
 import { apiClient } from "@/lib/http/client";
 
+function appendMultiValueQuery(
+  query: URLSearchParams,
+  key: string,
+  values?: string[],
+) {
+  values
+    ?.map((value) => value.trim())
+    .filter(Boolean)
+    .forEach((value) => query.append(key, value));
+}
+
 export interface UsageExportPayload {
   version?: number;
   exported_at?: string;
@@ -242,11 +253,11 @@ export const usageApi = {
   getMonitorFilters(
     days = 7,
     apiKey?: string,
-    channelName?: string,
+    channelNames?: string[],
   ): Promise<MonitorFiltersResponse> {
     const query = new URLSearchParams({ days: String(days) });
     if (apiKey?.trim()) query.set("api_key", apiKey.trim());
-    if (channelName?.trim()) query.set("channel_name", channelName.trim());
+    appendMultiValueQuery(query, "channel_name", channelNames);
     return apiClient.get<MonitorFiltersResponse>(
       `/monitor/filters?${query.toString()}`,
     );
@@ -256,12 +267,12 @@ export const usageApi = {
     days = 7,
     apiKey?: string,
     model?: string,
-    channelName?: string,
+    channelNames?: string[],
   ): Promise<MonitorSummaryResponse> {
     const query = new URLSearchParams({ days: String(days) });
     if (apiKey?.trim()) query.set("api_key", apiKey.trim());
     if (model?.trim()) query.set("model", model.trim());
-    if (channelName?.trim()) query.set("channel_name", channelName.trim());
+    appendMultiValueQuery(query, "channel_name", channelNames);
     return apiClient.get<MonitorSummaryResponse>(
       `/monitor/summary?${query.toString()}`,
     );
@@ -272,7 +283,7 @@ export const usageApi = {
     limit = 10,
     apiKey?: string,
     model?: string,
-    channelName?: string,
+    channelNames?: string[],
   ): Promise<MonitorModelDistributionResponse> {
     const query = new URLSearchParams({
       days: String(days),
@@ -280,7 +291,7 @@ export const usageApi = {
     });
     if (apiKey?.trim()) query.set("api_key", apiKey.trim());
     if (model?.trim()) query.set("model", model.trim());
-    if (channelName?.trim()) query.set("channel_name", channelName.trim());
+    appendMultiValueQuery(query, "channel_name", channelNames);
     return apiClient.get<MonitorModelDistributionResponse>(
       `/monitor/model-distribution?${query.toString()}`,
     );
@@ -290,12 +301,12 @@ export const usageApi = {
     days = 7,
     apiKey?: string,
     model?: string,
-    channelName?: string,
+    channelNames?: string[],
   ): Promise<MonitorDailyTrendResponse> {
     const query = new URLSearchParams({ days: String(days) });
     if (apiKey?.trim()) query.set("api_key", apiKey.trim());
     if (model?.trim()) query.set("model", model.trim());
-    if (channelName?.trim()) query.set("channel_name", channelName.trim());
+    appendMultiValueQuery(query, "channel_name", channelNames);
     return apiClient.get<MonitorDailyTrendResponse>(
       `/monitor/daily-trend?${query.toString()}`,
     );
@@ -305,12 +316,12 @@ export const usageApi = {
     hours = 24,
     apiKey?: string,
     model?: string,
-    channelName?: string,
+    channelNames?: string[],
   ): Promise<MonitorHourlyResponse> {
     const query = new URLSearchParams({ hours: String(hours) });
     if (apiKey?.trim()) query.set("api_key", apiKey.trim());
     if (model?.trim()) query.set("model", model.trim());
-    if (channelName?.trim()) query.set("channel_name", channelName.trim());
+    appendMultiValueQuery(query, "channel_name", channelNames);
     return apiClient.get<MonitorHourlyResponse>(
       `/monitor/hourly?${query.toString()}`,
     );
@@ -321,7 +332,7 @@ export const usageApi = {
     limit = 10,
     apiKey?: string,
     model?: string,
-    channelName?: string,
+    channelNames?: string[],
   ): Promise<MonitorChannelStatsResponse> {
     const query = new URLSearchParams({
       days: String(days),
@@ -329,7 +340,7 @@ export const usageApi = {
     });
     if (apiKey?.trim()) query.set("api_key", apiKey.trim());
     if (model?.trim()) query.set("model", model.trim());
-    if (channelName?.trim()) query.set("channel_name", channelName.trim());
+    appendMultiValueQuery(query, "channel_name", channelNames);
     return apiClient.get<MonitorChannelStatsResponse>(
       `/monitor/channel-stats?${query.toString()}`,
     );
@@ -340,7 +351,7 @@ export const usageApi = {
     limit = 10,
     apiKey?: string,
     model?: string,
-    channelName?: string,
+    channelNames?: string[],
   ): Promise<MonitorFailureStatsResponse> {
     const query = new URLSearchParams({
       days: String(days),
@@ -348,7 +359,7 @@ export const usageApi = {
     });
     if (apiKey?.trim()) query.set("api_key", apiKey.trim());
     if (model?.trim()) query.set("model", model.trim());
-    if (channelName?.trim()) query.set("channel_name", channelName.trim());
+    appendMultiValueQuery(query, "channel_name", channelNames);
     return apiClient.get<MonitorFailureStatsResponse>(
       `/monitor/failure-stats?${query.toString()}`,
     );
