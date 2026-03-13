@@ -33,7 +33,9 @@ import { ToggleSwitch } from "@/modules/ui/ToggleSwitch";
 import { useToast } from "@/modules/ui/ToastProvider";
 import { KeyValueInputList, keyValueEntriesToRecord } from "@/modules/providers/KeyValueInputList";
 import { ModelInputList, createEmptyModelEntry } from "@/modules/providers/ModelInputList";
+import { ProviderCardActionBar } from "@/modules/providers/ProviderCardActionBar";
 import { ProviderStatusBar } from "@/modules/providers/ProviderStatusBar";
+import { ProviderStateBadge } from "@/modules/providers/ProviderStateBadge";
 import { ProviderKeyListCard } from "@/modules/providers/ProviderKeyListCard";
 import {
   buildCandidateUsageSourceIds,
@@ -520,6 +522,32 @@ export function ProvidersPage() {
     [openaiProviders],
   );
 
+  const toggleOpenAIProviderEnabled = useCallback(
+    async (index: number, enabled: boolean) => {
+      const current = openaiProviders[index];
+      if (!current) return;
+      const prev = openaiProviders;
+
+      const nextExcluded = enabled
+        ? withoutDisableAllModelsRule(current.excludedModels)
+        : withDisableAllModelsRule(current.excludedModels);
+
+      const nextItem: OpenAIProvider = { ...current, excludedModels: nextExcluded };
+      const nextList = prev.map((item, i) => (i === index ? nextItem : item));
+
+      try {
+        setOpenaiProviders(nextList);
+        await providersApi.saveOpenAIProviders(nextList);
+        notify({ type: "success", message: enabled ? "已启用" : "已禁用" });
+        startTransition(() => void refreshAll());
+      } catch (err: unknown) {
+        setOpenaiProviders(prev);
+        notify({ type: "error", message: err instanceof Error ? err.message : "更新失败" });
+      }
+    },
+    [notify, openaiProviders, refreshAll, startTransition],
+  );
+
   useEffect(() => {
     if (loading) return;
     const pathname = location.pathname;
@@ -578,6 +606,9 @@ export function ProvidersPage() {
     }
 
     const headers = keyValueEntriesToRecord(openaiDraft.headersEntries);
+    const excludedModels = openaiDraft.excludedModelsText.trim()
+      ? excludedModelsFromText(openaiDraft.excludedModelsText)
+      : undefined;
 
     const priorityText = openaiDraft.priorityText.trim();
     const priority = priorityText !== "" ? Number(priorityText) : undefined;
@@ -618,6 +649,7 @@ export function ProvidersPage() {
       baseUrl,
       ...(openaiDraft.prefix.trim() ? { prefix: openaiDraft.prefix.trim() } : {}),
       ...(headers ? { headers } : {}),
+      ...(excludedModels ? { excludedModels } : {}),
       ...(priority !== undefined ? { priority } : {}),
       ...(openaiDraft.testModel.trim() ? { testModel: openaiDraft.testModel.trim() } : {}),
       ...(modelCommit.models ? { models: modelCommit.models } : {}),
@@ -885,13 +917,40 @@ export function ProvidersPage() {
     return stripDisableAllModelsRule(list).length;
   }, [keyDraft.excludedModelsText]);
 
+  const editOpenAIEnabled = useMemo(() => {
+    const list = excludedModelsFromText(openaiDraft.excludedModelsText);
+    return !hasDisableAllModelsRule(list);
+  }, [openaiDraft.excludedModelsText]);
+
+  const editOpenAIEnabledToggle = useCallback(
+    (enabled: boolean) => {
+      const current = excludedModelsFromText(openaiDraft.excludedModelsText);
+      const next = enabled ? withoutDisableAllModelsRule(current) : withDisableAllModelsRule(current);
+      setOpenaiDraft((prev) => ({ ...prev, excludedModelsText: next.join("\n") }));
+    },
+    [openaiDraft.excludedModelsText],
+  );
+
+  const editOpenAIExcludedCount = useMemo(() => {
+    const list = excludedModelsFromText(openaiDraft.excludedModelsText);
+    return stripDisableAllModelsRule(list).length;
+  }, [openaiDraft.excludedModelsText]);
+
   const editKeyHeaderCount = useMemo(() => {
     return keyDraft.headersEntries.filter((e) => e.key.trim() && e.value.trim()).length;
   }, [keyDraft.headersEntries]);
 
+  const editOpenAIHeaderCount = useMemo(() => {
+    return openaiDraft.headersEntries.filter((e) => e.key.trim() && e.value.trim()).length;
+  }, [openaiDraft.headersEntries]);
+
   const editKeyModelCount = useMemo(() => {
     return keyDraft.modelEntries.filter((e) => e.name.trim()).length;
   }, [keyDraft.modelEntries]);
+
+  const editOpenAIModelCount = useMemo(() => {
+    return openaiDraft.modelEntries.filter((entry) => entry.name.trim()).length;
+  }, [openaiDraft.modelEntries]);
 
   return (
     <div className="space-y-6">
@@ -1016,14 +1075,19 @@ export function ProvidersPage() {
                 {openaiProviders.map((provider, idx) => {
                   const stats = getOpenAIProviderStats(provider);
                   const statusData = getOpenAIProviderStatusBar(provider);
+                  const disabled = hasDisableAllModelsRule(provider.excludedModels);
+                  const excludedModels = stripDisableAllModelsRule(provider.excludedModels);
 
                   return (
                     <div
                       key={`${provider.name}:${idx}`}
-                      className="rounded-2xl border border-slate-200 bg-white/70 px-4 py-3 shadow-sm dark:border-neutral-800 dark:bg-neutral-950/60"
+                      className={[
+                        "relative rounded-2xl border border-slate-200 bg-white/70 px-4 py-3 shadow-sm dark:border-neutral-800 dark:bg-neutral-950/60",
+                        disabled ? "opacity-60" : "",
+                      ].join(" ")}
                     >
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div className="min-w-0">
+                      <div className="min-w-0">
+                          <div className="md:pr-[280px]">
                           <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">
                             {provider.name}
                           </p>
@@ -1035,6 +1099,7 @@ export function ProvidersPage() {
                           <p className="mt-1 truncate font-mono text-xs text-slate-700 dark:text-slate-200">
                             baseUrl：{provider.baseUrl || "--"}
                           </p>
+                          </div>
 
                           {provider.apiKeyEntries?.length ? (
                             <div className="mt-2 space-y-1">
@@ -1084,6 +1149,8 @@ export function ProvidersPage() {
                           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-600 dark:text-white/65 tabular-nums">
                             <span>models：{provider.models?.length ?? 0}</span>
                             <span>·</span>
+                            <span>excluded：{excludedModels.length}</span>
+                            <span>·</span>
                             <span>成功：{stats.success}</span>
                             <span>·</span>
                             <span>失败：{stats.failure}</span>
@@ -1115,27 +1182,27 @@ export function ProvidersPage() {
                             </div>
                           ) : null}
 
+                          {excludedModels.length ? (
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              {excludedModels.map((model) => (
+                                <span
+                                  key={model}
+                                  className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200"
+                                >
+                                  {model}
+                                </span>
+                              ))}
+                            </div>
+                          ) : null}
+
                           <ProviderStatusBar data={statusData} />
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => openOpenAIEditor(idx)}
-                          >
-                            <Settings2 size={14} />
-                            编辑
-                          </Button>
-                          <Button
-                            variant="danger"
-                            size="sm"
-                            onClick={() => setConfirm({ type: "deleteOpenAI", index: idx })}
-                          >
-                            <Trash2 size={14} />
-                            删除
-                          </Button>
-                        </div>
                       </div>
+                      <ProviderCardActionBar
+                        enabled={!disabled}
+                        onToggle={(value) => void toggleOpenAIProviderEnabled(idx, value)}
+                        onEdit={() => openOpenAIEditor(idx)}
+                        onDelete={() => setConfirm({ type: "deleteOpenAI", index: idx })}
+                      />
                     </div>
                   );
                 })}
@@ -1150,15 +1217,22 @@ export function ProvidersPage() {
             description="配置上游 URL / API Key、模型映射与强制映射开关。"
             loading={loading}
             actions={
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={() => void saveAmpcode()}
-                disabled={loading || isPending}
-              >
-                <Save size={14} />
-                保存
-              </Button>
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <ProviderStateBadge
+                  enabled={Boolean(ampcode)}
+                  enabledText="已加载"
+                  disabledText="未加载"
+                />
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => void saveAmpcode()}
+                  disabled={loading || isPending}
+                >
+                  <Save size={14} />
+                  保存
+                </Button>
+              </div>
             }
           >
             <div className="grid gap-4 lg:grid-cols-2">
@@ -1183,7 +1257,7 @@ export function ProvidersPage() {
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-white/70 p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-950/60">
                   <p className="text-xs text-slate-600 dark:text-white/65">
-                    当前：{ampcode ? "已加载" : "未加载"} · 映射 {ampMappings.length} 条
+                    当前映射 {ampMappings.length} 条
                   </p>
                 </div>
               </div>
@@ -1294,15 +1368,7 @@ export function ProvidersPage() {
       >
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-2">
-            <span
-              className={
-                editKeyEnabled
-                  ? "rounded-full bg-emerald-600/10 px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200"
-                  : "rounded-full bg-amber-500/15 px-2.5 py-1 text-xs font-semibold text-amber-700 dark:text-amber-200"
-              }
-            >
-              {editKeyEnabled ? "已启用" : "已禁用"}
-            </span>
+            <ProviderStateBadge enabled={editKeyEnabled} />
             <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 dark:border-neutral-800 dark:bg-neutral-950/60 dark:text-white/75">
               headers：<span className="font-semibold tabular-nums">{editKeyHeaderCount}</span>
             </span>
@@ -1624,6 +1690,32 @@ export function ProvidersPage() {
         }
       >
         <div className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <ProviderStateBadge enabled={editOpenAIEnabled} />
+            <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 dark:border-neutral-800 dark:bg-neutral-950/60 dark:text-white/75">
+              headers：<span className="font-semibold tabular-nums">{editOpenAIHeaderCount}</span>
+            </span>
+            <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 dark:border-neutral-800 dark:bg-neutral-950/60 dark:text-white/75">
+              models：<span className="font-semibold tabular-nums">{editOpenAIModelCount}</span>
+            </span>
+            <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 dark:border-neutral-800 dark:bg-neutral-950/60 dark:text-white/75">
+              excluded：<span className="font-semibold tabular-nums">{editOpenAIExcludedCount}</span>
+            </span>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white/70 p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-950/60">
+            <ToggleSwitch
+              label="启用"
+              description={editOpenAIEnabled ? "当前：启用" : "当前：禁用（已写入 * 规则）"}
+              checked={editOpenAIEnabled}
+              onCheckedChange={editOpenAIEnabledToggle}
+            />
+            <p className="mt-2 text-xs text-slate-500 dark:text-white/55">
+              禁用本质是向 Excluded Models 写入 <span className="font-mono">*</span>
+              ；你也可以在下方手动编辑。
+            </p>
+          </div>
+
           <div className="grid gap-3 md:grid-cols-2">
             <div className="space-y-2">
               <p className="text-sm font-semibold text-slate-900 dark:text-white">Name</p>
@@ -1821,6 +1913,45 @@ export function ProvidersPage() {
               ))}
             </div>
           </section>
+
+          <div className="rounded-2xl border border-slate-200 bg-white/70 p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-950/60">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                Excluded Models（可选）
+              </p>
+              <div className="flex items-center gap-2">
+                <Button variant="secondary" size="sm" onClick={() => editOpenAIEnabledToggle(false)}>
+                  写入 * 禁用
+                </Button>
+                <Button variant="secondary" size="sm" onClick={() => editOpenAIEnabledToggle(true)}>
+                  移除 *
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setOpenaiDraft((prev) => ({ ...prev, excludedModelsText: "" }))}
+                >
+                  清空
+                </Button>
+              </div>
+            </div>
+
+            <textarea
+              value={openaiDraft.excludedModelsText}
+              onChange={(e) => {
+                const value = e.currentTarget.value;
+                setOpenaiDraft((prev) => ({ ...prev, excludedModelsText: value }));
+              }}
+              placeholder="每行一个模型；写 * 表示禁用全部模型"
+              aria-label="openaiExcludedModels"
+              className="mt-3 min-h-[140px] w-full resize-y rounded-2xl border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-900 outline-none transition placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-slate-400/35 dark:border-neutral-800 dark:bg-neutral-950 dark:text-slate-100 dark:placeholder:text-neutral-500 dark:focus-visible:ring-white/15"
+            />
+
+            <p className="mt-2 text-xs text-slate-500 dark:text-white/55">
+              当前排除：<span className="font-semibold tabular-nums">{editOpenAIExcludedCount}</span>{" "}
+              条（不含 *）。
+            </p>
+          </div>
 
           <section className="space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2">

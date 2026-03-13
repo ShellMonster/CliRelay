@@ -149,6 +149,7 @@ export type OpenAIDraft = {
   name: string;
   baseUrl: string;
   prefix: string;
+  excludedModelsText: string;
   headersEntries: KeyValueEntry[];
   priorityText: string;
   testModel: string;
@@ -165,6 +166,7 @@ export const buildOpenAIDraft = (input?: OpenAIProvider | null): OpenAIDraft => 
   name: input?.name ?? "",
   baseUrl: input?.baseUrl ?? "",
   prefix: input?.prefix ?? "",
+  excludedModelsText: excludedModelsToText(input?.excludedModels),
   headersEntries: recordToKeyValueEntries(input?.headers),
   priorityText: input?.priority !== undefined ? String(input.priority) : "",
   testModel: input?.testModel ?? "",
