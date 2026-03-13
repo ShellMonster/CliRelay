@@ -903,6 +903,7 @@ func (s *Service) registerModelsForAuth(a *coreauth.Auth) {
 							UserDefined: true,
 						})
 					}
+					ms = applyExcludedModels(ms, excluded)
 					// Register and return
 					if len(ms) > 0 {
 						if providerKey == "" {

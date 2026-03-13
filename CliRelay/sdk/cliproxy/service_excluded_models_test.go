@@ -63,3 +63,53 @@ func TestRegisterModelsForAuth_UsesPreMergedExcludedModelsAttribute(t *testing.T
 		t.Fatal("expected global excluded model to be present when attribute override is set")
 	}
 }
+
+func TestRegisterModelsForAuth_OpenAICompatRespectsExcludedModels(t *testing.T) {
+	service := &Service{
+		cfg: &config.Config{
+			OpenAICompatibility: []config.OpenAICompatibility{
+				{
+					Name:           "Github-openai兼容",
+					BaseURL:        "https://api.githubcopilot.com",
+					ExcludedModels: []string{"*"},
+					Models: []config.OpenAICompatibilityModel{
+						{Name: "gpt-5.4"},
+					},
+				},
+			},
+		},
+	}
+	auth := &coreauth.Auth{
+		ID:       "auth-openai-compat",
+		Provider: "github-openai兼容",
+		Status:   coreauth.StatusActive,
+		Attributes: map[string]string{
+			"auth_kind":       "apikey",
+			"provider_key":    "github-openai兼容",
+			"compat_name":     "Github-openai兼容",
+			"excluded_models": "*",
+		},
+	}
+
+	registry := GlobalModelRegistry()
+	registry.UnregisterClient(auth.ID)
+	t.Cleanup(func() {
+		registry.UnregisterClient(auth.ID)
+	})
+
+	service.registerModelsForAuth(auth)
+
+	if registry.ClientSupportsModel(auth.ID, "gpt-5.4") {
+		t.Fatal("expected openai-compat auth to unregister excluded model support")
+	}
+
+	models := registry.GetAvailableModelsByProvider("github-openai兼容")
+	for _, model := range models {
+		if model == nil {
+			continue
+		}
+		if strings.EqualFold(strings.TrimSpace(model.ID), "gpt-5.4") {
+			t.Fatalf("expected model %q to be excluded for openai-compat provider", model.ID)
+		}
+	}
+}
