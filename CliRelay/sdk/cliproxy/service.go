@@ -325,7 +325,8 @@ func (s *Service) applyCoreAuthRemoval(ctx context.Context, id string) {
 		if _, err := s.coreManager.Update(ctx, existing); err != nil {
 			log.Errorf("failed to disable auth %s: %v", id, err)
 		}
-		if strings.EqualFold(strings.TrimSpace(existing.Provider), "codex") {
+		switch strings.ToLower(strings.TrimSpace(existing.Provider)) {
+		case "codex", "codex-compat":
 			s.ensureExecutorsForAuth(existing)
 		}
 	}
@@ -367,9 +368,10 @@ func (s *Service) ensureExecutorsForAuthWithMode(a *coreauth.Auth, forceReplace 
 	if s == nil || s.coreManager == nil || a == nil {
 		return
 	}
-	if strings.EqualFold(strings.TrimSpace(a.Provider), "codex") {
+	providerKey := strings.ToLower(strings.TrimSpace(a.Provider))
+	if providerKey == "codex" || providerKey == "codex-compat" {
 		if !forceReplace {
-			existingExecutor, hasExecutor := s.coreManager.Executor("codex")
+			existingExecutor, hasExecutor := s.coreManager.Executor(providerKey)
 			if hasExecutor {
 				_, isCodexAutoExecutor := existingExecutor.(*executor.CodexAutoExecutor)
 				if isCodexAutoExecutor {
@@ -377,7 +379,11 @@ func (s *Service) ensureExecutorsForAuthWithMode(a *coreauth.Auth, forceReplace 
 				}
 			}
 		}
-		s.coreManager.RegisterExecutor(executor.NewCodexAutoExecutor(s.cfg))
+		if providerKey == "codex-compat" {
+			s.coreManager.RegisterExecutor(executor.NewCodexCompatAutoExecutor(s.cfg))
+		} else {
+			s.coreManager.RegisterExecutor(executor.NewCodexAutoExecutor(s.cfg))
+		}
 		return
 	}
 	// Skip disabled auth entries when (re)binding executors.
@@ -396,7 +402,7 @@ func (s *Service) ensureExecutorsForAuthWithMode(a *coreauth.Auth, forceReplace 
 		s.coreManager.RegisterExecutor(executor.NewOpenAICompatExecutor(compatProviderKey, s.cfg))
 		return
 	}
-	switch strings.ToLower(a.Provider) {
+	switch providerKey {
 	case "gemini":
 		s.coreManager.RegisterExecutor(executor.NewGeminiExecutor(s.cfg))
 	case "vertex":
@@ -433,13 +439,16 @@ func (s *Service) rebindExecutors() {
 		return
 	}
 	auths := s.coreManager.List()
-	reboundCodex := false
+	reboundProviders := make(map[string]bool)
 	for _, auth := range auths {
-		if auth != nil && strings.EqualFold(strings.TrimSpace(auth.Provider), "codex") {
-			if reboundCodex {
-				continue
+		if auth != nil {
+			providerKey := strings.ToLower(strings.TrimSpace(auth.Provider))
+			if providerKey == "codex" || providerKey == "codex-compat" {
+				if reboundProviders[providerKey] {
+					continue
+				}
+				reboundProviders[providerKey] = true
 			}
-			reboundCodex = true
 		}
 		s.ensureExecutorsForAuthWithMode(auth, true)
 	}
@@ -816,14 +825,20 @@ func (s *Service) registerModelsForAuth(a *coreauth.Auth) {
 			}
 		}
 		models = applyExcludedModels(models, excluded)
-	case "codex":
+	case "codex", "codex-compat":
 		fetchCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		models = executor.FetchCodexModels(fetchCtx, a, s.cfg)
 		cancel()
 		if len(models) == 0 {
 			models = registry.GetOpenAIModels()
 		}
-		if entry := s.resolveConfigCodexKey(a); entry != nil {
+		var entry *config.CodexKey
+		if provider == "codex-compat" {
+			entry = s.resolveConfigCodexCompatKey(a)
+		} else {
+			entry = s.resolveConfigCodexKey(a)
+		}
+		if entry != nil {
 			if len(entry.Models) > 0 {
 				models = buildCodexConfigModels(entry)
 			}
@@ -909,7 +924,7 @@ func (s *Service) registerModelsForAuth(a *coreauth.Auth) {
 						if providerKey == "" {
 							providerKey = "openai-compatibility"
 						}
-						GlobalModelRegistry().RegisterClient(a.ID, providerKey, applyModelPrefixes(ms, a.Prefix, s.cfg.ForceModelPrefix))
+						GlobalModelRegistry().RegisterClient(a.ID, providerKey, applyModelPrefixes(ms, effectiveAuthModelPrefix(a), s.cfg.ForceModelPrefix))
 					} else {
 						// Ensure stale registrations are cleared when model list becomes empty.
 						GlobalModelRegistry().UnregisterClient(a.ID)
@@ -930,7 +945,7 @@ func (s *Service) registerModelsForAuth(a *coreauth.Auth) {
 		if key == "" {
 			key = strings.ToLower(strings.TrimSpace(a.Provider))
 		}
-		GlobalModelRegistry().RegisterClient(a.ID, key, applyModelPrefixes(models, a.Prefix, s.cfg != nil && s.cfg.ForceModelPrefix))
+		GlobalModelRegistry().RegisterClient(a.ID, key, applyModelPrefixes(models, effectiveAuthModelPrefix(a), s.cfg != nil && s.cfg.ForceModelPrefix))
 		if provider == "antigravity" {
 			s.backfillAntigravityModels(a, models)
 		}
@@ -1040,7 +1055,21 @@ func (s *Service) resolveConfigVertexCompatKey(auth *coreauth.Auth) *config.Vert
 }
 
 func (s *Service) resolveConfigCodexKey(auth *coreauth.Auth) *config.CodexKey {
+	if s == nil || s.cfg == nil {
+		return nil
+	}
+	return resolveConfigCodexLikeKey(s.cfg.CodexKey, auth)
+}
+
+func (s *Service) resolveConfigCodexCompatKey(auth *coreauth.Auth) *config.CodexKey {
 	if auth == nil || s.cfg == nil {
+		return nil
+	}
+	return resolveConfigCodexLikeKey(s.cfg.CodexCompatKey, auth)
+}
+
+func resolveConfigCodexLikeKey(entries []config.CodexKey, auth *coreauth.Auth) *config.CodexKey {
+	if auth == nil {
 		return nil
 	}
 	var attrKey, attrBase string
@@ -1048,8 +1077,8 @@ func (s *Service) resolveConfigCodexKey(auth *coreauth.Auth) *config.CodexKey {
 		attrKey = strings.TrimSpace(auth.Attributes["api_key"])
 		attrBase = strings.TrimSpace(auth.Attributes["base_url"])
 	}
-	for i := range s.cfg.CodexKey {
-		entry := &s.cfg.CodexKey[i]
+	for i := range entries {
+		entry := &entries[i]
 		cfgKey := strings.TrimSpace(entry.APIKey)
 		cfgBase := strings.TrimSpace(entry.BaseURL)
 		if attrKey != "" && strings.EqualFold(cfgKey, attrKey) {
@@ -1063,6 +1092,17 @@ func (s *Service) resolveConfigCodexKey(auth *coreauth.Auth) *config.CodexKey {
 		}
 	}
 	return nil
+}
+
+func effectiveAuthModelPrefix(auth *coreauth.Auth) string {
+	if auth == nil {
+		return ""
+	}
+	prefix := strings.TrimSpace(auth.Prefix)
+	if prefix == "" && strings.EqualFold(strings.TrimSpace(auth.Provider), "codex-compat") {
+		return config.DefaultCodexCompatPrefix
+	}
+	return prefix
 }
 
 func (s *Service) oauthExcludedModels(provider, authKind string) []string {

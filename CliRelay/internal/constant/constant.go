@@ -13,6 +13,10 @@ const (
 	// Codex represents the OpenAI Codex provider identifier.
 	Codex = "codex"
 
+	// CodexCompat represents the Codex-compatible provider identifier with stable
+	// OpenAI Responses SSE normalization.
+	CodexCompat = "codex-compat"
+
 	// Claude represents the Anthropic Claude provider identifier.
 	Claude = "claude"
 

@@ -124,8 +124,10 @@ const normalizeProviderKeyConfig = (item: unknown): ProviderKeyConfig | null => 
   const prefix = normalizePrefix(record?.prefix ?? record?.["prefix"]);
   if (prefix) config.prefix = prefix;
   const baseUrl = record ? (record["base-url"] ?? record.baseUrl) : undefined;
+  const websockets = normalizeBoolean(record?.websockets ?? record?.["websockets"]);
   const proxyUrl = record ? (record["proxy-url"] ?? record.proxyUrl) : undefined;
   if (baseUrl) config.baseUrl = String(baseUrl);
+  if (websockets !== undefined) config.websockets = websockets;
   if (proxyUrl) config.proxyUrl = String(proxyUrl);
   const headers = normalizeHeaders(record?.headers);
   if (headers) config.headers = headers;
@@ -339,6 +341,14 @@ export const normalizeConfigResponse = (raw: unknown): Config => {
   const codexList = raw["codex-api-key"] ?? raw.codexApiKey ?? raw.codexApiKeys;
   if (Array.isArray(codexList)) {
     config.codexApiKeys = codexList
+      .map((item) => normalizeProviderKeyConfig(item))
+      .filter(Boolean) as ProviderKeyConfig[];
+  }
+
+  const codexCompatList =
+    raw["codex-compat-api-key"] ?? raw.codexCompatApiKey ?? raw.codexCompatApiKeys;
+  if (Array.isArray(codexCompatList)) {
+    config.codexCompatApiKeys = codexCompatList
       .map((item) => normalizeProviderKeyConfig(item))
       .filter(Boolean) as ProviderKeyConfig[];
   }

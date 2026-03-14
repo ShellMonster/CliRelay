@@ -512,6 +512,9 @@ func TestBuildConfigChangeDetails_CountBranches(t *testing.T) {
 		GeminiKey: []config.GeminiKey{{APIKey: "g"}},
 		ClaudeKey: []config.ClaudeKey{{APIKey: "c"}},
 		CodexKey:  []config.CodexKey{{APIKey: "x"}},
+		CodexCompatKey: []config.CodexKey{
+			{APIKey: "xc"},
+		},
 		VertexCompatAPIKey: []config.VertexCompatKey{
 			{APIKey: "v", BaseURL: "http://v"},
 		},
@@ -521,6 +524,7 @@ func TestBuildConfigChangeDetails_CountBranches(t *testing.T) {
 	expectContains(t, changes, "gemini-api-key count: 0 -> 1")
 	expectContains(t, changes, "claude-api-key count: 0 -> 1")
 	expectContains(t, changes, "codex-api-key count: 0 -> 1")
+	expectContains(t, changes, "codex-compat-api-key count: 0 -> 1")
 	expectContains(t, changes, "vertex-api-key count: 0 -> 1")
 }
 

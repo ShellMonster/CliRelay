@@ -174,7 +174,8 @@ func preferCodexWebsocketAuths(ctx context.Context, provider string, available [
 	if !cliproxyexecutor.DownstreamWebsocket(ctx) {
 		return available
 	}
-	if !strings.EqualFold(strings.TrimSpace(provider), "codex") {
+	trimmedProvider := strings.TrimSpace(provider)
+	if !strings.EqualFold(trimmedProvider, "codex") && !strings.EqualFold(trimmedProvider, "codex-compat") {
 		return available
 	}
 

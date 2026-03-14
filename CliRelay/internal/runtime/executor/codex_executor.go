@@ -37,12 +37,40 @@ var dataTag = []byte("data:")
 // CodexExecutor is a stateless executor for Codex (OpenAI Responses API entrypoint).
 // If api_key is unavailable on auth, it falls back to legacy via ClientAdapter.
 type CodexExecutor struct {
-	cfg *config.Config
+	cfg              *config.Config
+	providerID       string
+	translatorFormat sdktranslator.Format
 }
 
-func NewCodexExecutor(cfg *config.Config) *CodexExecutor { return &CodexExecutor{cfg: cfg} }
+func NewCodexExecutor(cfg *config.Config) *CodexExecutor {
+	return newCodexExecutor(cfg, "codex", sdktranslator.FromString("codex"))
+}
 
-func (e *CodexExecutor) Identifier() string { return "codex" }
+func NewCodexCompatExecutor(cfg *config.Config) *CodexExecutor {
+	return newCodexExecutor(cfg, "codex-compat", sdktranslator.FromString("codex-compat"))
+}
+
+func newCodexExecutor(cfg *config.Config, providerID string, translatorFormat sdktranslator.Format) *CodexExecutor {
+	return &CodexExecutor{
+		cfg:              cfg,
+		providerID:       strings.TrimSpace(providerID),
+		translatorFormat: translatorFormat,
+	}
+}
+
+func (e *CodexExecutor) Identifier() string {
+	if e == nil || strings.TrimSpace(e.providerID) == "" {
+		return "codex"
+	}
+	return e.providerID
+}
+
+func (e *CodexExecutor) targetTranslatorFormat() sdktranslator.Format {
+	if e == nil || strings.TrimSpace(e.translatorFormat.String()) == "" {
+		return sdktranslator.FromString("codex")
+	}
+	return e.translatorFormat
+}
 
 // PrepareRequest injects Codex credentials into the outgoing HTTP request.
 func (e *CodexExecutor) PrepareRequest(req *http.Request, auth *cliproxyauth.Auth) error {
@@ -92,7 +120,7 @@ func (e *CodexExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth, re
 	defer reporter.trackFailure(ctx, &err)
 
 	from := opts.SourceFormat
-	to := sdktranslator.FromString("codex")
+	to := e.targetTranslatorFormat()
 	originalPayloadSource := req.Payload
 	if len(opts.OriginalRequest) > 0 {
 		originalPayloadSource = opts.OriginalRequest
@@ -292,7 +320,7 @@ func (e *CodexExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Au
 	defer reporter.trackFailure(ctx, &err)
 
 	from := opts.SourceFormat
-	to := sdktranslator.FromString("codex")
+	to := e.targetTranslatorFormat()
 	originalPayloadSource := req.Payload
 	if len(opts.OriginalRequest) > 0 {
 		originalPayloadSource = opts.OriginalRequest
@@ -405,7 +433,7 @@ func (e *CodexExecutor) CountTokens(ctx context.Context, auth *cliproxyauth.Auth
 	baseModel := thinking.ParseSuffix(req.Model).ModelName
 
 	from := opts.SourceFormat
-	to := sdktranslator.FromString("codex")
+	to := e.targetTranslatorFormat()
 	body := sdktranslator.TranslateRequest(from, to, baseModel, req.Payload, false)
 
 	body, err := thinking.ApplyThinking(body, req.Model, from.String(), to.String(), e.Identifier())

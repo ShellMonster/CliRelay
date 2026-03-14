@@ -32,6 +32,7 @@ func NewApplier() *Applier {
 
 func init() {
 	thinking.RegisterProvider("codex", NewApplier())
+	thinking.RegisterProvider("codex-compat", NewApplier())
 }
 
 // Apply applies thinking configuration to Codex request body.

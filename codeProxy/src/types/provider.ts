@@ -32,6 +32,7 @@ export interface ProviderKeyConfig {
   name?: string;
   prefix?: string;
   baseUrl?: string;
+  websockets?: boolean;
   proxyUrl?: string;
   headers?: Record<string, string>;
   models?: ModelAlias[];

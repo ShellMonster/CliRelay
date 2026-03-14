@@ -21,6 +21,7 @@ import (
 const (
 	DefaultPanelGitHubRepository = "https://github.com/router-for-me/Cli-Proxy-API-Management-Center"
 	DefaultPprofAddr             = "127.0.0.1:8316"
+	DefaultCodexCompatPrefix     = "codex-compat"
 )
 
 // Config represents the application's configuration, loaded from a YAML file.
@@ -90,6 +91,10 @@ type Config struct {
 	// Codex defines a list of Codex API key configurations as specified in the YAML configuration file.
 	CodexKey []CodexKey `yaml:"codex-api-key" json:"codex-api-key"`
 
+	// CodexCompatKey defines a list of Codex-compatible API key configurations used for
+	// OpenAI Responses compatibility clients that require normalized response IDs.
+	CodexCompatKey []CodexKey `yaml:"codex-compat-api-key" json:"codex-compat-api-key"`
+
 	// ClaudeKey defines a list of Claude API key configurations as specified in the YAML configuration file.
 	ClaudeKey []ClaudeKey `yaml:"claude-api-key" json:"claude-api-key"`
 
@@ -115,7 +120,8 @@ type Config struct {
 	// gemini-cli, vertex, aistudio, antigravity, claude, codex, qwen, iflow.
 	//
 	// NOTE: This does not apply to existing per-credential model alias features under:
-	// gemini-api-key, codex-api-key, claude-api-key, openai-compatibility, vertex-api-key, and ampcode.
+	// gemini-api-key, codex-api-key, codex-compat-api-key, claude-api-key, openai-compatibility,
+	// vertex-api-key, and ampcode.
 	OAuthModelAlias map[string][]OAuthModelAlias `yaml:"oauth-model-alias,omitempty" json:"oauth-model-alias,omitempty"`
 
 	// Payload defines default and override rules for provider payload parameters.
@@ -645,6 +651,9 @@ func LoadConfigOptional(configFile string, optional bool) (*Config, error) {
 	// Sanitize Codex keys: drop entries without base-url
 	cfg.SanitizeCodexKeys()
 
+	// Sanitize Codex-compat keys: drop entries without base-url and enforce a default prefix
+	cfg.SanitizeCodexCompatKeys()
+
 	// Sanitize Claude key headers
 	cfg.SanitizeClaudeKeys()
 
@@ -804,13 +813,33 @@ func (cfg *Config) SanitizeOpenAICompatibility() {
 // SanitizeCodexKeys removes Codex API key entries missing a BaseURL.
 // It trims whitespace and preserves order for remaining entries.
 func (cfg *Config) SanitizeCodexKeys() {
-	if cfg == nil || len(cfg.CodexKey) == 0 {
+	if cfg == nil {
 		return
 	}
-	out := make([]CodexKey, 0, len(cfg.CodexKey))
-	for i := range cfg.CodexKey {
-		e := cfg.CodexKey[i]
+	cfg.CodexKey = sanitizeCodexLikeKeys(cfg.CodexKey, "")
+}
+
+// SanitizeCodexCompatKeys removes Codex-compatible API key entries missing a BaseURL.
+// It trims whitespace, preserves order, and guarantees a non-empty prefix to avoid
+// routing collisions with the native Codex provider.
+func (cfg *Config) SanitizeCodexCompatKeys() {
+	if cfg == nil {
+		return
+	}
+	cfg.CodexCompatKey = sanitizeCodexLikeKeys(cfg.CodexCompatKey, DefaultCodexCompatPrefix)
+}
+
+func sanitizeCodexLikeKeys(entries []CodexKey, defaultPrefix string) []CodexKey {
+	if len(entries) == 0 {
+		return entries
+	}
+	out := make([]CodexKey, 0, len(entries))
+	for i := range entries {
+		e := entries[i]
 		e.Prefix = normalizeModelPrefix(e.Prefix)
+		if e.Prefix == "" && defaultPrefix != "" {
+			e.Prefix = defaultPrefix
+		}
 		e.BaseURL = strings.TrimSpace(e.BaseURL)
 		e.Headers = NormalizeHeaders(e.Headers)
 		e.ExcludedModels = NormalizeExcludedModels(e.ExcludedModels)
@@ -819,7 +848,7 @@ func (cfg *Config) SanitizeCodexKeys() {
 		}
 		out = append(out, e)
 	}
-	cfg.CodexKey = out
+	return out
 }
 
 // SanitizeClaudeKeys normalizes headers for Claude credentials.

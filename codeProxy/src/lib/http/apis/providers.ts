@@ -38,6 +38,7 @@ const serializeProviderKey = (config: ProviderKeyConfig) => {
   if (config.name?.trim()) payload.name = config.name.trim();
   if (config.prefix?.trim()) payload.prefix = config.prefix.trim();
   if (config.baseUrl) payload["base-url"] = config.baseUrl;
+  if (config.websockets !== undefined) payload.websockets = config.websockets;
   if (config.proxyUrl) payload["proxy-url"] = config.proxyUrl;
   const headers = serializeHeaders(config.headers);
   if (headers) payload.headers = headers;
@@ -146,6 +147,25 @@ export const providersApi = {
 
   deleteCodexConfig: (apiKey: string) =>
     apiClient.delete("/codex-api-key", undefined, { params: { "api-key": apiKey } }),
+
+  async getCodexCompatConfigs(): Promise<ProviderKeyConfig[]> {
+    const data = await apiClient.get("/codex-compat-api-key");
+    return extractArrayPayload(data, "codex-compat-api-key")
+      .map((item) => normalizeProviderKeyConfig(item))
+      .filter(Boolean) as ProviderKeyConfig[];
+  },
+
+  saveCodexCompatConfigs: (configs: ProviderKeyConfig[]) =>
+    apiClient.put(
+      "/codex-compat-api-key",
+      configs.map((item) => serializeProviderKey(item)),
+    ),
+
+  updateCodexCompatConfig: (index: number, value: ProviderKeyConfig) =>
+    apiClient.patch("/codex-compat-api-key", { index, value: serializeProviderKey(value) }),
+
+  deleteCodexCompatConfig: (apiKey: string) =>
+    apiClient.delete("/codex-compat-api-key", undefined, { params: { "api-key": apiKey } }),
 
   async getClaudeConfigs(): Promise<ProviderKeyConfig[]> {
     const data = await apiClient.get("/claude-api-key");

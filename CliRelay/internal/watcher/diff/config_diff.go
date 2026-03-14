@@ -206,6 +206,44 @@ func BuildConfigChangeDetails(oldCfg, newCfg *config.Config) []string {
 		}
 	}
 
+	// Codex-compat keys (do not print key material)
+	if len(oldCfg.CodexCompatKey) != len(newCfg.CodexCompatKey) {
+		changes = append(changes, fmt.Sprintf("codex-compat-api-key count: %d -> %d", len(oldCfg.CodexCompatKey), len(newCfg.CodexCompatKey)))
+	} else {
+		for i := range oldCfg.CodexCompatKey {
+			o := oldCfg.CodexCompatKey[i]
+			n := newCfg.CodexCompatKey[i]
+			if strings.TrimSpace(o.BaseURL) != strings.TrimSpace(n.BaseURL) {
+				changes = append(changes, fmt.Sprintf("codex-compat[%d].base-url: %s -> %s", i, strings.TrimSpace(o.BaseURL), strings.TrimSpace(n.BaseURL)))
+			}
+			if strings.TrimSpace(o.ProxyURL) != strings.TrimSpace(n.ProxyURL) {
+				changes = append(changes, fmt.Sprintf("codex-compat[%d].proxy-url: %s -> %s", i, formatProxyURL(o.ProxyURL), formatProxyURL(n.ProxyURL)))
+			}
+			if strings.TrimSpace(o.Prefix) != strings.TrimSpace(n.Prefix) {
+				changes = append(changes, fmt.Sprintf("codex-compat[%d].prefix: %s -> %s", i, strings.TrimSpace(o.Prefix), strings.TrimSpace(n.Prefix)))
+			}
+			if o.Websockets != n.Websockets {
+				changes = append(changes, fmt.Sprintf("codex-compat[%d].websockets: %t -> %t", i, o.Websockets, n.Websockets))
+			}
+			if strings.TrimSpace(o.APIKey) != strings.TrimSpace(n.APIKey) {
+				changes = append(changes, fmt.Sprintf("codex-compat[%d].api-key: updated", i))
+			}
+			if !equalStringMap(o.Headers, n.Headers) {
+				changes = append(changes, fmt.Sprintf("codex-compat[%d].headers: updated", i))
+			}
+			oldModels := SummarizeCodexModels(o.Models)
+			newModels := SummarizeCodexModels(n.Models)
+			if oldModels.hash != newModels.hash {
+				changes = append(changes, fmt.Sprintf("codex-compat[%d].models: updated (%d -> %d entries)", i, oldModels.count, newModels.count))
+			}
+			oldExcluded := SummarizeExcludedModels(o.ExcludedModels)
+			newExcluded := SummarizeExcludedModels(n.ExcludedModels)
+			if oldExcluded.hash != newExcluded.hash {
+				changes = append(changes, fmt.Sprintf("codex-compat[%d].excluded-models: updated (%d -> %d entries)", i, oldExcluded.count, newExcluded.count))
+			}
+		}
+	}
+
 	// AmpCode settings (redacted where needed)
 	oldAmpURL := strings.TrimSpace(oldCfg.AmpCode.UpstreamURL)
 	newAmpURL := strings.TrimSpace(newCfg.AmpCode.UpstreamURL)

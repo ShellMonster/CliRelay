@@ -62,3 +62,59 @@ func TestEnsureExecutorsForAuthWithMode_CodexForceReplace(t *testing.T) {
 		t.Fatal("expected codex executor replacement in force mode")
 	}
 }
+
+func TestEnsureExecutorsForAuth_CodexCompatDoesNotReplaceInNormalMode(t *testing.T) {
+	service := &Service{
+		cfg:         &config.Config{},
+		coreManager: coreauth.NewManager(nil, nil, nil),
+	}
+	auth := &coreauth.Auth{
+		ID:       "codex-compat-auth-1",
+		Provider: "codex-compat",
+		Status:   coreauth.StatusActive,
+	}
+
+	service.ensureExecutorsForAuth(auth)
+	firstExecutor, okFirst := service.coreManager.Executor("codex-compat")
+	if !okFirst || firstExecutor == nil {
+		t.Fatal("expected codex-compat executor after first bind")
+	}
+
+	service.ensureExecutorsForAuth(auth)
+	secondExecutor, okSecond := service.coreManager.Executor("codex-compat")
+	if !okSecond || secondExecutor == nil {
+		t.Fatal("expected codex-compat executor after second bind")
+	}
+
+	if firstExecutor != secondExecutor {
+		t.Fatal("expected codex-compat executor to stay unchanged in normal mode")
+	}
+}
+
+func TestEnsureExecutorsForAuthWithMode_CodexCompatForceReplace(t *testing.T) {
+	service := &Service{
+		cfg:         &config.Config{},
+		coreManager: coreauth.NewManager(nil, nil, nil),
+	}
+	auth := &coreauth.Auth{
+		ID:       "codex-compat-auth-2",
+		Provider: "codex-compat",
+		Status:   coreauth.StatusActive,
+	}
+
+	service.ensureExecutorsForAuth(auth)
+	firstExecutor, okFirst := service.coreManager.Executor("codex-compat")
+	if !okFirst || firstExecutor == nil {
+		t.Fatal("expected codex-compat executor after first bind")
+	}
+
+	service.ensureExecutorsForAuthWithMode(auth, true)
+	secondExecutor, okSecond := service.coreManager.Executor("codex-compat")
+	if !okSecond || secondExecutor == nil {
+		t.Fatal("expected codex-compat executor after forced rebind")
+	}
+
+	if firstExecutor == secondExecutor {
+		t.Fatal("expected codex-compat executor replacement in force mode")
+	}
+}

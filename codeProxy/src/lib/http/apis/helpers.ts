@@ -111,6 +111,7 @@ export const serializeProviderKey = (config: ProviderSimpleConfig) => {
   if (prefix) payload.prefix = prefix;
   const baseUrl = normalizeString(config.baseUrl);
   if (baseUrl) payload["base-url"] = baseUrl;
+  if (config.websockets !== undefined) payload.websockets = config.websockets;
   const proxyUrl = normalizeString(config.proxyUrl);
   if (proxyUrl) payload["proxy-url"] = proxyUrl;
   const headers = serializeHeaders(config.headers);

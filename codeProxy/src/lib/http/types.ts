@@ -64,6 +64,7 @@ export interface ProviderSimpleConfig {
   name?: string;
   prefix?: string;
   baseUrl?: string;
+  websockets?: boolean;
   proxyUrl?: string;
   headers?: Record<string, string>;
   models?: ProviderModel[];

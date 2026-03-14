@@ -73,8 +73,16 @@ type codexWebsocketSession struct {
 }
 
 func NewCodexWebsocketsExecutor(cfg *config.Config) *CodexWebsocketsExecutor {
+	return newCodexWebsocketsExecutor(cfg, "codex", sdktranslator.FromString("codex"))
+}
+
+func NewCodexCompatWebsocketsExecutor(cfg *config.Config) *CodexWebsocketsExecutor {
+	return newCodexWebsocketsExecutor(cfg, "codex-compat", sdktranslator.FromString("codex-compat"))
+}
+
+func newCodexWebsocketsExecutor(cfg *config.Config, providerID string, translatorFormat sdktranslator.Format) *CodexWebsocketsExecutor {
 	return &CodexWebsocketsExecutor{
-		CodexExecutor: NewCodexExecutor(cfg),
+		CodexExecutor: newCodexExecutor(cfg, providerID, translatorFormat),
 		sessions:      make(map[string]*codexWebsocketSession),
 	}
 }
@@ -163,7 +171,7 @@ func (e *CodexWebsocketsExecutor) Execute(ctx context.Context, auth *cliproxyaut
 	defer reporter.trackFailure(ctx, &err)
 
 	from := opts.SourceFormat
-	to := sdktranslator.FromString("codex")
+	to := e.targetTranslatorFormat()
 	originalPayloadSource := req.Payload
 	if len(opts.OriginalRequest) > 0 {
 		originalPayloadSource = opts.OriginalRequest
@@ -382,7 +390,7 @@ func (e *CodexWebsocketsExecutor) ExecuteStream(ctx context.Context, auth *clipr
 	defer reporter.trackFailure(ctx, &err)
 
 	from := opts.SourceFormat
-	to := sdktranslator.FromString("codex")
+	to := e.targetTranslatorFormat()
 	body := req.Payload
 
 	body, err = thinking.ApplyThinking(body, req.Model, from.String(), to.String(), e.Identifier())
@@ -1307,18 +1315,33 @@ func logCodexWebsocketDisconnected(sessionID string, authID string, wsURL string
 //
 // For non-websocket downstream requests, it always uses the legacy HTTP implementation.
 type CodexAutoExecutor struct {
+	providerID string
 	httpExec *CodexExecutor
 	wsExec   *CodexWebsocketsExecutor
 }
 
 func NewCodexAutoExecutor(cfg *config.Config) *CodexAutoExecutor {
+	return newCodexAutoExecutor(cfg, "codex", sdktranslator.FromString("codex"))
+}
+
+func NewCodexCompatAutoExecutor(cfg *config.Config) *CodexAutoExecutor {
+	return newCodexAutoExecutor(cfg, "codex-compat", sdktranslator.FromString("codex-compat"))
+}
+
+func newCodexAutoExecutor(cfg *config.Config, providerID string, translatorFormat sdktranslator.Format) *CodexAutoExecutor {
 	return &CodexAutoExecutor{
-		httpExec: NewCodexExecutor(cfg),
-		wsExec:   NewCodexWebsocketsExecutor(cfg),
+		providerID: strings.TrimSpace(providerID),
+		httpExec:   newCodexExecutor(cfg, providerID, translatorFormat),
+		wsExec:     newCodexWebsocketsExecutor(cfg, providerID, translatorFormat),
 	}
 }
 
-func (e *CodexAutoExecutor) Identifier() string { return "codex" }
+func (e *CodexAutoExecutor) Identifier() string {
+	if e == nil || strings.TrimSpace(e.providerID) == "" {
+		return "codex"
+	}
+	return e.providerID
+}
 
 func (e *CodexAutoExecutor) PrepareRequest(req *http.Request, auth *cliproxyauth.Auth) error {
 	if e == nil || e.httpExec == nil {

@@ -169,12 +169,12 @@ func NewManager(store Store, selector Selector, hook Hook) *Manager {
 		hook = NoopHook{}
 	}
 	manager := &Manager{
-		store:           store,
-		executors:       make(map[string]ProviderExecutor),
-		selector:        selector,
-		hook:            hook,
-		auths:           make(map[string]*Auth),
-		providerOffsets: make(map[string]int),
+		store:            store,
+		executors:        make(map[string]ProviderExecutor),
+		selector:         selector,
+		hook:             hook,
+		auths:            make(map[string]*Auth),
+		providerOffsets:  make(map[string]int),
 		refreshSemaphore: make(chan struct{}, refreshMaxConcurrency),
 	}
 	// atomic.Value requires non-nil initial value.
@@ -309,6 +309,10 @@ func (m *Manager) rebuildAPIKeyModelAliasLocked(cfg *internalconfig.Config) {
 			}
 		case "codex":
 			if entry := resolveCodexAPIKeyConfig(cfg, auth); entry != nil {
+				compileAPIKeyModelAliasForModels(byAlias, entry.Models)
+			}
+		case "codex-compat":
+			if entry := resolveCodexCompatAPIKeyConfig(cfg, auth); entry != nil {
 				compileAPIKeyModelAliasForModels(byAlias, entry.Models)
 			}
 		case "vertex":
@@ -912,6 +916,8 @@ func (m *Manager) applyAPIKeyModelAlias(auth *Auth, requestedModel string) strin
 		upstreamModel = resolveUpstreamModelForClaudeAPIKey(cfg, auth, requestedModel)
 	case "codex":
 		upstreamModel = resolveUpstreamModelForCodexAPIKey(cfg, auth, requestedModel)
+	case "codex-compat":
+		upstreamModel = resolveUpstreamModelForCodexCompatAPIKey(cfg, auth, requestedModel)
 	case "vertex":
 		upstreamModel = resolveUpstreamModelForVertexAPIKey(cfg, auth, requestedModel)
 	default:
@@ -991,6 +997,13 @@ func resolveCodexAPIKeyConfig(cfg *internalconfig.Config, auth *Auth) *internalc
 	return resolveAPIKeyConfig(cfg.CodexKey, auth)
 }
 
+func resolveCodexCompatAPIKeyConfig(cfg *internalconfig.Config, auth *Auth) *internalconfig.CodexKey {
+	if cfg == nil {
+		return nil
+	}
+	return resolveAPIKeyConfig(cfg.CodexCompatKey, auth)
+}
+
 func resolveVertexAPIKeyConfig(cfg *internalconfig.Config, auth *Auth) *internalconfig.VertexCompatKey {
 	if cfg == nil {
 		return nil
@@ -1016,6 +1029,14 @@ func resolveUpstreamModelForClaudeAPIKey(cfg *internalconfig.Config, auth *Auth,
 
 func resolveUpstreamModelForCodexAPIKey(cfg *internalconfig.Config, auth *Auth, requestedModel string) string {
 	entry := resolveCodexAPIKeyConfig(cfg, auth)
+	if entry == nil {
+		return ""
+	}
+	return resolveModelAliasFromConfigModels(requestedModel, asModelAliasEntries(entry.Models))
+}
+
+func resolveUpstreamModelForCodexCompatAPIKey(cfg *internalconfig.Config, auth *Auth, requestedModel string) string {
+	entry := resolveCodexCompatAPIKeyConfig(cfg, auth)
 	if entry == nil {
 		return ""
 	}

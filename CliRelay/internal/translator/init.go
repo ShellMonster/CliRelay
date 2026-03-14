@@ -11,6 +11,7 @@ import (
 	_ "github.com/router-for-me/CLIProxyAPI/v6/internal/translator/codex/gemini-cli"
 	_ "github.com/router-for-me/CLIProxyAPI/v6/internal/translator/codex/openai/chat-completions"
 	_ "github.com/router-for-me/CLIProxyAPI/v6/internal/translator/codex/openai/responses"
+	_ "github.com/router-for-me/CLIProxyAPI/v6/internal/translator/codexcompat"
 
 	_ "github.com/router-for-me/CLIProxyAPI/v6/internal/translator/gemini-cli/claude"
 	_ "github.com/router-for-me/CLIProxyAPI/v6/internal/translator/gemini-cli/gemini"

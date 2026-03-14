@@ -535,15 +535,15 @@ func (h *Handler) PutOpenAICompat(c *gin.Context) {
 	h.persist(c)
 }
 func (h *Handler) PatchOpenAICompat(c *gin.Context) {
-type openAICompatPatch struct {
-	Name          *string                             `json:"name"`
-	Prefix        *string                             `json:"prefix"`
-	BaseURL       *string                             `json:"base-url"`
-	APIKeyEntries *[]config.OpenAICompatibilityAPIKey `json:"api-key-entries"`
-	Models        *[]config.OpenAICompatibilityModel  `json:"models"`
-	Headers       *map[string]string                  `json:"headers"`
-	ExcludedModels *[]string                          `json:"excluded-models"`
-}
+	type openAICompatPatch struct {
+		Name           *string                             `json:"name"`
+		Prefix         *string                             `json:"prefix"`
+		BaseURL        *string                             `json:"base-url"`
+		APIKeyEntries  *[]config.OpenAICompatibilityAPIKey `json:"api-key-entries"`
+		Models         *[]config.OpenAICompatibilityModel  `json:"models"`
+		Headers        *map[string]string                  `json:"headers"`
+		ExcludedModels *[]string                           `json:"excluded-models"`
+	}
 	var body struct {
 		Name  *string            `json:"name"`
 		Index *int               `json:"index"`
@@ -985,6 +985,7 @@ func (h *Handler) PatchCodexKey(c *gin.Context) {
 		APIKey         *string              `json:"api-key"`
 		Prefix         *string              `json:"prefix"`
 		BaseURL        *string              `json:"base-url"`
+		Websockets     *bool                `json:"websockets"`
 		ProxyURL       *string              `json:"proxy-url"`
 		Models         *[]config.CodexModel `json:"models"`
 		Headers        *map[string]string   `json:"headers"`
@@ -1034,6 +1035,9 @@ func (h *Handler) PatchCodexKey(c *gin.Context) {
 		}
 		entry.BaseURL = trimmed
 	}
+	if body.Value.Websockets != nil {
+		entry.Websockets = *body.Value.Websockets
+	}
 	if body.Value.ProxyURL != nil {
 		entry.ProxyURL = strings.TrimSpace(*body.Value.ProxyURL)
 	}
@@ -1071,6 +1075,144 @@ func (h *Handler) DeleteCodexKey(c *gin.Context) {
 		if err == nil && idx >= 0 && idx < len(h.cfg.CodexKey) {
 			h.cfg.CodexKey = append(h.cfg.CodexKey[:idx], h.cfg.CodexKey[idx+1:]...)
 			h.cfg.SanitizeCodexKeys()
+			h.persist(c)
+			return
+		}
+	}
+	c.JSON(400, gin.H{"error": "missing api-key or index"})
+}
+
+// codex-compat-api-key: []CodexKey
+func (h *Handler) GetCodexCompatKeys(c *gin.Context) {
+	c.JSON(200, gin.H{"codex-compat-api-key": h.cfg.CodexCompatKey})
+}
+
+func (h *Handler) PutCodexCompatKeys(c *gin.Context) {
+	data, err := c.GetRawData()
+	if err != nil {
+		c.JSON(400, gin.H{"error": "failed to read body"})
+		return
+	}
+	var arr []config.CodexKey
+	if err = json.Unmarshal(data, &arr); err != nil {
+		var obj struct {
+			Items []config.CodexKey `json:"items"`
+		}
+		if err2 := json.Unmarshal(data, &obj); err2 != nil || len(obj.Items) == 0 {
+			c.JSON(400, gin.H{"error": "invalid body"})
+			return
+		}
+		arr = obj.Items
+	}
+	filtered := make([]config.CodexKey, 0, len(arr))
+	for i := range arr {
+		entry := arr[i]
+		normalizeCodexCompatKey(&entry)
+		if entry.BaseURL == "" {
+			continue
+		}
+		filtered = append(filtered, entry)
+	}
+	h.cfg.CodexCompatKey = filtered
+	h.cfg.SanitizeCodexCompatKeys()
+	h.persist(c)
+}
+
+func (h *Handler) PatchCodexCompatKey(c *gin.Context) {
+	type codexKeyPatch struct {
+		APIKey         *string              `json:"api-key"`
+		Prefix         *string              `json:"prefix"`
+		BaseURL        *string              `json:"base-url"`
+		Websockets     *bool                `json:"websockets"`
+		ProxyURL       *string              `json:"proxy-url"`
+		Models         *[]config.CodexModel `json:"models"`
+		Headers        *map[string]string   `json:"headers"`
+		ExcludedModels *[]string            `json:"excluded-models"`
+	}
+	var body struct {
+		Index *int           `json:"index"`
+		Match *string        `json:"match"`
+		Value *codexKeyPatch `json:"value"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil || body.Value == nil {
+		c.JSON(400, gin.H{"error": "invalid body"})
+		return
+	}
+	targetIndex := -1
+	if body.Index != nil && *body.Index >= 0 && *body.Index < len(h.cfg.CodexCompatKey) {
+		targetIndex = *body.Index
+	}
+	if targetIndex == -1 && body.Match != nil {
+		match := strings.TrimSpace(*body.Match)
+		for i := range h.cfg.CodexCompatKey {
+			if h.cfg.CodexCompatKey[i].APIKey == match {
+				targetIndex = i
+				break
+			}
+		}
+	}
+	if targetIndex == -1 {
+		c.JSON(404, gin.H{"error": "item not found"})
+		return
+	}
+
+	entry := h.cfg.CodexCompatKey[targetIndex]
+	if body.Value.APIKey != nil {
+		entry.APIKey = strings.TrimSpace(*body.Value.APIKey)
+	}
+	if body.Value.Prefix != nil {
+		entry.Prefix = strings.TrimSpace(*body.Value.Prefix)
+	}
+	if body.Value.BaseURL != nil {
+		trimmed := strings.TrimSpace(*body.Value.BaseURL)
+		if trimmed == "" {
+			h.cfg.CodexCompatKey = append(h.cfg.CodexCompatKey[:targetIndex], h.cfg.CodexCompatKey[targetIndex+1:]...)
+			h.cfg.SanitizeCodexCompatKeys()
+			h.persist(c)
+			return
+		}
+		entry.BaseURL = trimmed
+	}
+	if body.Value.Websockets != nil {
+		entry.Websockets = *body.Value.Websockets
+	}
+	if body.Value.ProxyURL != nil {
+		entry.ProxyURL = strings.TrimSpace(*body.Value.ProxyURL)
+	}
+	if body.Value.Models != nil {
+		entry.Models = append([]config.CodexModel(nil), (*body.Value.Models)...)
+	}
+	if body.Value.Headers != nil {
+		entry.Headers = config.NormalizeHeaders(*body.Value.Headers)
+	}
+	if body.Value.ExcludedModels != nil {
+		entry.ExcludedModels = config.NormalizeExcludedModels(*body.Value.ExcludedModels)
+	}
+	normalizeCodexCompatKey(&entry)
+	h.cfg.CodexCompatKey[targetIndex] = entry
+	h.cfg.SanitizeCodexCompatKeys()
+	h.persist(c)
+}
+
+func (h *Handler) DeleteCodexCompatKey(c *gin.Context) {
+	if val := c.Query("api-key"); val != "" {
+		out := make([]config.CodexKey, 0, len(h.cfg.CodexCompatKey))
+		for _, v := range h.cfg.CodexCompatKey {
+			if v.APIKey != val {
+				out = append(out, v)
+			}
+		}
+		h.cfg.CodexCompatKey = out
+		h.cfg.SanitizeCodexCompatKeys()
+		h.persist(c)
+		return
+	}
+	if idxStr := c.Query("index"); idxStr != "" {
+		var idx int
+		_, err := fmt.Sscanf(idxStr, "%d", &idx)
+		if err == nil && idx >= 0 && idx < len(h.cfg.CodexCompatKey) {
+			h.cfg.CodexCompatKey = append(h.cfg.CodexCompatKey[:idx], h.cfg.CodexCompatKey[idx+1:]...)
+			h.cfg.SanitizeCodexCompatKeys()
 			h.persist(c)
 			return
 		}
@@ -1141,11 +1283,22 @@ func normalizeClaudeKey(entry *config.ClaudeKey) {
 }
 
 func normalizeCodexKey(entry *config.CodexKey) {
+	normalizeCodexLikeKey(entry, "")
+}
+
+func normalizeCodexCompatKey(entry *config.CodexKey) {
+	normalizeCodexLikeKey(entry, config.DefaultCodexCompatPrefix)
+}
+
+func normalizeCodexLikeKey(entry *config.CodexKey, defaultPrefix string) {
 	if entry == nil {
 		return
 	}
 	entry.APIKey = strings.TrimSpace(entry.APIKey)
 	entry.Prefix = strings.TrimSpace(entry.Prefix)
+	if entry.Prefix == "" && defaultPrefix != "" {
+		entry.Prefix = defaultPrefix
+	}
 	entry.BaseURL = strings.TrimSpace(entry.BaseURL)
 	entry.ProxyURL = strings.TrimSpace(entry.ProxyURL)
 	entry.Headers = config.NormalizeHeaders(entry.Headers)

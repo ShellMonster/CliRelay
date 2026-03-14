@@ -72,14 +72,15 @@ export function ProvidersPage() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const [tab, setTab] = useState<"gemini" | "claude" | "codex" | "vertex" | "openai" | "ampcode">(
-    "gemini",
-  );
+  const [tab, setTab] = useState<
+    "gemini" | "claude" | "codex" | "codex-compat" | "vertex" | "openai" | "ampcode"
+  >("gemini");
   const [loading, setLoading] = useState(true);
 
   const [geminiKeys, setGeminiKeys] = useState<ProviderSimpleConfig[]>([]);
   const [claudeKeys, setClaudeKeys] = useState<ProviderSimpleConfig[]>([]);
   const [codexKeys, setCodexKeys] = useState<ProviderSimpleConfig[]>([]);
+  const [codexCompatKeys, setCodexCompatKeys] = useState<ProviderSimpleConfig[]>([]);
   const [vertexKeys, setVertexKeys] = useState<ProviderSimpleConfig[]>([]);
   const [openaiProviders, setOpenaiProviders] = useState<OpenAIProvider[]>([]);
 
@@ -94,9 +95,9 @@ export function ProvidersPage() {
   const [ampMappings, setAmpMappings] = useState<AmpMappingEntry[]>([]);
 
   const [editKeyOpen, setEditKeyOpen] = useState(false);
-  const [editKeyType, setEditKeyType] = useState<"gemini" | "claude" | "codex" | "vertex">(
-    "gemini",
-  );
+  const [editKeyType, setEditKeyType] = useState<
+    "gemini" | "claude" | "codex" | "codex-compat" | "vertex"
+  >("gemini");
   const [editKeyIndex, setEditKeyIndex] = useState<number | null>(null);
   const [keyDraft, setKeyDraft] = useState<ProviderKeyDraft>(() => buildProviderKeyDraft(null));
   const [keyDraftError, setKeyDraftError] = useState<string | null>(null);
@@ -116,7 +117,11 @@ export function ProvidersPage() {
 
   const [confirm, setConfirm] = useState<
     | null
-    | { type: "deleteKey"; keyType: "gemini" | "claude" | "codex" | "vertex"; index: number }
+    | {
+      type: "deleteKey";
+      keyType: "gemini" | "claude" | "codex" | "codex-compat" | "vertex";
+      index: number;
+    }
     | { type: "deleteOpenAI"; index: number }
   >(null);
 
@@ -127,6 +132,8 @@ export function ProvidersPage() {
         ? "Claude"
         : editKeyType === "codex"
           ? "Codex"
+          : editKeyType === "codex-compat"
+            ? "Codex Compat"
           : "Vertex";
 
   // 按 Tab 加载数据，切换 Tab 时只请求当前 Tab 的数据
@@ -143,6 +150,9 @@ export function ProvidersPage() {
             break;
           case "codex":
             setCodexKeys(await providersApi.getCodexConfigs());
+            break;
+          case "codex-compat":
+            setCodexCompatKeys(await providersApi.getCodexCompatConfigs());
             break;
           case "vertex":
             setVertexKeys(await providersApi.getVertexConfigs());
@@ -187,6 +197,20 @@ export function ProvidersPage() {
       }
     },
     [notify],
+  );
+
+  const buildKeyDraftForType = useCallback(
+    (
+      type: "gemini" | "claude" | "codex" | "codex-compat" | "vertex",
+      current: ProviderSimpleConfig | null,
+    ) => {
+      const draft = buildProviderKeyDraft(current);
+      if (type === "codex-compat" && !draft.prefix.trim()) {
+        draft.prefix = "codex-compat";
+      }
+      return draft;
+    },
+    [],
   );
 
   // Usage 统计单独加载一次
@@ -239,7 +263,7 @@ export function ProvidersPage() {
   }, [location.pathname, navigate]);
 
   const openKeyEditor = useCallback(
-    (type: "gemini" | "claude" | "codex" | "vertex", index: number | null) => {
+    (type: "gemini" | "claude" | "codex" | "codex-compat" | "vertex", index: number | null) => {
       const list =
         type === "gemini"
           ? geminiKeys
@@ -247,17 +271,19 @@ export function ProvidersPage() {
             ? claudeKeys
             : type === "codex"
               ? codexKeys
-              : vertexKeys;
+              : type === "codex-compat"
+                ? codexCompatKeys
+                : vertexKeys;
       const current = index === null ? null : (list[index] ?? null);
       setEditKeyType(type);
       setEditKeyIndex(index);
-      setKeyDraft(buildProviderKeyDraft(current));
+      setKeyDraft(buildKeyDraftForType(type, current));
       setKeyDraftError(null);
       setKeyDiscoveredModels([]);
       setKeyDiscoverSelected(new Set());
       setEditKeyOpen(true);
     },
-    [claudeKeys, codexKeys, geminiKeys, vertexKeys],
+    [buildKeyDraftForType, claudeKeys, codexCompatKeys, codexKeys, geminiKeys, vertexKeys],
   );
 
   const commitKeyDraft = useCallback((): ProviderSimpleConfig | null => {
@@ -286,11 +312,25 @@ export function ProvidersPage() {
       return null;
     }
 
+    const current =
+      editKeyIndex === null
+        ? null
+        : editKeyType === "gemini"
+          ? geminiKeys[editKeyIndex] ?? null
+          : editKeyType === "claude"
+            ? claudeKeys[editKeyIndex] ?? null
+            : editKeyType === "codex"
+              ? codexKeys[editKeyIndex] ?? null
+              : editKeyType === "codex-compat"
+                ? codexCompatKeys[editKeyIndex] ?? null
+                : vertexKeys[editKeyIndex] ?? null;
+
     const result: ProviderSimpleConfig = {
       apiKey,
       name,
       ...(keyDraft.prefix.trim() ? { prefix: keyDraft.prefix.trim() } : {}),
       ...(keyDraft.baseUrl.trim() ? { baseUrl: keyDraft.baseUrl.trim() } : {}),
+      ...(current?.websockets !== undefined ? { websockets: current.websockets } : {}),
       ...(keyDraft.proxyUrl.trim() ? { proxyUrl: keyDraft.proxyUrl.trim() } : {}),
       ...(headers ? { headers } : {}),
       ...(excludedModels ? { excludedModels } : {}),
@@ -299,7 +339,7 @@ export function ProvidersPage() {
 
     setKeyDraftError(null);
     return result;
-  }, [editKeyType, keyDraft]);
+  }, [claudeKeys, codexCompatKeys, codexKeys, editKeyIndex, editKeyType, geminiKeys, keyDraft, vertexKeys]);
 
   const saveKeyDraft = useCallback(async () => {
     const value = commitKeyDraft();
@@ -325,6 +365,10 @@ export function ProvidersPage() {
         const next = apply(codexKeys);
         setCodexKeys(next);
         await providersApi.saveCodexConfigs(next);
+      } else if (type === "codex-compat") {
+        const next = apply(codexCompatKeys);
+        setCodexCompatKeys(next);
+        await providersApi.saveCodexCompatConfigs(next);
       } else {
         const next = apply(vertexKeys);
         setVertexKeys(next);
@@ -339,6 +383,7 @@ export function ProvidersPage() {
   }, [
     claudeKeys,
     closeKeyEditor,
+    codexCompatKeys,
     codexKeys,
     commitKeyDraft,
     editKeyIndex,
@@ -359,7 +404,7 @@ export function ProvidersPage() {
       const apiKey = keyDraft.apiKey.trim();
       let list: { id: string; owned_by?: string }[] = [];
 
-      if (editKeyType === "codex") {
+      if (editKeyType === "codex" || editKeyType === "codex-compat") {
         const baseUrl = keyDraft.baseUrl.trim();
         if (!baseUrl) {
           notify({ type: "info", message: "请先填写 baseUrl" });
@@ -438,7 +483,7 @@ export function ProvidersPage() {
   }, [keyDiscoverSelected, keyDiscoveredModels, keyDraft.modelEntries, notify]);
 
   const deleteKey = useCallback(
-    async (type: "gemini" | "claude" | "codex" | "vertex", index: number) => {
+    async (type: "gemini" | "claude" | "codex" | "codex-compat" | "vertex", index: number) => {
       const list =
         type === "gemini"
           ? geminiKeys
@@ -446,7 +491,9 @@ export function ProvidersPage() {
             ? claudeKeys
             : type === "codex"
               ? codexKeys
-              : vertexKeys;
+              : type === "codex-compat"
+                ? codexCompatKeys
+                : vertexKeys;
       const entry = list[index];
       if (!entry) return;
 
@@ -460,6 +507,9 @@ export function ProvidersPage() {
         } else if (type === "codex") {
           await providersApi.deleteCodexConfig(entry.apiKey);
           setCodexKeys((prev) => prev.filter((_, i) => i !== index));
+        } else if (type === "codex-compat") {
+          await providersApi.deleteCodexCompatConfig(entry.apiKey);
+          setCodexCompatKeys((prev) => prev.filter((_, i) => i !== index));
         } else {
           await providersApi.deleteVertexConfig(entry.apiKey);
           setVertexKeys((prev) => prev.filter((_, i) => i !== index));
@@ -469,12 +519,19 @@ export function ProvidersPage() {
         notify({ type: "error", message: err instanceof Error ? err.message : "删除失败" });
       }
     },
-    [claudeKeys, codexKeys, geminiKeys, notify, vertexKeys],
+    [claudeKeys, codexCompatKeys, codexKeys, geminiKeys, notify, vertexKeys],
   );
 
   const toggleKeyEnabled = useCallback(
-    async (type: "gemini" | "claude" | "codex", index: number, enabled: boolean) => {
-      const list = type === "gemini" ? geminiKeys : type === "claude" ? claudeKeys : codexKeys;
+    async (type: "gemini" | "claude" | "codex" | "codex-compat", index: number, enabled: boolean) => {
+      const list =
+        type === "gemini"
+          ? geminiKeys
+          : type === "claude"
+            ? claudeKeys
+            : type === "codex"
+              ? codexKeys
+              : codexCompatKeys;
       const current = list[index];
       if (!current) return;
       const prev = list;
@@ -493,20 +550,24 @@ export function ProvidersPage() {
         } else if (type === "claude") {
           setClaudeKeys(nextList);
           await providersApi.saveClaudeConfigs(nextList);
-        } else {
+        } else if (type === "codex") {
           setCodexKeys(nextList);
           await providersApi.saveCodexConfigs(nextList);
+        } else {
+          setCodexCompatKeys(nextList);
+          await providersApi.saveCodexCompatConfigs(nextList);
         }
         notify({ type: "success", message: enabled ? "已启用" : "已禁用" });
         startTransition(() => void refreshAll());
       } catch (err: unknown) {
         if (type === "gemini") setGeminiKeys(prev);
         else if (type === "claude") setClaudeKeys(prev);
-        else setCodexKeys(prev);
+        else if (type === "codex") setCodexKeys(prev);
+        else setCodexCompatKeys(prev);
         notify({ type: "error", message: err instanceof Error ? err.message : "更新失败" });
       }
     },
-    [claudeKeys, codexKeys, geminiKeys, notify, refreshAll, startTransition],
+    [claudeKeys, codexCompatKeys, codexKeys, geminiKeys, notify, refreshAll, startTransition],
   );
 
   const openOpenAIEditor = useCallback(
@@ -561,16 +622,17 @@ export function ProvidersPage() {
       provider === "gemini" ||
       provider === "claude" ||
       provider === "codex" ||
+      provider === "codex-compat" ||
       provider === "vertex"
     ) {
-      setTab(provider);
+      setTab(provider as typeof tab);
       if (action === "new") {
-        openKeyEditor(provider, null);
+        openKeyEditor(provider as "gemini" | "claude" | "codex" | "codex-compat" | "vertex", null);
         return;
       }
       const index = Number(action);
       if (Number.isFinite(index) && index >= 0) {
-        openKeyEditor(provider, index);
+        openKeyEditor(provider as "gemini" | "claude" | "codex" | "codex-compat" | "vertex", index);
       }
       return;
     }
@@ -983,6 +1045,7 @@ export function ProvidersPage() {
           <TabsTrigger value="gemini">Gemini</TabsTrigger>
           <TabsTrigger value="claude">Claude</TabsTrigger>
           <TabsTrigger value="codex">Codex</TabsTrigger>
+          <TabsTrigger value="codex-compat">Codex Compat</TabsTrigger>
           <TabsTrigger value="vertex">Vertex</TabsTrigger>
           <TabsTrigger value="openai">OpenAI 兼容</TabsTrigger>
           <TabsTrigger value="ampcode">Ampcode</TabsTrigger>
@@ -1031,6 +1094,22 @@ export function ProvidersPage() {
             onEdit={(idx) => openKeyEditor("codex", idx)}
             onDelete={(idx) => setConfirm({ type: "deleteKey", keyType: "codex", index: idx })}
             onToggleEnabled={(idx, enabled) => void toggleKeyEnabled("codex", idx, enabled)}
+            getStats={getSimpleStats}
+            getStatusBar={getSimpleStatusBar}
+          />
+        </TabsContent>
+
+        <TabsContent value="codex-compat" className="mt-6">
+          <ProviderKeyListCard
+            icon={Settings2}
+            title="Codex Compat Keys"
+            description="面向 OpenAI Responses 兼容客户端，默认使用 codex-compat prefix，并对响应事件 ID 做稳定化。"
+            loading={loading}
+            items={codexCompatKeys}
+            onAdd={() => openKeyEditor("codex-compat", null)}
+            onEdit={(idx) => openKeyEditor("codex-compat", idx)}
+            onDelete={(idx) => setConfirm({ type: "deleteKey", keyType: "codex-compat", index: idx })}
+            onToggleEnabled={(idx, enabled) => void toggleKeyEnabled("codex-compat", idx, enabled)}
             getStats={getSimpleStats}
             getStatusBar={getSimpleStatusBar}
           />
@@ -1340,8 +1419,10 @@ export function ProvidersPage() {
         description={
           editKeyType === "vertex"
             ? "Vertex 的 models 必须填写 alias（name => alias）。Excluded Models 中使用 * 可一键禁用该配置。"
-            : editKeyType === "codex"
-              ? "支持 Excluded Models、自定义 headers / models，以及通过 /models 拉取并合并 Codex 模型。"
+            : editKeyType === "codex" || editKeyType === "codex-compat"
+              ? editKeyType === "codex-compat"
+                ? "支持 Excluded Models、自定义 headers / models，以及通过 /models 拉取并合并模型；默认 prefix 为 codex-compat，并对 OpenAI Responses 事件 ID 做稳定化。"
+                : "支持 Excluded Models、自定义 headers / models，以及通过 /models 拉取并合并 Codex 模型。"
               : editKeyType === "claude"
                 ? "支持 Excluded Models、自定义 headers / models，以及通过 Claude /v1/models 拉取并合并模型。"
                 : editKeyType === "gemini"
@@ -1520,7 +1601,7 @@ export function ProvidersPage() {
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white/70 p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-950/60">
-            {editKeyType === "codex" || editKeyType === "claude" || editKeyType === "gemini" ? (
+            {editKeyType === "codex" || editKeyType === "codex-compat" || editKeyType === "claude" || editKeyType === "gemini" ? (
               <div className="space-y-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-sm font-semibold text-slate-900 dark:text-white">
@@ -1554,7 +1635,7 @@ export function ProvidersPage() {
                       ? keyDraft.baseUrl.trim()
                         ? `/models 拉取地址：${buildModelsEndpoint(keyDraft.baseUrl)}（失败时回退静态模型定义）`
                         : "未填写 baseUrl：将回退使用静态模型定义"
-                      : `/models 拉取地址：${keyDraft.baseUrl.trim() ? buildModelsEndpoint(keyDraft.baseUrl) : "--"}`}
+                      : `/models 拉取地址：${keyDraft.baseUrl.trim() ? buildModelsEndpoint(keyDraft.baseUrl) : "--"}${editKeyType === "codex-compat" ? "；建议保留 codex-compat prefix 以避免和原 Codex 冲突" : ""}`}
                 </p>
                 <ModelInputList
                   title="模型列表（可选）"
