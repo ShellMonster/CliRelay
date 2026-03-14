@@ -8,6 +8,8 @@ import type {
   PayloadProtocol,
   PayloadRule,
   RoutingStrategy,
+  UserAgentRoutingMatchMode,
+  UserAgentRoutingRuleEntry,
   VisualConfigValues,
 } from "@/modules/config/visual/types";
 import { makeClientId } from "@/modules/config/visual/types";
@@ -23,14 +25,31 @@ import { Modal } from "@/modules/ui/Modal";
 import { ToggleSwitch } from "@/modules/ui/ToggleSwitch";
 import { useToast } from "@/modules/ui/ToastProvider";
 
-const isValidApiKeyCharset = (key: string): boolean => /^[\x21-\x7E]+$/.test(key);
+const isValidApiKeyCharset = (key: string): boolean =>
+  /^[\x21-\x7E]+$/.test(key);
 
 const maskApiKey = (value: string): string => {
   const trimmed = value.trim();
   if (!trimmed) return "--";
-  if (trimmed.length <= 10) return `${trimmed.slice(0, 2)}***${trimmed.slice(-2)}`;
+  if (trimmed.length <= 10)
+    return `${trimmed.slice(0, 2)}***${trimmed.slice(-2)}`;
   return `${trimmed.slice(0, 6)}***${trimmed.slice(-4)}`;
 };
+
+const USER_AGENT_ROUTING_MATCH_MODE_OPTIONS = [
+  { value: "contains", label: "contains（包含）" },
+  { value: "regex", label: "regex（正则）" },
+] satisfies ReadonlyArray<{ value: UserAgentRoutingMatchMode; label: string }>;
+
+const parseProviderList = (value: string): string[] =>
+  value
+    .split(/[\n,]+/)
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean)
+    .filter((item, index, arr) => arr.indexOf(item) === index);
+
+const formatProviderList = (providers: string[]): string =>
+  providers.join("\n");
 
 function Field({
   label,
@@ -43,8 +62,12 @@ function Field({
 }) {
   return (
     <div className="space-y-1">
-      <div className="text-sm font-semibold text-slate-900 dark:text-white">{label}</div>
-      {hint ? <div className="text-xs text-slate-600 dark:text-white/65">{hint}</div> : null}
+      <div className="text-sm font-semibold text-slate-900 dark:text-white">
+        {label}
+      </div>
+      {hint ? (
+        <div className="text-xs text-slate-600 dark:text-white/65">{hint}</div>
+      ) : null}
       <div className="pt-1">{children}</div>
     </div>
   );
@@ -201,7 +224,9 @@ function ApiKeysEditor({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="text-sm font-semibold text-slate-900 dark:text-white">API Keys</div>
+        <div className="text-sm font-semibold text-slate-900 dark:text-white">
+          API Keys
+        </div>
         <Button size="sm" onClick={openAddModal} disabled={disabled}>
           <Plus size={14} />
           新增
@@ -275,7 +300,11 @@ function ApiKeysEditor({
         title={editingIndex !== null ? "编辑 API Key" : "新增 API Key"}
         footer={
           <>
-            <Button variant="secondary" onClick={closeModal} disabled={disabled}>
+            <Button
+              variant="secondary"
+              onClick={closeModal}
+              disabled={disabled}
+            >
               取消
             </Button>
             <Button onClick={handleSave} disabled={disabled}>
@@ -293,7 +322,9 @@ function ApiKeysEditor({
             disabled={disabled}
           />
           {formError ? (
-            <p className="mt-2 text-sm text-rose-600 dark:text-rose-300">{formError}</p>
+            <p className="mt-2 text-sm text-rose-600 dark:text-rose-300">
+              {formError}
+            </p>
           ) : null}
         </Field>
       </Modal>
@@ -371,7 +402,9 @@ function PayloadRulesEditor({
 
   const removeModel = (ruleIndex: number, modelIndex: number) => {
     onChange(
-      updateRuleModels(rules, ruleIndex, (models) => models.filter((_, i) => i !== modelIndex)),
+      updateRuleModels(rules, ruleIndex, (models) =>
+        models.filter((_, i) => i !== modelIndex),
+      ),
     );
   };
 
@@ -399,7 +432,9 @@ function PayloadRulesEditor({
 
   const removeParam = (ruleIndex: number, paramIndex: number) => {
     onChange(
-      updateRuleParams(rules, ruleIndex, (params) => params.filter((_, i) => i !== paramIndex)),
+      updateRuleParams(rules, ruleIndex, (params) =>
+        params.filter((_, i) => i !== paramIndex),
+      ),
     );
   };
 
@@ -477,11 +512,16 @@ function PayloadRulesEditor({
 
                 <div className="space-y-2">
                   {(rule.models || []).map((model, modelIndex) => (
-                    <div key={model.id} className="grid gap-2 lg:grid-cols-[1fr_180px_auto]">
+                    <div
+                      key={model.id}
+                      className="grid gap-2 lg:grid-cols-[1fr_180px_auto]"
+                    >
                       <TextInput
                         value={model.name}
                         onChange={(e) =>
-                          updateModel(ruleIndex, modelIndex, { name: e.currentTarget.value })
+                          updateModel(ruleIndex, modelIndex, {
+                            name: e.currentTarget.value,
+                          })
                         }
                         placeholder="model 名称"
                         disabled={disabled}
@@ -490,7 +530,9 @@ function PayloadRulesEditor({
                         value={(model.protocol ?? "") as string}
                         onChange={(value) =>
                           updateModel(ruleIndex, modelIndex, {
-                            protocol: (value || undefined) as PayloadProtocol | undefined,
+                            protocol: (value || undefined) as
+                              | PayloadProtocol
+                              | undefined,
                           })
                         }
                         options={VISUAL_CONFIG_PROTOCOL_OPTIONS}
@@ -542,7 +584,9 @@ function PayloadRulesEditor({
                           <TextInput
                             value={param.path}
                             onChange={(e) =>
-                              updateParam(ruleIndex, paramIndex, { path: e.currentTarget.value })
+                              updateParam(ruleIndex, paramIndex, {
+                                path: e.currentTarget.value,
+                              })
                             }
                             placeholder="参数路径，例如：headers.Authorization"
                             disabled={disabled}
@@ -572,7 +616,9 @@ function PayloadRulesEditor({
                         {param.valueType === "json" ? (
                           <TextArea
                             value={param.value}
-                            onChange={(value) => updateParam(ruleIndex, paramIndex, { value })}
+                            onChange={(value) =>
+                              updateParam(ruleIndex, paramIndex, { value })
+                            }
                             placeholder={getValuePlaceholder(param.valueType)}
                             disabled={disabled}
                             ariaLabel="JSON 值"
@@ -582,7 +628,9 @@ function PayloadRulesEditor({
                           <TextInput
                             value={param.value}
                             onChange={(e) =>
-                              updateParam(ruleIndex, paramIndex, { value: e.currentTarget.value })
+                              updateParam(ruleIndex, paramIndex, {
+                                value: e.currentTarget.value,
+                              })
                             }
                             placeholder={getValuePlaceholder(param.valueType)}
                             disabled={disabled}
@@ -624,19 +672,28 @@ function PayloadFilterRulesEditor({
   };
 
   const updateRule = (index: number, patch: Partial<PayloadFilterRule>) => {
-    onChange((rules || []).map((rule, i) => (i === index ? { ...rule, ...patch } : rule)));
+    onChange(
+      (rules || []).map((rule, i) =>
+        i === index ? { ...rule, ...patch } : rule,
+      ),
+    );
   };
 
   const addModel = (ruleIndex: number) => {
     const rule = rules[ruleIndex];
     updateRule(ruleIndex, {
-      models: [...rule.models, { id: makeClientId(), name: "", protocol: undefined }],
+      models: [
+        ...rule.models,
+        { id: makeClientId(), name: "", protocol: undefined },
+      ],
     });
   };
 
   const removeModel = (ruleIndex: number, modelIndex: number) => {
     const rule = rules[ruleIndex];
-    updateRule(ruleIndex, { models: rule.models.filter((_, i) => i !== modelIndex) });
+    updateRule(ruleIndex, {
+      models: rule.models.filter((_, i) => i !== modelIndex),
+    });
   };
 
   const updateModel = (
@@ -646,7 +703,9 @@ function PayloadFilterRulesEditor({
   ) => {
     const rule = rules[ruleIndex];
     updateRule(ruleIndex, {
-      models: rule.models.map((m, i) => (i === modelIndex ? { ...m, ...patch } : m)),
+      models: rule.models.map((m, i) =>
+        i === modelIndex ? { ...m, ...patch } : m,
+      ),
     });
   };
 
@@ -657,13 +716,21 @@ function PayloadFilterRulesEditor({
 
   const removeParam = (ruleIndex: number, paramIndex: number) => {
     const rule = rules[ruleIndex];
-    updateRule(ruleIndex, { params: (rule.params || []).filter((_, i) => i !== paramIndex) });
+    updateRule(ruleIndex, {
+      params: (rule.params || []).filter((_, i) => i !== paramIndex),
+    });
   };
 
-  const updateParam = (ruleIndex: number, paramIndex: number, nextValue: string) => {
+  const updateParam = (
+    ruleIndex: number,
+    paramIndex: number,
+    nextValue: string,
+  ) => {
     const rule = rules[ruleIndex];
     updateRule(ruleIndex, {
-      params: (rule.params || []).map((p, i) => (i === paramIndex ? nextValue : p)),
+      params: (rule.params || []).map((p, i) =>
+        i === paramIndex ? nextValue : p,
+      ),
     });
   };
 
@@ -722,11 +789,16 @@ function PayloadFilterRulesEditor({
 
                 <div className="space-y-2">
                   {(rule.models || []).map((model, modelIndex) => (
-                    <div key={model.id} className="grid gap-2 lg:grid-cols-[1fr_180px_auto]">
+                    <div
+                      key={model.id}
+                      className="grid gap-2 lg:grid-cols-[1fr_180px_auto]"
+                    >
                       <TextInput
                         value={model.name}
                         onChange={(e) =>
-                          updateModel(ruleIndex, modelIndex, { name: e.currentTarget.value })
+                          updateModel(ruleIndex, modelIndex, {
+                            name: e.currentTarget.value,
+                          })
                         }
                         placeholder="model 名称"
                         disabled={disabled}
@@ -735,7 +807,9 @@ function PayloadFilterRulesEditor({
                         value={(model.protocol ?? "") as string}
                         onChange={(value) =>
                           updateModel(ruleIndex, modelIndex, {
-                            protocol: (value || undefined) as PayloadProtocol | undefined,
+                            protocol: (value || undefined) as
+                              | PayloadProtocol
+                              | undefined,
                           })
                         }
                         options={VISUAL_CONFIG_PROTOCOL_OPTIONS}
@@ -786,7 +860,11 @@ function PayloadFilterRulesEditor({
                         <TextInput
                           value={param}
                           onChange={(e) =>
-                            updateParam(ruleIndex, paramIndex, e.currentTarget.value)
+                            updateParam(
+                              ruleIndex,
+                              paramIndex,
+                              e.currentTarget.value,
+                            )
                           }
                           placeholder="例如：messages.0.content"
                           disabled={disabled}
@@ -804,6 +882,176 @@ function PayloadFilterRulesEditor({
                     ))}
                   </div>
                 )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function UserAgentRoutingRulesEditor({
+  rules,
+  disabled,
+  onChange,
+}: {
+  rules: UserAgentRoutingRuleEntry[];
+  disabled?: boolean;
+  onChange: (rules: UserAgentRoutingRuleEntry[]) => void;
+}) {
+  const addRule = () => {
+    onChange([
+      ...(rules || []),
+      {
+        id: makeClientId(),
+        name: "",
+        enabled: true,
+        matchMode: "contains",
+        pattern: "",
+        forceProviders: [],
+        preferProviders: [],
+      },
+    ]);
+  };
+
+  const updateRule = (
+    index: number,
+    patch: Partial<UserAgentRoutingRuleEntry>,
+  ) => {
+    onChange(
+      (rules || []).map((rule, i) =>
+        i === index ? { ...rule, ...patch } : rule,
+      ),
+    );
+  };
+
+  const removeRule = (index: number) => {
+    onChange((rules || []).filter((_, i) => i !== index));
+  };
+
+  return (
+    <Card
+      title="UA 路由规则"
+      description="首个命中的规则生效。`force-providers` 会缩小 provider 范围，`prefer-providers` 只调整优先级。"
+      actions={
+        <Button size="sm" onClick={addRule} disabled={disabled}>
+          <Plus size={14} />
+          新增规则
+        </Button>
+      }
+    >
+      {rules.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-slate-200 bg-white/60 p-4 text-center text-sm text-slate-600 dark:border-neutral-800 dark:bg-neutral-950/40 dark:text-white/65">
+          暂无 UA 路由规则
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {rules.map((rule, index) => (
+            <div
+              key={rule.id}
+              className="space-y-4 rounded-2xl border border-slate-200 bg-white/60 p-4 dark:border-neutral-800 dark:bg-neutral-950/40"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="text-sm font-semibold text-slate-900 dark:text-white">
+                  规则 {index + 1}
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <ToggleSwitch
+                    label="启用"
+                    checked={rule.enabled}
+                    onCheckedChange={(next) =>
+                      updateRule(index, { enabled: next })
+                    }
+                    disabled={disabled}
+                  />
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={() => removeRule(index)}
+                    disabled={disabled}
+                  >
+                    <Trash2 size={14} />
+                    删除
+                  </Button>
+                </div>
+              </div>
+
+              <div className="grid gap-3 lg:grid-cols-2">
+                <Field label="name" hint="仅用于识别规则来源。">
+                  <TextInput
+                    value={rule.name}
+                    onChange={(e) =>
+                      updateRule(index, { name: e.currentTarget.value })
+                    }
+                    placeholder="例如：OpenCode 定向"
+                    disabled={disabled}
+                  />
+                </Field>
+                <Field label="match-mode" hint="contains 大多数场景更稳。">
+                  <SelectInput
+                    value={rule.matchMode}
+                    onChange={(value) =>
+                      updateRule(index, {
+                        matchMode: value as UserAgentRoutingMatchMode,
+                      })
+                    }
+                    options={USER_AGENT_ROUTING_MATCH_MODE_OPTIONS}
+                    disabled={disabled}
+                    ariaLabel="user-agent match mode"
+                  />
+                </Field>
+              </div>
+
+              <Field
+                label="pattern"
+                hint="匹配 User-Agent；contains 忽略大小写，regex 使用原始正则。"
+              >
+                <TextInput
+                  value={rule.pattern}
+                  onChange={(e) =>
+                    updateRule(index, { pattern: e.currentTarget.value })
+                  }
+                  placeholder="例如：opencode 或 ^opencode/"
+                  disabled={disabled}
+                />
+              </Field>
+
+              <div className="grid gap-3 lg:grid-cols-2">
+                <Field
+                  label="force-providers"
+                  hint="命中后只保留这些 provider。逗号或换行分隔，如 codex-compat。"
+                >
+                  <TextArea
+                    value={formatProviderList(rule.forceProviders)}
+                    onChange={(value) =>
+                      updateRule(index, {
+                        forceProviders: parseProviderList(value),
+                      })
+                    }
+                    placeholder={"codex-compat\ncodex"}
+                    disabled={disabled}
+                    ariaLabel="force providers"
+                    rows={4}
+                  />
+                </Field>
+                <Field
+                  label="prefer-providers"
+                  hint="命中后优先尝试这些 provider；未命中的 provider 仍可回退。"
+                >
+                  <TextArea
+                    value={formatProviderList(rule.preferProviders)}
+                    onChange={(value) =>
+                      updateRule(index, {
+                        preferProviders: parseProviderList(value),
+                      })
+                    }
+                    placeholder={"codex-compat\nopenai-compatibility"}
+                    disabled={disabled}
+                    ariaLabel="prefer providers"
+                    rows={4}
+                  />
+                </Field>
               </div>
             </div>
           ))}
@@ -931,7 +1179,9 @@ export function VisualConfigEditor({
               label="禁用控制面板"
               description="remote-management.disable-control-panel"
               checked={values.rmDisableControlPanel}
-              onCheckedChange={(next) => update({ rmDisableControlPanel: next })}
+              onCheckedChange={(next) =>
+                update({ rmDisableControlPanel: next })
+              }
               disabled={disabled}
             />
           </div>
@@ -944,7 +1194,10 @@ export function VisualConfigEditor({
                 disabled={disabled}
               />
             </Field>
-            <Field label="panel-github-repository" hint="面板仓库地址（如需）。">
+            <Field
+              label="panel-github-repository"
+              hint="面板仓库地址（如需）。"
+            >
               <TextInput
                 value={values.rmPanelRepo}
                 onChange={(e) => update({ rmPanelRepo: e.currentTarget.value })}
@@ -984,20 +1237,27 @@ export function VisualConfigEditor({
               label="使用统计"
               description="usage-statistics-enabled"
               checked={values.usageStatisticsEnabled}
-              onCheckedChange={(next) => update({ usageStatisticsEnabled: next })}
+              onCheckedChange={(next) =>
+                update({ usageStatisticsEnabled: next })
+              }
               disabled={disabled}
             />
             <ToggleSwitch
               label="存储请求/响应内容"
               description="usage-log-content-enabled"
               checked={values.usageLogContentEnabled}
-              onCheckedChange={(next) => update({ usageLogContentEnabled: next })}
+              onCheckedChange={(next) =>
+                update({ usageLogContentEnabled: next })
+              }
               disabled={disabled}
             />
           </div>
         </Card>
 
-        <Card title="代理与重试" description="proxy-url、request-retry、max-retry-interval。">
+        <Card
+          title="代理与重试"
+          description="proxy-url、request-retry、max-retry-interval。"
+        >
           <div className="space-y-4">
             <Field label="proxy-url" hint="为空表示不使用代理。">
               <TextInput
@@ -1011,7 +1271,9 @@ export function VisualConfigEditor({
               <Field label="request-retry" hint="非负整数。">
                 <TextInput
                   value={values.requestRetry}
-                  onChange={(e) => update({ requestRetry: e.currentTarget.value })}
+                  onChange={(e) =>
+                    update({ requestRetry: e.currentTarget.value })
+                  }
                   placeholder="0"
                   inputMode="numeric"
                   disabled={disabled}
@@ -1020,7 +1282,9 @@ export function VisualConfigEditor({
               <Field label="max-retry-interval" hint="非负整数（秒）。">
                 <TextInput
                   value={values.maxRetryInterval}
-                  onChange={(e) => update({ maxRetryInterval: e.currentTarget.value })}
+                  onChange={(e) =>
+                    update({ maxRetryInterval: e.currentTarget.value })
+                  }
                   placeholder="0"
                   inputMode="numeric"
                   disabled={disabled}
@@ -1051,7 +1315,9 @@ export function VisualConfigEditor({
             <Field label="logs-max-total-size-mb" hint="日志总大小上限（MB）。">
               <TextInput
                 value={values.logsMaxTotalSizeMb}
-                onChange={(e) => update({ logsMaxTotalSizeMb: e.currentTarget.value })}
+                onChange={(e) =>
+                  update({ logsMaxTotalSizeMb: e.currentTarget.value })
+                }
                 placeholder="0"
                 inputMode="numeric"
                 disabled={disabled}
@@ -1076,53 +1342,87 @@ export function VisualConfigEditor({
               label="切换 Preview Model"
               description="quota-exceeded.switch-preview-model"
               checked={values.quotaSwitchPreviewModel}
-              onCheckedChange={(next) => update({ quotaSwitchPreviewModel: next })}
+              onCheckedChange={(next) =>
+                update({ quotaSwitchPreviewModel: next })
+              }
               disabled={disabled}
             />
           </div>
         </Card>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card title="路由" description="routing.strategy。">
-          <div className="space-y-4">
-            <Field label="routing.strategy" hint="选择路由策略。">
-              <SelectInput
-                value={values.routingStrategy}
-                onChange={(value) => update({ routingStrategy: value as RoutingStrategy })}
-                options={routingOptions}
-                disabled={disabled}
-                ariaLabel="routing.strategy"
-              />
-            </Field>
-          </div>
-        </Card>
-
-        <Card
-          title="Streaming"
-          description="streaming.keepalive-seconds / bootstrap-retries / nonstream-keepalive-interval。"
-        >
-          <div className="space-y-4">
-            <div className="grid gap-3 lg:grid-cols-2">
-              <Field label="streaming.keepalive-seconds" hint="非负整数（秒）。">
-                <TextInput
-                  value={values.streaming.keepaliveSeconds}
-                  onChange={(e) =>
-                    update({
-                      streaming: { ...values.streaming, keepaliveSeconds: e.currentTarget.value },
-                    })
+      <div className="space-y-6">
+        <div className="grid gap-6 lg:grid-cols-2">
+          <Card title="路由" description="routing.strategy。">
+            <div className="space-y-4">
+              <Field label="routing.strategy" hint="选择路由策略。">
+                <SelectInput
+                  value={values.routingStrategy}
+                  onChange={(value) =>
+                    update({ routingStrategy: value as RoutingStrategy })
                   }
-                  placeholder="0"
-                  inputMode="numeric"
+                  options={routingOptions}
                   disabled={disabled}
+                  ariaLabel="routing.strategy"
                 />
               </Field>
-              <Field label="streaming.bootstrap-retries" hint="非负整数。">
+            </div>
+          </Card>
+
+          <Card
+            title="Streaming"
+            description="streaming.keepalive-seconds / bootstrap-retries / nonstream-keepalive-interval。"
+          >
+            <div className="space-y-4">
+              <div className="grid gap-3 lg:grid-cols-2">
+                <Field
+                  label="streaming.keepalive-seconds"
+                  hint="非负整数（秒）。"
+                >
+                  <TextInput
+                    value={values.streaming.keepaliveSeconds}
+                    onChange={(e) =>
+                      update({
+                        streaming: {
+                          ...values.streaming,
+                          keepaliveSeconds: e.currentTarget.value,
+                        },
+                      })
+                    }
+                    placeholder="0"
+                    inputMode="numeric"
+                    disabled={disabled}
+                  />
+                </Field>
+                <Field label="streaming.bootstrap-retries" hint="非负整数。">
+                  <TextInput
+                    value={values.streaming.bootstrapRetries}
+                    onChange={(e) =>
+                      update({
+                        streaming: {
+                          ...values.streaming,
+                          bootstrapRetries: e.currentTarget.value,
+                        },
+                      })
+                    }
+                    placeholder="0"
+                    inputMode="numeric"
+                    disabled={disabled}
+                  />
+                </Field>
+              </div>
+              <Field
+                label="nonstream-keepalive-interval"
+                hint="非负整数（秒）。"
+              >
                 <TextInput
-                  value={values.streaming.bootstrapRetries}
+                  value={values.streaming.nonstreamKeepaliveInterval}
                   onChange={(e) =>
                     update({
-                      streaming: { ...values.streaming, bootstrapRetries: e.currentTarget.value },
+                      streaming: {
+                        ...values.streaming,
+                        nonstreamKeepaliveInterval: e.currentTarget.value,
+                      },
                     })
                   }
                   placeholder="0"
@@ -1131,24 +1431,14 @@ export function VisualConfigEditor({
                 />
               </Field>
             </div>
-            <Field label="nonstream-keepalive-interval" hint="非负整数（秒）。">
-              <TextInput
-                value={values.streaming.nonstreamKeepaliveInterval}
-                onChange={(e) =>
-                  update({
-                    streaming: {
-                      ...values.streaming,
-                      nonstreamKeepaliveInterval: e.currentTarget.value,
-                    },
-                  })
-                }
-                placeholder="0"
-                inputMode="numeric"
-                disabled={disabled}
-              />
-            </Field>
-          </div>
-        </Card>
+          </Card>
+        </div>
+
+        <UserAgentRoutingRulesEditor
+          rules={values.routingUserAgentRules}
+          disabled={disabled}
+          onChange={(rules) => update({ routingUserAgentRules: rules })}
+        />
       </div>
 
       <div className="space-y-6">

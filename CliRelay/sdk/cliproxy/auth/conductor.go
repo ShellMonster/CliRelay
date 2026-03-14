@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -509,17 +510,18 @@ func (m *Manager) Execute(ctx context.Context, providers []string, req cliproxye
 	if len(normalized) == 0 {
 		return cliproxyexecutor.Response{}, &Error{Code: "provider_not_found", Message: "no provider supplied"}
 	}
+	routedProviders, orderedByProvider := m.userAgentRoutedProviders(normalized, opts.Metadata)
 
 	_, maxWait := m.retrySettings()
 
 	var lastErr error
 	for attempt := 0; ; attempt++ {
-		resp, errExec := m.executeMixedOnce(ctx, normalized, req, opts)
+		resp, errExec := m.executeMixedOnce(ctx, routedProviders, req, opts, orderedByProvider)
 		if errExec == nil {
 			return resp, nil
 		}
 		lastErr = errExec
-		wait, shouldRetry := m.shouldRetryAfterError(errExec, attempt, normalized, req.Model, maxWait)
+		wait, shouldRetry := m.shouldRetryAfterError(errExec, attempt, routedProviders, req.Model, maxWait)
 		if !shouldRetry {
 			break
 		}
@@ -540,17 +542,18 @@ func (m *Manager) ExecuteCount(ctx context.Context, providers []string, req clip
 	if len(normalized) == 0 {
 		return cliproxyexecutor.Response{}, &Error{Code: "provider_not_found", Message: "no provider supplied"}
 	}
+	routedProviders, orderedByProvider := m.userAgentRoutedProviders(normalized, opts.Metadata)
 
 	_, maxWait := m.retrySettings()
 
 	var lastErr error
 	for attempt := 0; ; attempt++ {
-		resp, errExec := m.executeCountMixedOnce(ctx, normalized, req, opts)
+		resp, errExec := m.executeCountMixedOnce(ctx, routedProviders, req, opts, orderedByProvider)
 		if errExec == nil {
 			return resp, nil
 		}
 		lastErr = errExec
-		wait, shouldRetry := m.shouldRetryAfterError(errExec, attempt, normalized, req.Model, maxWait)
+		wait, shouldRetry := m.shouldRetryAfterError(errExec, attempt, routedProviders, req.Model, maxWait)
 		if !shouldRetry {
 			break
 		}
@@ -571,17 +574,18 @@ func (m *Manager) ExecuteStream(ctx context.Context, providers []string, req cli
 	if len(normalized) == 0 {
 		return nil, &Error{Code: "provider_not_found", Message: "no provider supplied"}
 	}
+	routedProviders, orderedByProvider := m.userAgentRoutedProviders(normalized, opts.Metadata)
 
 	_, maxWait := m.retrySettings()
 
 	var lastErr error
 	for attempt := 0; ; attempt++ {
-		result, errStream := m.executeStreamMixedOnce(ctx, normalized, req, opts)
+		result, errStream := m.executeStreamMixedOnce(ctx, routedProviders, req, opts, orderedByProvider)
 		if errStream == nil {
 			return result, nil
 		}
 		lastErr = errStream
-		wait, shouldRetry := m.shouldRetryAfterError(errStream, attempt, normalized, req.Model, maxWait)
+		wait, shouldRetry := m.shouldRetryAfterError(errStream, attempt, routedProviders, req.Model, maxWait)
 		if !shouldRetry {
 			break
 		}
@@ -595,7 +599,7 @@ func (m *Manager) ExecuteStream(ctx context.Context, providers []string, req cli
 	return nil, &Error{Code: "auth_not_found", Message: "no auth available"}
 }
 
-func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req cliproxyexecutor.Request, opts cliproxyexecutor.Options) (cliproxyexecutor.Response, error) {
+func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req cliproxyexecutor.Request, opts cliproxyexecutor.Options, orderedByProvider bool) (cliproxyexecutor.Response, error) {
 	if len(providers) == 0 {
 		return cliproxyexecutor.Response{}, &Error{Code: "provider_not_found", Message: "no provider supplied"}
 	}
@@ -604,7 +608,7 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 	tried := make(map[string]struct{})
 	var lastErr error
 	for {
-		auth, executor, provider, errPick := m.pickNextMixed(ctx, providers, routeModel, opts, tried)
+		auth, executor, provider, errPick := m.pickNextMixed(ctx, providers, routeModel, opts, tried, orderedByProvider)
 		if errPick != nil {
 			if lastErr != nil {
 				return cliproxyexecutor.Response{}, lastErr
@@ -651,7 +655,7 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 	}
 }
 
-func (m *Manager) executeCountMixedOnce(ctx context.Context, providers []string, req cliproxyexecutor.Request, opts cliproxyexecutor.Options) (cliproxyexecutor.Response, error) {
+func (m *Manager) executeCountMixedOnce(ctx context.Context, providers []string, req cliproxyexecutor.Request, opts cliproxyexecutor.Options, orderedByProvider bool) (cliproxyexecutor.Response, error) {
 	if len(providers) == 0 {
 		return cliproxyexecutor.Response{}, &Error{Code: "provider_not_found", Message: "no provider supplied"}
 	}
@@ -660,7 +664,7 @@ func (m *Manager) executeCountMixedOnce(ctx context.Context, providers []string,
 	tried := make(map[string]struct{})
 	var lastErr error
 	for {
-		auth, executor, provider, errPick := m.pickNextMixed(ctx, providers, routeModel, opts, tried)
+		auth, executor, provider, errPick := m.pickNextMixed(ctx, providers, routeModel, opts, tried, orderedByProvider)
 		if errPick != nil {
 			if lastErr != nil {
 				return cliproxyexecutor.Response{}, lastErr
@@ -707,7 +711,7 @@ func (m *Manager) executeCountMixedOnce(ctx context.Context, providers []string,
 	}
 }
 
-func (m *Manager) executeStreamMixedOnce(ctx context.Context, providers []string, req cliproxyexecutor.Request, opts cliproxyexecutor.Options) (*cliproxyexecutor.StreamResult, error) {
+func (m *Manager) executeStreamMixedOnce(ctx context.Context, providers []string, req cliproxyexecutor.Request, opts cliproxyexecutor.Options, orderedByProvider bool) (*cliproxyexecutor.StreamResult, error) {
 	if len(providers) == 0 {
 		return nil, &Error{Code: "provider_not_found", Message: "no provider supplied"}
 	}
@@ -716,7 +720,7 @@ func (m *Manager) executeStreamMixedOnce(ctx context.Context, providers []string
 	tried := make(map[string]struct{})
 	var lastErr error
 	for {
-		auth, executor, provider, errPick := m.pickNextMixed(ctx, providers, routeModel, opts, tried)
+		auth, executor, provider, errPick := m.pickNextMixed(ctx, providers, routeModel, opts, tried, orderedByProvider)
 		if errPick != nil {
 			if lastErr != nil {
 				return nil, lastErr
@@ -1127,6 +1131,190 @@ func (m *Manager) normalizeProviders(providers []string) []string {
 		result = append(result, p)
 	}
 	return result
+}
+
+func (m *Manager) userAgentRoutedProviders(providers []string, meta map[string]any) ([]string, bool) {
+	if m == nil || len(providers) == 0 {
+		return providers, false
+	}
+	userAgent := userAgentFromMetadata(meta)
+	if userAgent == "" {
+		return providers, false
+	}
+
+	cfg, _ := m.runtimeConfig.Load().(*internalconfig.Config)
+	if cfg == nil || len(cfg.Routing.UserAgentRules) == 0 {
+		return providers, false
+	}
+
+	for _, rule := range cfg.Routing.UserAgentRules {
+		if !userAgentRoutingRuleEnabled(rule) || !userAgentRoutingRuleMatches(rule, userAgent) {
+			continue
+		}
+
+		routedProviders, ordered := applyUserAgentRoutingRule(providers, rule)
+		if len(routedProviders) == 0 {
+			continue
+		}
+		return routedProviders, ordered
+	}
+
+	return providers, false
+}
+
+func userAgentFromMetadata(meta map[string]any) string {
+	if len(meta) == 0 {
+		return ""
+	}
+	raw, ok := meta[cliproxyexecutor.UserAgentMetadataKey]
+	if !ok || raw == nil {
+		return ""
+	}
+	switch v := raw.(type) {
+	case string:
+		return strings.TrimSpace(v)
+	case []byte:
+		return strings.TrimSpace(string(v))
+	default:
+		return ""
+	}
+}
+
+func userAgentRoutingRuleEnabled(rule internalconfig.UserAgentRoutingRule) bool {
+	return rule.Enabled == nil || *rule.Enabled
+}
+
+func userAgentRoutingRuleMatches(rule internalconfig.UserAgentRoutingRule, userAgent string) bool {
+	pattern := strings.TrimSpace(rule.Pattern)
+	if pattern == "" {
+		return false
+	}
+	userAgent = strings.TrimSpace(userAgent)
+	if userAgent == "" {
+		return false
+	}
+
+	switch strings.ToLower(strings.TrimSpace(rule.MatchMode)) {
+	case "regex":
+		re, err := regexp.Compile(pattern)
+		if err != nil {
+			log.WithError(err).WithField("rule", strings.TrimSpace(rule.Name)).Debug("skip invalid user-agent routing regex")
+			return false
+		}
+		return re.MatchString(userAgent)
+	default:
+		return strings.Contains(strings.ToLower(userAgent), strings.ToLower(pattern))
+	}
+}
+
+func applyUserAgentRoutingRule(providers []string, rule internalconfig.UserAgentRoutingRule) ([]string, bool) {
+	forced := intersectProvidersByRuleOrder(providers, rule.ForceProviders)
+	if len(rule.ForceProviders) > 0 {
+		if len(forced) == 0 {
+			return nil, false
+		}
+		if len(rule.PreferProviders) > 0 {
+			return prioritizeProvidersByRule(forced, rule.PreferProviders), true
+		}
+		return forced, true
+	}
+
+	if len(rule.PreferProviders) > 0 {
+		preferred := prioritizeProvidersByRule(providers, rule.PreferProviders)
+		if len(preferred) > 0 && hasProviderOverlap(providers, rule.PreferProviders) {
+			return preferred, true
+		}
+		return nil, false
+	}
+
+	return nil, false
+}
+
+func intersectProvidersByRuleOrder(providers, allowed []string) []string {
+	if len(providers) == 0 || len(allowed) == 0 {
+		return nil
+	}
+	providerSet := make(map[string]struct{}, len(providers))
+	for i := range providers {
+		providerSet[providers[i]] = struct{}{}
+	}
+	out := make([]string, 0, len(allowed))
+	seen := make(map[string]struct{}, len(allowed))
+	for i := range allowed {
+		provider := strings.ToLower(strings.TrimSpace(allowed[i]))
+		if provider == "" {
+			continue
+		}
+		if _, ok := providerSet[provider]; !ok {
+			continue
+		}
+		if _, ok := seen[provider]; ok {
+			continue
+		}
+		seen[provider] = struct{}{}
+		out = append(out, provider)
+	}
+	return out
+}
+
+func prioritizeProvidersByRule(providers, preferred []string) []string {
+	if len(providers) == 0 {
+		return nil
+	}
+	if len(preferred) == 0 {
+		return append([]string(nil), providers...)
+	}
+
+	providerSet := make(map[string]struct{}, len(providers))
+	for i := range providers {
+		providerSet[providers[i]] = struct{}{}
+	}
+
+	out := make([]string, 0, len(providers))
+	seen := make(map[string]struct{}, len(providers))
+	for i := range preferred {
+		provider := strings.ToLower(strings.TrimSpace(preferred[i]))
+		if provider == "" {
+			continue
+		}
+		if _, ok := providerSet[provider]; !ok {
+			continue
+		}
+		if _, ok := seen[provider]; ok {
+			continue
+		}
+		seen[provider] = struct{}{}
+		out = append(out, provider)
+	}
+	for i := range providers {
+		provider := providers[i]
+		if _, ok := seen[provider]; ok {
+			continue
+		}
+		seen[provider] = struct{}{}
+		out = append(out, provider)
+	}
+	return out
+}
+
+func hasProviderOverlap(providers, preferred []string) bool {
+	if len(providers) == 0 || len(preferred) == 0 {
+		return false
+	}
+	providerSet := make(map[string]struct{}, len(providers))
+	for i := range providers {
+		providerSet[providers[i]] = struct{}{}
+	}
+	for i := range preferred {
+		provider := strings.ToLower(strings.TrimSpace(preferred[i]))
+		if provider == "" {
+			continue
+		}
+		if _, ok := providerSet[provider]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 func (m *Manager) retrySettings() (int, time.Duration) {
@@ -1745,7 +1933,11 @@ func (m *Manager) pickNext(ctx context.Context, provider, model string, opts cli
 	return authCopy, executor, nil
 }
 
-func (m *Manager) pickNextMixed(ctx context.Context, providers []string, model string, opts cliproxyexecutor.Options, tried map[string]struct{}) (*Auth, ProviderExecutor, string, error) {
+func (m *Manager) pickNextMixed(ctx context.Context, providers []string, model string, opts cliproxyexecutor.Options, tried map[string]struct{}, orderedByProvider bool) (*Auth, ProviderExecutor, string, error) {
+	if orderedByProvider {
+		return m.pickNextMixedOrdered(ctx, providers, model, opts, tried)
+	}
+
 	pinnedAuthID := pinnedAuthIDFromMetadata(opts.Metadata)
 
 	providerSet := make(map[string]struct{}, len(providers))
@@ -1826,6 +2018,54 @@ func (m *Manager) pickNextMixed(ctx context.Context, providers []string, model s
 		m.mu.Unlock()
 	}
 	return authCopy, executor, providerKey, nil
+}
+
+func (m *Manager) pickNextMixedOrdered(ctx context.Context, providers []string, model string, opts cliproxyexecutor.Options, tried map[string]struct{}) (*Auth, ProviderExecutor, string, error) {
+	if len(providers) == 0 {
+		return nil, nil, "", &Error{Code: "provider_not_found", Message: "no provider supplied"}
+	}
+
+	var selectedErr error
+	for i := range providers {
+		provider := strings.TrimSpace(strings.ToLower(providers[i]))
+		if provider == "" {
+			continue
+		}
+		auth, executor, err := m.pickNext(ctx, provider, model, opts, tried)
+		if err == nil {
+			return auth, executor, provider, nil
+		}
+		if shouldReplaceOrderedPickError(selectedErr, err) {
+			selectedErr = err
+		}
+	}
+
+	if selectedErr != nil {
+		return nil, nil, "", selectedErr
+	}
+	return nil, nil, "", &Error{Code: "auth_not_found", Message: "no auth available"}
+}
+
+func shouldReplaceOrderedPickError(existing, next error) bool {
+	if next == nil {
+		return false
+	}
+	if existing == nil {
+		return true
+	}
+	if isProviderPickNotFoundError(existing) && !isProviderPickNotFoundError(next) {
+		return true
+	}
+	return false
+}
+
+func isProviderPickNotFoundError(err error) bool {
+	var authErr *Error
+	if !errors.As(err, &authErr) || authErr == nil {
+		return false
+	}
+	code := strings.TrimSpace(strings.ToLower(authErr.Code))
+	return code == "auth_not_found" || code == "auth_unavailable"
 }
 
 func (m *Manager) persist(ctx context.Context, auth *Auth) error {

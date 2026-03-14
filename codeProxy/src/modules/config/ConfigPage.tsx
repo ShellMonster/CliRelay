@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import {
   ChevronDown,
   ChevronUp,
@@ -23,6 +30,7 @@ import { ToggleSwitch } from "@/modules/ui/ToggleSwitch";
 import { useToast } from "@/modules/ui/ToastProvider";
 import { HoverTooltip } from "@/modules/ui/Tooltip";
 import { YamlCodeEditor } from "@/modules/config/YamlCodeEditor";
+import type { UserAgentRoutingRuleConfig } from "@/types";
 
 type ConfigTab = "visual" | "source" | "runtime";
 
@@ -31,7 +39,10 @@ const TAB_STORAGE_KEY = "config-panel:tab";
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 
-const readString = (obj: Record<string, unknown> | null, ...keys: string[]): string => {
+const readString = (
+  obj: Record<string, unknown> | null,
+  ...keys: string[]
+): string => {
   if (!obj) return "";
   for (const key of keys) {
     const value = obj[key];
@@ -40,7 +51,10 @@ const readString = (obj: Record<string, unknown> | null, ...keys: string[]): str
   return "";
 };
 
-const readBool = (obj: Record<string, unknown> | null, ...keys: string[]): boolean => {
+const readBool = (
+  obj: Record<string, unknown> | null,
+  ...keys: string[]
+): boolean => {
   if (!obj) return false;
   for (const key of keys) {
     const value = obj[key];
@@ -55,7 +69,10 @@ const readBool = (obj: Record<string, unknown> | null, ...keys: string[]): boole
   return false;
 };
 
-const readNumber = (obj: Record<string, unknown> | null, ...keys: string[]): number | null => {
+const readNumber = (
+  obj: Record<string, unknown> | null,
+  ...keys: string[]
+): number | null => {
   if (!obj) return null;
   for (const key of keys) {
     const value = obj[key];
@@ -68,7 +85,8 @@ const readNumber = (obj: Record<string, unknown> | null, ...keys: string[]): num
 function readCommercialModeFromYaml(yamlContent: string): boolean {
   try {
     const parsed = parseYaml(yamlContent);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return false;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+      return false;
     return Boolean((parsed as Record<string, unknown>)["commercial-mode"]);
   } catch {
     return false;
@@ -79,7 +97,8 @@ function useStickyTab(): [ConfigTab, (next: ConfigTab) => void] {
   const [tab, setTab] = useState<ConfigTab>(() => {
     try {
       const saved = localStorage.getItem(TAB_STORAGE_KEY);
-      if (saved === "visual" || saved === "source" || saved === "runtime") return saved;
+      if (saved === "visual" || saved === "source" || saved === "runtime")
+        return saved;
       return "visual";
     } catch {
       return "visual";
@@ -98,12 +117,18 @@ function useStickyTab(): [ConfigTab, (next: ConfigTab) => void] {
   return [tab, update];
 }
 
-function RuntimeConfigPanel() {
+function RuntimeConfigPanel({
+  onOpenVisualConfig,
+}: {
+  onOpenVisualConfig: () => void;
+}) {
   const { notify } = useToast();
   const [isPending, startTransition] = useTransition();
 
   const [loading, setLoading] = useState(true);
-  const [rawConfig, setRawConfig] = useState<Record<string, unknown> | null>(null);
+  const [rawConfig, setRawConfig] = useState<Record<string, unknown> | null>(
+    null,
+  );
 
   const [debugEnabled, setDebugEnabled] = useState(false);
   const [usageStatisticsEnabled, setUsageStatisticsEnabled] = useState(false);
@@ -112,13 +137,17 @@ function RuntimeConfigPanel() {
   const [loggingToFileEnabled, setLoggingToFileEnabled] = useState(false);
   const [wsAuthEnabled, setWsAuthEnabled] = useState(false);
   const [switchProjectEnabled, setSwitchProjectEnabled] = useState(false);
-  const [switchPreviewModelEnabled, setSwitchPreviewModelEnabled] = useState(false);
+  const [switchPreviewModelEnabled, setSwitchPreviewModelEnabled] =
+    useState(false);
   const [forceModelPrefixEnabled, setForceModelPrefixEnabled] = useState(false);
 
   const [proxyUrl, setProxyUrl] = useState("");
   const [requestRetry, setRequestRetry] = useState("0");
   const [logsMaxTotalSizeMb, setLogsMaxTotalSizeMb] = useState("0");
   const [routingStrategy, setRoutingStrategy] = useState("round-robin");
+  const [userAgentRoutingRules, setUserAgentRoutingRules] = useState<
+    UserAgentRoutingRuleConfig[]
+  >([]);
 
   const [baselineText, setBaselineText] = useState<{
     proxyUrl: string;
@@ -142,10 +171,14 @@ function RuntimeConfigPanel() {
         configApi.getRoutingStrategy().catch(() => "round-robin"),
       ]);
 
-      const record = isRecord(config) ? (config as Record<string, unknown>) : null;
+      const record = isRecord(config)
+        ? (config as Record<string, unknown>)
+        : null;
       setRawConfig(record);
 
-      setDebugEnabled(readBool(record, "debug", "debug-enabled", "debugEnabled"));
+      setDebugEnabled(
+        readBool(record, "debug", "debug-enabled", "debugEnabled"),
+      );
       setUsageStatisticsEnabled(
         readBool(record, "usage-statistics-enabled", "usageStatisticsEnabled"),
       );
@@ -153,11 +186,19 @@ function RuntimeConfigPanel() {
         readBool(record, "usage-log-content-enabled", "usageLogContentEnabled"),
       );
       setRequestLogEnabled(readBool(record, "request-log", "requestLog"));
-      setLoggingToFileEnabled(readBool(record, "logging-to-file", "loggingToFile"));
+      setLoggingToFileEnabled(
+        readBool(record, "logging-to-file", "loggingToFile"),
+      );
       setWsAuthEnabled(readBool(record, "ws-auth", "wsAuth"));
-      setSwitchProjectEnabled(readBool(record, "quota-exceeded.switch-project", "switchProject"));
+      setSwitchProjectEnabled(
+        readBool(record, "quota-exceeded.switch-project", "switchProject"),
+      );
       setSwitchPreviewModelEnabled(
-        readBool(record, "quota-exceeded.switch-preview-model", "switchPreviewModel"),
+        readBool(
+          record,
+          "quota-exceeded.switch-preview-model",
+          "switchPreviewModel",
+        ),
       );
 
       setProxyUrl(readString(record, "proxy-url", "proxyUrl"));
@@ -166,16 +207,27 @@ function RuntimeConfigPanel() {
 
       setLogsMaxTotalSizeMb(String(logsLimit ?? 0));
       setForceModelPrefixEnabled(Boolean(forcePrefix));
-      setRoutingStrategy(typeof strategy === "string" ? strategy : "round-robin");
+      setRoutingStrategy(
+        typeof strategy === "string" ? strategy : "round-robin",
+      );
+      setUserAgentRoutingRules(
+        Array.isArray(config.userAgentRoutingRules)
+          ? config.userAgentRoutingRules
+          : [],
+      );
 
       setBaselineText({
         proxyUrl: readString(record, "proxy-url", "proxyUrl"),
         requestRetry: retry !== null ? String(retry) : "0",
         logsMaxTotalSizeMb: String(logsLimit ?? 0),
-        routingStrategy: typeof strategy === "string" ? strategy : "round-robin",
+        routingStrategy:
+          typeof strategy === "string" ? strategy : "round-robin",
       });
     } catch (err: unknown) {
-      notify({ type: "error", message: err instanceof Error ? err.message : "加载配置失败" });
+      notify({
+        type: "error",
+        message: err instanceof Error ? err.message : "加载配置失败",
+      });
     } finally {
       setLoading(false);
     }
@@ -190,16 +242,22 @@ function RuntimeConfigPanel() {
       try {
         if (key === "debug") await configApi.updateDebug(next);
         if (key === "usage") await configApi.updateUsageStatistics(next);
-        if (key === "usageLogContent") await configApi.updateUsageLogContent(next);
+        if (key === "usageLogContent")
+          await configApi.updateUsageLogContent(next);
         if (key === "requestLog") await configApi.updateRequestLog(next);
         if (key === "loggingToFile") await configApi.updateLoggingToFile(next);
         if (key === "wsAuth") await configApi.updateWsAuth(next);
         if (key === "switchProject") await configApi.updateSwitchProject(next);
-        if (key === "switchPreviewModel") await configApi.updateSwitchPreviewModel(next);
-        if (key === "forceModelPrefix") await configApi.updateForceModelPrefix(next);
+        if (key === "switchPreviewModel")
+          await configApi.updateSwitchPreviewModel(next);
+        if (key === "forceModelPrefix")
+          await configApi.updateForceModelPrefix(next);
         notify({ type: "success", message: "已更新" });
       } catch (err: unknown) {
-        notify({ type: "error", message: err instanceof Error ? err.message : "更新失败" });
+        notify({
+          type: "error",
+          message: err instanceof Error ? err.message : "更新失败",
+        });
         throw err;
       }
     },
@@ -244,7 +302,9 @@ function RuntimeConfigPanel() {
         await configApi.updateRequestRetry(Math.round(retryParsed));
       }
 
-      if (logsMaxTotalSizeMb.trim() !== baselineText.logsMaxTotalSizeMb.trim()) {
+      if (
+        logsMaxTotalSizeMb.trim() !== baselineText.logsMaxTotalSizeMb.trim()
+      ) {
         await configApi.updateLogsMaxTotalSizeMb(Math.round(logsParsed));
       }
 
@@ -255,7 +315,10 @@ function RuntimeConfigPanel() {
       notify({ type: "success", message: "已保存" });
       startTransition(() => void loadRuntimeConfig());
     } catch (err: unknown) {
-      notify({ type: "error", message: err instanceof Error ? err.message : "保存失败" });
+      notify({
+        type: "error",
+        message: err instanceof Error ? err.message : "保存失败",
+      });
       startTransition(() => void loadRuntimeConfig());
     }
   }, [
@@ -309,7 +372,9 @@ function RuntimeConfigPanel() {
               checked={debugEnabled}
               onCheckedChange={(next) => {
                 setDebugEnabled(next);
-                void updateToggle("debug", next).catch(() => setDebugEnabled((prev) => !prev));
+                void updateToggle("debug", next).catch(() =>
+                  setDebugEnabled((prev) => !prev),
+                );
               }}
             />
             <ToggleSwitch
@@ -365,7 +430,9 @@ function RuntimeConfigPanel() {
               checked={wsAuthEnabled}
               onCheckedChange={(next) => {
                 setWsAuthEnabled(next);
-                void updateToggle("wsAuth", next).catch(() => setWsAuthEnabled((prev) => !prev));
+                void updateToggle("wsAuth", next).catch(() =>
+                  setWsAuthEnabled((prev) => !prev),
+                );
               }}
             />
             <ToggleSwitch
@@ -446,6 +513,64 @@ function RuntimeConfigPanel() {
               </p>
             </div>
           </Card>
+
+          <Card
+            title="UA 路由规则"
+            description="按请求 User-Agent 强制定向或优先某些 provider。编辑请走“可视化编辑”。"
+            className="lg:col-span-2"
+            actions={
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={onOpenVisualConfig}
+              >
+                <Eye size={14} />
+                去可视化编辑
+              </Button>
+            }
+          >
+            {userAgentRoutingRules.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-slate-200 bg-white/60 p-4 text-center text-sm text-slate-600 dark:border-neutral-800 dark:bg-neutral-950/40 dark:text-white/65">
+                当前未配置 UA 路由规则
+              </div>
+            ) : (
+              <div className="grid gap-3 lg:grid-cols-2">
+                {userAgentRoutingRules.map((rule, index) => (
+                  <div
+                    key={`${rule.name ?? "ua-rule"}-${index}`}
+                    className="space-y-2 rounded-2xl border border-slate-200 bg-white/60 p-4 dark:border-neutral-800 dark:bg-neutral-950/40"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="text-sm font-semibold text-slate-900 dark:text-white">
+                        {rule.name?.trim() || `规则 ${index + 1}`}
+                      </div>
+                      <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700 dark:bg-white/10 dark:text-white/75">
+                        {rule.enabled === false ? "已禁用" : "已启用"}
+                      </span>
+                    </div>
+                    <div className="text-xs text-slate-600 dark:text-white/65">
+                      匹配方式：{rule.matchMode || "contains"}
+                    </div>
+                    <div className="text-xs text-slate-600 dark:text-white/65">
+                      Pattern：{rule.pattern?.trim() || "--"}
+                    </div>
+                    <div className="text-xs text-slate-600 dark:text-white/65">
+                      Force：
+                      {rule.forceProviders?.length
+                        ? rule.forceProviders.join(", ")
+                        : "--"}
+                    </div>
+                    <div className="text-xs text-slate-600 dark:text-white/65">
+                      Prefer：
+                      {rule.preferProviders?.length
+                        ? rule.preferProviders.join(", ")
+                        : "--"}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
         </div>
       </Card>
     </div>
@@ -495,7 +620,8 @@ export function ConfigPage() {
       setLastSearchedQuery("");
       loadVisualValuesFromYaml(text);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "加载 config.yaml 失败";
+      const message =
+        err instanceof Error ? err.message : "加载 config.yaml 失败";
       setError(message);
       notify({ type: "error", message });
     } finally {
@@ -521,9 +647,11 @@ export function ConfigPage() {
     setSaving(true);
     try {
       const previousCommercialMode = readCommercialModeFromYaml(yamlText);
-      const nextYaml = tab === "visual" ? applyVisualChangesToYaml(yamlText) : yamlText;
+      const nextYaml =
+        tab === "visual" ? applyVisualChangesToYaml(yamlText) : yamlText;
       const nextCommercialMode = readCommercialModeFromYaml(nextYaml);
-      const commercialModeChanged = previousCommercialMode !== nextCommercialMode;
+      const commercialModeChanged =
+        previousCommercialMode !== nextCommercialMode;
 
       await configFileApi.saveConfigYaml(nextYaml);
       const latest = await configFileApi.fetchConfigYaml();
@@ -532,14 +660,26 @@ export function ConfigPage() {
       loadVisualValuesFromYaml(latest);
       notify({ type: "success", message: "已保存 config.yaml" });
       if (commercialModeChanged) {
-        notify({ type: "info", message: "commercial-mode 已变更：通常需要重启服务以生效" });
+        notify({
+          type: "info",
+          message: "commercial-mode 已变更：通常需要重启服务以生效",
+        });
       }
     } catch (err: unknown) {
-      notify({ type: "error", message: err instanceof Error ? err.message : "保存失败" });
+      notify({
+        type: "error",
+        message: err instanceof Error ? err.message : "保存失败",
+      });
     } finally {
       setSaving(false);
     }
-  }, [applyVisualChangesToYaml, loadVisualValuesFromYaml, notify, tab, yamlText]);
+  }, [
+    applyVisualChangesToYaml,
+    loadVisualValuesFromYaml,
+    notify,
+    tab,
+    yamlText,
+  ]);
 
   const buildSearchPositions = useCallback(
     (query: string) => {
@@ -570,7 +710,8 @@ export function ConfigPage() {
       if (!q) return;
       const positions = searchPositions;
       if (!positions.length) return;
-      const safe = ((index % positions.length) + positions.length) % positions.length;
+      const safe =
+        ((index % positions.length) + positions.length) % positions.length;
       const start = positions[safe];
       el.focus();
       el.setSelectionRange(start, start + q.length);
@@ -623,7 +764,11 @@ export function ConfigPage() {
   );
 
   const searchStats = useMemo(() => {
-    if (!lastSearchedQuery || lastSearchedQuery !== searchQuery.trim() || !searchPositions.length) {
+    if (
+      !lastSearchedQuery ||
+      lastSearchedQuery !== searchQuery.trim() ||
+      !searchPositions.length
+    ) {
       return { current: 0, total: 0 };
     }
     return { current: searchIndex + 1, total: searchPositions.length };
@@ -711,7 +856,12 @@ export function ConfigPage() {
         ) : null}
       </div>
       <div className="flex items-center gap-2">
-        <Button variant="secondary" size="sm" onClick={requestReload} disabled={reloadDisabled}>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={requestReload}
+          disabled={reloadDisabled}
+        >
           <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
           重载
         </Button>
@@ -736,8 +886,15 @@ export function ConfigPage() {
           : "space-y-6 overflow-x-hidden"
       }
     >
-      <div className={visualLayoutEnabled ? "flex min-h-0 flex-1 flex-col gap-4" : undefined}>
-        <Tabs value={tab} onValueChange={(next) => handleTabChange(next as ConfigTab)}>
+      <div
+        className={
+          visualLayoutEnabled ? "flex min-h-0 flex-1 flex-col gap-4" : undefined
+        }
+      >
+        <Tabs
+          value={tab}
+          onValueChange={(next) => handleTabChange(next as ConfigTab)}
+        >
           <TabsList>
             <TabsTrigger value="visual">
               <Eye size={14} />
@@ -823,7 +980,10 @@ export function ConfigPage() {
                             }}
                             disabled={disableControls || loading}
                             endAdornment={
-                              <HoverTooltip content="搜索（回车）" placement="bottom">
+                              <HoverTooltip
+                                content="搜索（回车）"
+                                placement="bottom"
+                              >
                                 <span className="inline-flex h-6 w-6 items-center justify-center text-slate-400 dark:text-white/45">
                                   <Search size={16} aria-hidden="true" />
                                 </span>
@@ -896,7 +1056,9 @@ export function ConfigPage() {
             </TabsContent>
 
             <TabsContent value="runtime">
-              <RuntimeConfigPanel />
+              <RuntimeConfigPanel
+                onOpenVisualConfig={() => handleTabChange("visual")}
+              />
             </TabsContent>
           </div>
         </Tabs>

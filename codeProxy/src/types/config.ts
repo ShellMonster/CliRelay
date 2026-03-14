@@ -3,12 +3,25 @@
  * 与基线 /config 返回结构保持一致（内部使用驼峰形式）
  */
 
-import type { GeminiKeyConfig, ProviderKeyConfig, OpenAIProviderConfig } from "./provider";
+import type {
+  GeminiKeyConfig,
+  ProviderKeyConfig,
+  OpenAIProviderConfig,
+} from "./provider";
 import type { AmpcodeConfig } from "./ampcode";
 
 export interface QuotaExceededConfig {
   switchProject?: boolean;
   switchPreviewModel?: boolean;
+}
+
+export interface UserAgentRoutingRuleConfig {
+  name?: string;
+  enabled?: boolean;
+  matchMode?: "contains" | "regex";
+  pattern?: string;
+  forceProviders?: string[];
+  preferProviders?: string[];
 }
 
 export interface Config {
@@ -24,6 +37,7 @@ export interface Config {
   wsAuth?: boolean;
   forceModelPrefix?: boolean;
   routingStrategy?: string;
+  userAgentRoutingRules?: UserAgentRoutingRuleConfig[];
   apiKeys?: string[];
   ampcode?: AmpcodeConfig;
   geminiApiKeys?: GeminiKeyConfig[];

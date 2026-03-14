@@ -193,6 +193,28 @@ type RoutingConfig struct {
 	// Strategy selects the credential selection strategy.
 	// Supported values: "round-robin" (default), "fill-first".
 	Strategy string `yaml:"strategy,omitempty" json:"strategy,omitempty"`
+
+	// UserAgentRules optionally override provider routing based on the downstream User-Agent.
+	UserAgentRules []UserAgentRoutingRule `yaml:"user-agent-rules,omitempty" json:"user-agent-rules,omitempty"`
+}
+
+// UserAgentRoutingRule routes requests to specific providers when the User-Agent matches.
+type UserAgentRoutingRule struct {
+	Name string `yaml:"name,omitempty" json:"name,omitempty"`
+
+	// Enabled defaults to true when omitted.
+	Enabled *bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+
+	// MatchMode supports "contains" (default) and "regex".
+	MatchMode string `yaml:"match-mode,omitempty" json:"match-mode,omitempty"`
+	Pattern   string `yaml:"pattern,omitempty" json:"pattern,omitempty"`
+
+	// ForceProviders narrows the provider set to the intersection of these providers and
+	// the model's existing provider candidates.
+	ForceProviders []string `yaml:"force-providers,omitempty" json:"force-providers,omitempty"`
+
+	// PreferProviders keeps the existing candidate set but prioritizes these providers first.
+	PreferProviders []string `yaml:"prefer-providers,omitempty" json:"prefer-providers,omitempty"`
 }
 
 // OAuthModelAlias defines a model ID alias for a specific channel.
@@ -669,6 +691,9 @@ func LoadConfigOptional(configFile string, optional bool) (*Config, error) {
 	// Validate raw payload rules and drop invalid entries.
 	cfg.SanitizePayloadRules()
 
+	// Normalize user-agent based provider routing rules.
+	cfg.SanitizeUserAgentRoutingRules()
+
 	// NOTE: Legacy migration persistence is intentionally disabled together with
 	// startup legacy migration to keep startup read-only for config.yaml.
 	// Re-enable the block below if automatic startup migration is needed again.
@@ -695,6 +720,64 @@ func (cfg *Config) SanitizePayloadRules() {
 	}
 	cfg.Payload.DefaultRaw = sanitizePayloadRawRules(cfg.Payload.DefaultRaw, "default-raw")
 	cfg.Payload.OverrideRaw = sanitizePayloadRawRules(cfg.Payload.OverrideRaw, "override-raw")
+}
+
+// SanitizeUserAgentRoutingRules trims and normalizes configured UA routing rules.
+func (cfg *Config) SanitizeUserAgentRoutingRules() {
+	if cfg == nil || len(cfg.Routing.UserAgentRules) == 0 {
+		return
+	}
+	cfg.Routing.UserAgentRules = sanitizeUserAgentRoutingRules(cfg.Routing.UserAgentRules)
+}
+
+func sanitizeUserAgentRoutingRules(rules []UserAgentRoutingRule) []UserAgentRoutingRule {
+	out := make([]UserAgentRoutingRule, 0, len(rules))
+	for i := range rules {
+		rule := rules[i]
+		rule.Name = strings.TrimSpace(rule.Name)
+		rule.Pattern = strings.TrimSpace(rule.Pattern)
+		if rule.Pattern == "" {
+			continue
+		}
+
+		matchMode := strings.ToLower(strings.TrimSpace(rule.MatchMode))
+		switch matchMode {
+		case "", "contains":
+			rule.MatchMode = "contains"
+		case "regex":
+			rule.MatchMode = "regex"
+		default:
+			rule.MatchMode = "contains"
+		}
+
+		rule.ForceProviders = normalizeProviderNames(rule.ForceProviders)
+		rule.PreferProviders = normalizeProviderNames(rule.PreferProviders)
+		out = append(out, rule)
+	}
+	return out
+}
+
+func normalizeProviderNames(names []string) []string {
+	if len(names) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(names))
+	seen := make(map[string]struct{}, len(names))
+	for _, name := range names {
+		normalized := strings.ToLower(strings.TrimSpace(name))
+		if normalized == "" {
+			continue
+		}
+		if _, ok := seen[normalized]; ok {
+			continue
+		}
+		seen[normalized] = struct{}{}
+		out = append(out, normalized)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func sanitizePayloadRawRules(rules []PayloadRule, section string) []PayloadRule {

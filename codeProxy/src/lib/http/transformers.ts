@@ -7,7 +7,7 @@ import type {
   AmpcodeConfig,
   AmpcodeModelMapping,
 } from "@/types";
-import type { Config } from "@/types/config";
+import type { Config, UserAgentRoutingRuleConfig } from "@/types/config";
 import { buildHeaderObject } from "@/utils/headers";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -84,6 +84,58 @@ const normalizeExcludedModels = (input: unknown): string[] => {
   return normalized;
 };
 
+const normalizeUserAgentRoutingProviders = (input: unknown): string[] => {
+  const rawList = Array.isArray(input)
+    ? input
+    : typeof input === "string"
+      ? input.split(/[\n,]/)
+      : [];
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+
+  rawList.forEach((item) => {
+    const trimmed = String(item ?? "")
+      .trim()
+      .toLowerCase();
+    if (!trimmed) return;
+    if (seen.has(trimmed)) return;
+    seen.add(trimmed);
+    normalized.push(trimmed);
+  });
+
+  return normalized;
+};
+
+const normalizeUserAgentRoutingRules = (
+  input: unknown,
+): UserAgentRoutingRuleConfig[] => {
+  if (!Array.isArray(input)) return [];
+  const normalized: UserAgentRoutingRuleConfig[] = [];
+  input.forEach((item) => {
+    if (!isRecord(item)) return;
+    const pattern = String(item.pattern ?? "").trim();
+    if (!pattern) return;
+    const enabled = normalizeBoolean(item.enabled);
+    const matchMode =
+      item["match-mode"] === "regex" || item.matchMode === "regex"
+        ? "regex"
+        : "contains";
+    normalized.push({
+      name: typeof item.name === "string" ? item.name : undefined,
+      enabled: enabled === undefined ? true : enabled,
+      matchMode,
+      pattern,
+      forceProviders: normalizeUserAgentRoutingProviders(
+        item["force-providers"] ?? item.forceProviders,
+      ),
+      preferProviders: normalizeUserAgentRoutingProviders(
+        item["prefer-providers"] ?? item.preferProviders,
+      ),
+    });
+  });
+  return normalized;
+};
+
 const normalizePrefix = (value: unknown): string | undefined => {
   if (value === undefined || value === null) return undefined;
   const trimmed = String(value).trim();
@@ -101,7 +153,9 @@ const normalizeApiKeyEntry = (entry: unknown): ApiKeyEntry | null => {
   const trimmed = String(apiKey || "").trim();
   if (!trimmed) return null;
 
-  const proxyUrl = record ? (record["proxy-url"] ?? record.proxyUrl) : undefined;
+  const proxyUrl = record
+    ? (record["proxy-url"] ?? record.proxyUrl)
+    : undefined;
   const headers = record ? normalizeHeaders(record.headers) : undefined;
 
   return {
@@ -111,10 +165,15 @@ const normalizeApiKeyEntry = (entry: unknown): ApiKeyEntry | null => {
   };
 };
 
-const normalizeProviderKeyConfig = (item: unknown): ProviderKeyConfig | null => {
+const normalizeProviderKeyConfig = (
+  item: unknown,
+): ProviderKeyConfig | null => {
   if (item === undefined || item === null) return null;
   const record = isRecord(item) ? item : null;
-  const apiKey = record?.["api-key"] ?? record?.apiKey ?? (typeof item === "string" ? item : "");
+  const apiKey =
+    record?.["api-key"] ??
+    record?.apiKey ??
+    (typeof item === "string" ? item : "");
   const trimmed = String(apiKey || "").trim();
   if (!trimmed) return null;
 
@@ -124,8 +183,12 @@ const normalizeProviderKeyConfig = (item: unknown): ProviderKeyConfig | null => 
   const prefix = normalizePrefix(record?.prefix ?? record?.["prefix"]);
   if (prefix) config.prefix = prefix;
   const baseUrl = record ? (record["base-url"] ?? record.baseUrl) : undefined;
-  const websockets = normalizeBoolean(record?.websockets ?? record?.["websockets"]);
-  const proxyUrl = record ? (record["proxy-url"] ?? record.proxyUrl) : undefined;
+  const websockets = normalizeBoolean(
+    record?.websockets ?? record?.["websockets"],
+  );
+  const proxyUrl = record
+    ? (record["proxy-url"] ?? record.proxyUrl)
+    : undefined;
   if (baseUrl) config.baseUrl = String(baseUrl);
   if (websockets !== undefined) config.websockets = websockets;
   if (proxyUrl) config.proxyUrl = String(proxyUrl);
@@ -156,7 +219,9 @@ const normalizeGeminiKeyConfig = (item: unknown): GeminiKeyConfig | null => {
   if (name) config.name = String(name).trim();
   const prefix = normalizePrefix(record?.prefix ?? record?.["prefix"]);
   if (prefix) config.prefix = prefix;
-  const baseUrl = record ? (record["base-url"] ?? record.baseUrl ?? record["base_url"]) : undefined;
+  const baseUrl = record
+    ? (record["base-url"] ?? record.baseUrl ?? record["base_url"])
+    : undefined;
   if (baseUrl) config.baseUrl = String(baseUrl);
   const proxyUrl = record
     ? (record["proxy-url"] ?? record.proxyUrl ?? record["proxy_url"])
@@ -173,7 +238,9 @@ const normalizeGeminiKeyConfig = (item: unknown): GeminiKeyConfig | null => {
   return config;
 };
 
-const normalizeOpenAIProvider = (provider: unknown): OpenAIProviderConfig | null => {
+const normalizeOpenAIProvider = (
+  provider: unknown,
+): OpenAIProviderConfig | null => {
   if (!isRecord(provider)) return null;
   const name = provider.name || provider.id;
   const baseUrl = provider["base-url"] ?? provider.baseUrl;
@@ -214,7 +281,9 @@ const normalizeOpenAIProvider = (provider: unknown): OpenAIProviderConfig | null
   return result;
 };
 
-const normalizeOauthExcluded = (payload: unknown): Record<string, string[]> | undefined => {
+const normalizeOauthExcluded = (
+  payload: unknown,
+): Record<string, string[]> | undefined => {
   if (!isRecord(payload)) return undefined;
   const source = payload["oauth-excluded-models"] ?? payload.items ?? payload;
   if (!isRecord(source)) return undefined;
@@ -228,7 +297,9 @@ const normalizeOauthExcluded = (payload: unknown): Record<string, string[]> | un
   return map;
 };
 
-const normalizeAmpcodeModelMappings = (input: unknown): AmpcodeModelMapping[] => {
+const normalizeAmpcodeModelMappings = (
+  input: unknown,
+): AmpcodeModelMapping[] => {
   if (!Array.isArray(input)) return [];
   const seen = new Set<string>();
   const mappings: AmpcodeModelMapping[] = [];
@@ -247,25 +318,35 @@ const normalizeAmpcodeModelMappings = (input: unknown): AmpcodeModelMapping[] =>
   return mappings;
 };
 
-const normalizeAmpcodeConfig = (payload: unknown): AmpcodeConfig | undefined => {
+const normalizeAmpcodeConfig = (
+  payload: unknown,
+): AmpcodeConfig | undefined => {
   const sourceRaw = isRecord(payload) ? (payload.ampcode ?? payload) : payload;
   if (!isRecord(sourceRaw)) return undefined;
   const source = sourceRaw;
 
   const config: AmpcodeConfig = {};
-  const upstreamUrl = source["upstream-url"] ?? source.upstreamUrl ?? source["upstream_url"];
+  const upstreamUrl =
+    source["upstream-url"] ?? source.upstreamUrl ?? source["upstream_url"];
   if (upstreamUrl) config.upstreamUrl = String(upstreamUrl);
   const upstreamApiKey =
-    source["upstream-api-key"] ?? source.upstreamApiKey ?? source["upstream_api_key"];
+    source["upstream-api-key"] ??
+    source.upstreamApiKey ??
+    source["upstream_api_key"];
   if (upstreamApiKey) config.upstreamApiKey = String(upstreamApiKey);
 
   const forceModelMappings = normalizeBoolean(
-    source["force-model-mappings"] ?? source.forceModelMappings ?? source["force_model_mappings"],
+    source["force-model-mappings"] ??
+      source.forceModelMappings ??
+      source["force_model_mappings"],
   );
-  if (forceModelMappings !== undefined) config.forceModelMappings = forceModelMappings;
+  if (forceModelMappings !== undefined)
+    config.forceModelMappings = forceModelMappings;
 
   const modelMappings = normalizeAmpcodeModelMappings(
-    source["model-mappings"] ?? source.modelMappings ?? source["model_mappings"],
+    source["model-mappings"] ??
+      source.modelMappings ??
+      source["model_mappings"],
   );
   if (modelMappings.length) config.modelMappings = modelMappings;
 
@@ -295,7 +376,9 @@ export const normalizeConfigResponse = (raw: unknown): Config => {
   const quota = raw["quota-exceeded"] ?? raw.quotaExceeded;
   if (isRecord(quota)) {
     config.quotaExceeded = {
-      switchProject: normalizeBoolean(quota["switch-project"] ?? quota.switchProject),
+      switchProject: normalizeBoolean(
+        quota["switch-project"] ?? quota.switchProject,
+      ),
       switchPreviewModel: normalizeBoolean(
         quota["switch-preview-model"] ?? quota.switchPreviewModel,
       ),
@@ -309,16 +392,27 @@ export const normalizeConfigResponse = (raw: unknown): Config => {
     raw["usage-log-content-enabled"] ?? raw.usageLogContentEnabled,
   );
   config.requestLog = normalizeBoolean(raw["request-log"] ?? raw.requestLog);
-  config.loggingToFile = normalizeBoolean(raw["logging-to-file"] ?? raw.loggingToFile);
-  const logsMaxTotalSizeMb = raw["logs-max-total-size-mb"] ?? raw.logsMaxTotalSizeMb;
-  if (typeof logsMaxTotalSizeMb === "number" && Number.isFinite(logsMaxTotalSizeMb)) {
+  config.loggingToFile = normalizeBoolean(
+    raw["logging-to-file"] ?? raw.loggingToFile,
+  );
+  const logsMaxTotalSizeMb =
+    raw["logs-max-total-size-mb"] ?? raw.logsMaxTotalSizeMb;
+  if (
+    typeof logsMaxTotalSizeMb === "number" &&
+    Number.isFinite(logsMaxTotalSizeMb)
+  ) {
     config.logsMaxTotalSizeMb = logsMaxTotalSizeMb;
-  } else if (typeof logsMaxTotalSizeMb === "string" && logsMaxTotalSizeMb.trim() !== "") {
+  } else if (
+    typeof logsMaxTotalSizeMb === "string" &&
+    logsMaxTotalSizeMb.trim() !== ""
+  ) {
     const parsed = Number(logsMaxTotalSizeMb);
     if (Number.isFinite(parsed)) config.logsMaxTotalSizeMb = parsed;
   }
   config.wsAuth = normalizeBoolean(raw["ws-auth"] ?? raw.wsAuth);
-  config.forceModelPrefix = normalizeBoolean(raw["force-model-prefix"] ?? raw.forceModelPrefix);
+  config.forceModelPrefix = normalizeBoolean(
+    raw["force-model-prefix"] ?? raw.forceModelPrefix,
+  );
   const routing = raw.routing;
   const strategyRaw = isRecord(routing)
     ? (routing.strategy ?? routing["strategy"])
@@ -326,12 +420,23 @@ export const normalizeConfigResponse = (raw: unknown): Config => {
   if (strategyRaw !== undefined && strategyRaw !== null) {
     config.routingStrategy = String(strategyRaw);
   }
+  if (isRecord(routing)) {
+    const userAgentRoutingRules = normalizeUserAgentRoutingRules(
+      routing["user-agent-rules"] ?? routing.userAgentRules,
+    );
+    if (userAgentRoutingRules.length > 0) {
+      config.userAgentRoutingRules = userAgentRoutingRules;
+    }
+  }
   const apiKeysRaw = raw["api-keys"] ?? raw.apiKeys;
   if (Array.isArray(apiKeysRaw)) {
-    config.apiKeys = apiKeysRaw.map((key) => String(key)).filter((key) => key.trim() !== "");
+    config.apiKeys = apiKeysRaw
+      .map((key) => String(key))
+      .filter((key) => key.trim() !== "");
   }
 
-  const geminiList = raw["gemini-api-key"] ?? raw.geminiApiKey ?? raw.geminiApiKeys;
+  const geminiList =
+    raw["gemini-api-key"] ?? raw.geminiApiKey ?? raw.geminiApiKeys;
   if (Array.isArray(geminiList)) {
     config.geminiApiKeys = geminiList
       .map((item) => normalizeGeminiKeyConfig(item))
@@ -346,21 +451,25 @@ export const normalizeConfigResponse = (raw: unknown): Config => {
   }
 
   const codexCompatList =
-    raw["codex-compat-api-key"] ?? raw.codexCompatApiKey ?? raw.codexCompatApiKeys;
+    raw["codex-compat-api-key"] ??
+    raw.codexCompatApiKey ??
+    raw.codexCompatApiKeys;
   if (Array.isArray(codexCompatList)) {
     config.codexCompatApiKeys = codexCompatList
       .map((item) => normalizeProviderKeyConfig(item))
       .filter(Boolean) as ProviderKeyConfig[];
   }
 
-  const claudeList = raw["claude-api-key"] ?? raw.claudeApiKey ?? raw.claudeApiKeys;
+  const claudeList =
+    raw["claude-api-key"] ?? raw.claudeApiKey ?? raw.claudeApiKeys;
   if (Array.isArray(claudeList)) {
     config.claudeApiKeys = claudeList
       .map((item) => normalizeProviderKeyConfig(item))
       .filter(Boolean) as ProviderKeyConfig[];
   }
 
-  const vertexList = raw["vertex-api-key"] ?? raw.vertexApiKey ?? raw.vertexApiKeys;
+  const vertexList =
+    raw["vertex-api-key"] ?? raw.vertexApiKey ?? raw.vertexApiKeys;
   if (Array.isArray(vertexList)) {
     config.vertexApiKeys = vertexList
       .map((item) => normalizeProviderKeyConfig(item))
@@ -368,7 +477,9 @@ export const normalizeConfigResponse = (raw: unknown): Config => {
   }
 
   const openaiList =
-    raw["openai-compatibility"] ?? raw.openaiCompatibility ?? raw.openAICompatibility;
+    raw["openai-compatibility"] ??
+    raw.openaiCompatibility ??
+    raw.openAICompatibility;
   if (Array.isArray(openaiList)) {
     config.openaiCompatibility = openaiList
       .map((item) => normalizeOpenAIProvider(item))

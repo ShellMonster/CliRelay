@@ -40,6 +40,17 @@ export interface StreamingConfig {
 }
 
 export type RoutingStrategy = "round-robin" | "fill-first";
+export type UserAgentRoutingMatchMode = "contains" | "regex";
+
+export type UserAgentRoutingRuleEntry = {
+  id: string;
+  name: string;
+  enabled: boolean;
+  matchMode: UserAgentRoutingMatchMode;
+  pattern: string;
+  forceProviders: string[];
+  preferProviders: string[];
+};
 
 export type VisualConfigValues = {
   host: string;
@@ -74,6 +85,7 @@ export type VisualConfigValues = {
   quotaSwitchPreviewModel: boolean;
 
   routingStrategy: RoutingStrategy;
+  routingUserAgentRules: UserAgentRoutingRuleEntry[];
 
   payloadDefaultRules: PayloadRule[];
   payloadOverrideRules: PayloadRule[];
@@ -113,6 +125,7 @@ export const DEFAULT_VISUAL_VALUES: VisualConfigValues = {
   quotaSwitchProject: true,
   quotaSwitchPreviewModel: true,
   routingStrategy: "round-robin",
+  routingUserAgentRules: [],
   payloadDefaultRules: [],
   payloadOverrideRules: [],
   payloadFilterRules: [],
