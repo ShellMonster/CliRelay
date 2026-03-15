@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	accessrestrictions "github.com/router-for-me/CLIProxyAPI/v6/internal/access/restrictions"
 	sdkaccess "github.com/router-for-me/CLIProxyAPI/v6/sdk/access"
 	sdkconfig "github.com/router-for-me/CLIProxyAPI/v6/sdk/config"
 )
@@ -16,58 +17,74 @@ func Register(cfg *sdkconfig.SDKConfig) {
 		return
 	}
 
-	keyModels := buildKeyModelsMap(cfg)
-	if len(keyModels) == 0 {
+	keyEntries := buildKeyEntriesMap(cfg)
+	if len(keyEntries) == 0 {
 		sdkaccess.UnregisterProvider(sdkaccess.AccessProviderTypeConfigAPIKey)
 		return
 	}
 
 	sdkaccess.RegisterProvider(
 		sdkaccess.AccessProviderTypeConfigAPIKey,
-		newProvider(sdkaccess.DefaultAccessProviderName, keyModels),
+		newProvider(sdkaccess.DefaultAccessProviderName, keyEntries),
 	)
 }
 
-// buildKeyModelsMap builds a map from API key to allowed models list.
+type keyEntryConfig struct {
+	AllowedModels  []string
+	ProviderAccess []sdkconfig.APIKeyProviderAccess
+}
+
+// buildKeyEntriesMap builds a map from API key to access restrictions.
 // Keys from both APIKeys (legacy, no restrictions) and APIKeyEntries are included.
-func buildKeyModelsMap(cfg *sdkconfig.SDKConfig) map[string][]string {
-	result := make(map[string][]string)
-	// APIKeyEntries first — they have the more specific config with AllowedModels
+func buildKeyEntriesMap(cfg *sdkconfig.SDKConfig) map[string]keyEntryConfig {
+	result := make(map[string]keyEntryConfig)
+	entryKeys := make(map[string]struct{}, len(cfg.APIKeyEntries))
+	// APIKeyEntries first — they have the more specific config with restrictions.
 	for _, entry := range cfg.APIKeyEntries {
-		trimmed := strings.TrimSpace(entry.Key)
-		if trimmed == "" || entry.Disabled {
+		normalized := accessrestrictions.NormalizeAPIKeyEntry(entry)
+		if normalized.Key == "" {
 			continue
 		}
-		if _, exists := result[trimmed]; exists {
+		entryKeys[normalized.Key] = struct{}{}
+		if normalized.Disabled {
 			continue
 		}
-		result[trimmed] = entry.AllowedModels
+		if _, exists := result[normalized.Key]; exists {
+			continue
+		}
+		result[normalized.Key] = keyEntryConfig{
+			AllowedModels:  append([]string(nil), normalized.AllowedModels...),
+			ProviderAccess: append([]sdkconfig.APIKeyProviderAccess(nil), normalized.ProviderAccess...),
+		}
 	}
-	// Legacy APIKeys — no model restrictions (empty slice = all models allowed)
+	// Legacy APIKeys — no restrictions.
 	for _, k := range cfg.APIKeys {
 		trimmed := strings.TrimSpace(k)
 		if trimmed == "" {
 			continue
 		}
+		if _, exists := entryKeys[trimmed]; exists {
+			continue
+		}
 		if _, exists := result[trimmed]; exists {
 			continue
 		}
-		result[trimmed] = nil
+		result[trimmed] = keyEntryConfig{}
 	}
 	return result
 }
 
 type provider struct {
 	name string
-	keys map[string][]string // key -> allowed models (nil/empty = all models)
+	keys map[string]keyEntryConfig // key -> access restrictions
 }
 
-func newProvider(name string, keyModels map[string][]string) *provider {
+func newProvider(name string, keys map[string]keyEntryConfig) *provider {
 	providerName := strings.TrimSpace(name)
 	if providerName == "" {
 		providerName = sdkaccess.DefaultAccessProviderName
 	}
-	return &provider{name: providerName, keys: keyModels}
+	return &provider{name: providerName, keys: keys}
 }
 
 func (p *provider) Identifier() string {
@@ -114,12 +131,12 @@ func (p *provider) Authenticate(_ context.Context, r *http.Request) (*sdkaccess.
 		if candidate.value == "" {
 			continue
 		}
-		if allowedModels, ok := p.keys[candidate.value]; ok {
+		if entry, ok := p.keys[candidate.value]; ok {
 			metadata := map[string]string{
 				"source": candidate.source,
 			}
-			if len(allowedModels) > 0 {
-				metadata["allowed-models"] = strings.Join(allowedModels, ",")
+			for key, value := range accessrestrictions.BuildRestrictionMetadata(entry.AllowedModels, entry.ProviderAccess) {
+				metadata[key] = value
 			}
 			return &sdkaccess.Result{
 				Provider:  p.Identifier(),

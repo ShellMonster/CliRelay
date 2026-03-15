@@ -1,5 +1,28 @@
 import { apiClient } from "@/lib/http/client";
 
+export interface ApiKeyProviderAccessEntry {
+  provider: string;
+  channels?: string[];
+  models?: string[];
+}
+
+export interface ApiKeyAccessModelOption {
+  id: string;
+  label: string;
+}
+
+export interface ApiKeyAccessChannelOption {
+  id: string;
+  label: string;
+  models: ApiKeyAccessModelOption[];
+}
+
+export interface ApiKeyAccessProviderOption {
+  provider: string;
+  label: string;
+  channels: ApiKeyAccessChannelOption[];
+}
+
 export interface ApiKeyEntry {
   key: string;
   name?: string;
@@ -7,6 +30,7 @@ export interface ApiKeyEntry {
   "daily-limit"?: number;
   "total-quota"?: number;
   "allowed-models"?: string[];
+  "provider-access"?: ApiKeyProviderAccessEntry[];
   "created-at"?: string;
 }
 
@@ -39,5 +63,11 @@ export const apiKeyEntriesApi = {
   delete: (params: { index?: number; key?: string }) => {
     const query = params.key ? `key=${encodeURIComponent(params.key)}` : `index=${params.index}`;
     return apiClient.delete(`/api-key-entries?${query}`);
+  },
+
+  async getAccessOptions(): Promise<ApiKeyAccessProviderOption[]> {
+    const data = await apiClient.get<Record<string, unknown>>("/api-key-access-options");
+    const providers = data?.providers as unknown;
+    return Array.isArray(providers) ? (providers as ApiKeyAccessProviderOption[]) : [];
   },
 };

@@ -23,6 +23,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/access"
+	accessrestrictions "github.com/router-for-me/CLIProxyAPI/v6/internal/access/restrictions"
 	managementHandlers "github.com/router-for-me/CLIProxyAPI/v6/internal/api/handlers/management"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/api/middleware"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/api/modules"
@@ -569,6 +570,7 @@ func (s *Server) registerManagementRoutes() {
 		mgmt.PUT("/api-key-entries", s.mgmt.PutAPIKeyEntries)
 		mgmt.PATCH("/api-key-entries", s.mgmt.PatchAPIKeyEntry)
 		mgmt.DELETE("/api-key-entries", s.mgmt.DeleteAPIKeyEntry)
+		mgmt.GET("/api-key-access-options", s.mgmt.GetAPIKeyAccessOptions)
 
 		mgmt.GET("/gemini-api-key", s.mgmt.GetGeminiKeys)
 		mgmt.PUT("/gemini-api-key", s.mgmt.PutGeminiKeys)
@@ -1165,9 +1167,8 @@ func AuthMiddleware(manager *sdkaccess.Manager) gin.HandlerFunc {
 	}
 }
 
-// ModelRestrictionMiddleware enforces the allowed-models restriction from API key config.
-// It reads the "allowed-models" metadata set by AuthMiddleware, parses the model from
-// the request body, and returns 403 if the model is not in the allowed list.
+// ModelRestrictionMiddleware enforces API key provider/model restrictions for request bodies
+// that include a "model" field. Path-based model restrictions are enforced later by handlers.
 func ModelRestrictionMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Only check POST requests (GET /models etc. don't need restriction)
@@ -1187,22 +1188,8 @@ func ModelRestrictionMiddleware() gin.HandlerFunc {
 			c.Next()
 			return
 		}
-		allowedStr, exists := metadata["allowed-models"]
-		if !exists || allowedStr == "" {
-			// No restriction — allow all models
-			c.Next()
-			return
-		}
-
-		// Parse allowed models into a set
-		allowedModels := make(map[string]struct{})
-		for _, m := range strings.Split(allowedStr, ",") {
-			trimmed := strings.TrimSpace(m)
-			if trimmed != "" {
-				allowedModels[trimmed] = struct{}{}
-			}
-		}
-		if len(allowedModels) == 0 {
+		restrictions := accessrestrictions.ParseRestrictions(metadata)
+		if restrictions.IsZero() {
 			c.Next()
 			return
 		}
@@ -1226,8 +1213,14 @@ func ModelRestrictionMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// Check if model is allowed
-		if _, allowed := allowedModels[bodyObj.Model]; !allowed {
+		providers := util.GetProviderName(bodyObj.Model)
+		if len(providers) == 0 {
+			// Unknown model/provider is handled by downstream handlers.
+			c.Next()
+			return
+		}
+
+		if len(restrictions.FilterProviders(providers, bodyObj.Model)) == 0 {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
 				"error": map[string]interface{}{
 					"message": fmt.Sprintf("model '%s' is not allowed for this API key", bodyObj.Model),

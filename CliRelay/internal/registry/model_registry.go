@@ -874,6 +874,32 @@ func (r *ModelRegistry) GetAvailableModelsByProvider(provider string) []*ModelIn
 	return result
 }
 
+// GetProviders returns the currently registered provider identifiers.
+func (r *ModelRegistry) GetProviders() []string {
+	if r == nil {
+		return nil
+	}
+
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
+
+	seen := make(map[string]struct{}, len(r.clientProviders))
+	providers := make([]string, 0, len(r.clientProviders))
+	for _, provider := range r.clientProviders {
+		provider = strings.ToLower(strings.TrimSpace(provider))
+		if provider == "" {
+			continue
+		}
+		if _, exists := seen[provider]; exists {
+			continue
+		}
+		seen[provider] = struct{}{}
+		providers = append(providers, provider)
+	}
+	sort.Strings(providers)
+	return providers
+}
+
 // GetModelCount returns the number of available clients for a specific model
 // Parameters:
 //   - modelID: The model ID to check

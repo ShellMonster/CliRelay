@@ -8,14 +8,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	accessrestrictions "github.com/router-for-me/CLIProxyAPI/v6/internal/access/restrictions"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/interfaces"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/logging"
+	"github.com/router-for-me/CLIProxyAPI/v6/internal/registry"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/thinking"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/util"
 	coreauth "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/auth"
@@ -257,6 +260,206 @@ func executionSessionIDFromContext(ctx context.Context) string {
 	}
 }
 
+func accessRestrictionsFromContext(ctx context.Context) accessrestrictions.Restrictions {
+	if ctx == nil {
+		return accessrestrictions.Restrictions{}
+	}
+	ginCtx, ok := ctx.Value("gin").(*gin.Context)
+	if !ok || ginCtx == nil {
+		return accessrestrictions.Restrictions{}
+	}
+	return accessRestrictionsFromGin(ginCtx)
+}
+
+func accessRestrictionsFromGin(c *gin.Context) accessrestrictions.Restrictions {
+	if c == nil {
+		return accessrestrictions.Restrictions{}
+	}
+	metadataVal, exists := c.Get("accessMetadata")
+	if !exists {
+		return accessrestrictions.Restrictions{}
+	}
+	metadata, ok := metadataVal.(map[string]string)
+	if !ok {
+		return accessrestrictions.Restrictions{}
+	}
+	return accessrestrictions.ParseRestrictions(metadata)
+}
+
+func normalizeRestrictedModelName(modelName string) string {
+	modelName = strings.TrimSpace(modelName)
+	if strings.HasPrefix(modelName, "models/") {
+		modelName = strings.TrimPrefix(modelName, "models/")
+	}
+	return strings.TrimSpace(modelName)
+}
+
+func extractRestrictedModelName(model map[string]any, identifierFields []string) string {
+	for _, field := range identifierFields {
+		value, ok := model[field].(string)
+		if !ok {
+			continue
+		}
+		value = normalizeRestrictedModelName(value)
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func normalizeRestrictedProviders(providers []string) []string {
+	if len(providers) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(providers))
+	seen := make(map[string]struct{}, len(providers))
+	for _, provider := range providers {
+		normalized := strings.ToLower(strings.TrimSpace(provider))
+		if normalized == "" {
+			continue
+		}
+		if _, exists := seen[normalized]; exists {
+			continue
+		}
+		seen[normalized] = struct{}{}
+		out = append(out, normalized)
+	}
+	return out
+}
+
+func restrictionModelLookupKey(model string) string {
+	normalized := strings.TrimSpace(model)
+	if normalized == "" {
+		return ""
+	}
+	parsed := thinking.ParseSuffix(normalized)
+	if parsed.ModelName != "" {
+		return strings.TrimSpace(parsed.ModelName)
+	}
+	return normalized
+}
+
+func (h *BaseAPIHandler) resolveRestrictedTargets(restrictions accessrestrictions.Restrictions, providers []string, modelName string) ([]string, []string) {
+	normalizedProviders := normalizeRestrictedProviders(providers)
+	if len(normalizedProviders) == 0 {
+		return nil, nil
+	}
+	if restrictions.IsZero() {
+		return normalizedProviders, nil
+	}
+	if h == nil || h.AuthManager == nil {
+		return restrictions.FilterProviders(normalizedProviders, modelName), nil
+	}
+
+	auths := h.AuthManager.List()
+	if len(auths) == 0 {
+		return restrictions.FilterProviders(normalizedProviders, modelName), nil
+	}
+
+	providerSet := make(map[string]struct{}, len(normalizedProviders))
+	for _, provider := range normalizedProviders {
+		providerSet[provider] = struct{}{}
+	}
+
+	modelKey := restrictionModelLookupKey(modelName)
+	reg := registry.GetGlobalRegistry()
+	allowedProviderSet := make(map[string]struct{}, len(normalizedProviders))
+	allowedAuthIDs := make([]string, 0, len(auths))
+	allowedAuthSet := make(map[string]struct{}, len(auths))
+
+	for _, auth := range auths {
+		if auth == nil || auth.Disabled {
+			continue
+		}
+		providerKey := strings.ToLower(strings.TrimSpace(auth.Provider))
+		if providerKey == "" {
+			continue
+		}
+		if _, exists := providerSet[providerKey]; !exists {
+			continue
+		}
+		if modelKey != "" && reg != nil && !reg.ClientSupportsModel(auth.ID, modelKey) {
+			continue
+		}
+		if !restrictions.AllowsAuth(auth, modelName) {
+			continue
+		}
+		allowedProviderSet[providerKey] = struct{}{}
+		authID := accessrestrictions.ChannelIDForAuth(auth)
+		if authID == "" {
+			continue
+		}
+		if _, exists := allowedAuthSet[authID]; exists {
+			continue
+		}
+		allowedAuthSet[authID] = struct{}{}
+		allowedAuthIDs = append(allowedAuthIDs, authID)
+	}
+
+	if len(allowedProviderSet) == 0 {
+		return nil, nil
+	}
+
+	filteredProviders := make([]string, 0, len(normalizedProviders))
+	for _, provider := range normalizedProviders {
+		if _, exists := allowedProviderSet[provider]; !exists {
+			continue
+		}
+		filteredProviders = append(filteredProviders, provider)
+	}
+	sort.Strings(allowedAuthIDs)
+	return filteredProviders, allowedAuthIDs
+}
+
+// FilterModelsForRequest applies API key restrictions to a model list response.
+func (h *BaseAPIHandler) FilterModelsForRequest(c *gin.Context, models []map[string]any, identifierFields ...string) []map[string]any {
+	restrictions := accessRestrictionsFromGin(c)
+	if restrictions.IsZero() || len(models) == 0 {
+		return models
+	}
+	if len(identifierFields) == 0 {
+		identifierFields = []string{"id", "name"}
+	}
+
+	filtered := make([]map[string]any, 0, len(models))
+	for _, model := range models {
+		modelName := extractRestrictedModelName(model, identifierFields)
+		if modelName == "" {
+			continue
+		}
+		providers := util.GetProviderName(modelName)
+		if len(providers) == 0 {
+			if len(restrictions.AllowedModels) > 0 && restrictions.AllowsProviderModel("", modelName) {
+				filtered = append(filtered, model)
+			}
+			continue
+		}
+		if filteredProviders, _ := h.resolveRestrictedTargets(restrictions, providers, modelName); len(filteredProviders) > 0 {
+			filtered = append(filtered, model)
+		}
+	}
+	return filtered
+}
+
+// IsModelAllowedForRequest reports whether the given model is allowed by the request's API key.
+func (h *BaseAPIHandler) IsModelAllowedForRequest(c *gin.Context, modelName string) bool {
+	restrictions := accessRestrictionsFromGin(c)
+	if restrictions.IsZero() {
+		return true
+	}
+	modelName = normalizeRestrictedModelName(modelName)
+	if modelName == "" {
+		return true
+	}
+	providers := util.GetProviderName(modelName)
+	if len(providers) == 0 {
+		return true
+	}
+	filteredProviders, _ := h.resolveRestrictedTargets(restrictions, providers, modelName)
+	return len(filteredProviders) > 0
+}
+
 // BaseAPIHandler contains the handlers for API endpoints.
 // It holds a pool of clients to interact with the backend service and manages
 // load balancing, client selection, and configuration.
@@ -473,12 +676,15 @@ func appendAPIResponse(c *gin.Context, data []byte) {
 // ExecuteWithAuthManager executes a non-streaming request via the core auth manager.
 // This path is the only supported execution route.
 func (h *BaseAPIHandler) ExecuteWithAuthManager(ctx context.Context, handlerType, modelName string, rawJSON []byte, alt string) ([]byte, http.Header, *interfaces.ErrorMessage) {
-	providers, normalizedModel, errMsg := h.getRequestDetails(modelName)
+	providers, normalizedModel, allowedAuthIDs, errMsg := h.getRequestDetails(ctx, modelName)
 	if errMsg != nil {
 		return nil, nil, errMsg
 	}
 	reqMeta := requestExecutionMetadata(ctx)
 	reqMeta[coreexecutor.RequestedModelMetadataKey] = normalizedModel
+	if len(allowedAuthIDs) > 0 {
+		reqMeta[coreexecutor.AllowedAuthIDsMetadataKey] = allowedAuthIDs
+	}
 	payload := rawJSON
 	if len(payload) == 0 {
 		payload = nil
@@ -519,12 +725,15 @@ func (h *BaseAPIHandler) ExecuteWithAuthManager(ctx context.Context, handlerType
 // ExecuteCountWithAuthManager executes a non-streaming request via the core auth manager.
 // This path is the only supported execution route.
 func (h *BaseAPIHandler) ExecuteCountWithAuthManager(ctx context.Context, handlerType, modelName string, rawJSON []byte, alt string) ([]byte, http.Header, *interfaces.ErrorMessage) {
-	providers, normalizedModel, errMsg := h.getRequestDetails(modelName)
+	providers, normalizedModel, allowedAuthIDs, errMsg := h.getRequestDetails(ctx, modelName)
 	if errMsg != nil {
 		return nil, nil, errMsg
 	}
 	reqMeta := requestExecutionMetadata(ctx)
 	reqMeta[coreexecutor.RequestedModelMetadataKey] = normalizedModel
+	if len(allowedAuthIDs) > 0 {
+		reqMeta[coreexecutor.AllowedAuthIDsMetadataKey] = allowedAuthIDs
+	}
 	payload := rawJSON
 	if len(payload) == 0 {
 		payload = nil
@@ -566,7 +775,7 @@ func (h *BaseAPIHandler) ExecuteCountWithAuthManager(ctx context.Context, handle
 // This path is the only supported execution route.
 // The returned http.Header carries upstream response headers captured before streaming begins.
 func (h *BaseAPIHandler) ExecuteStreamWithAuthManager(ctx context.Context, handlerType, modelName string, rawJSON []byte, alt string) (<-chan []byte, http.Header, <-chan *interfaces.ErrorMessage) {
-	providers, normalizedModel, errMsg := h.getRequestDetails(modelName)
+	providers, normalizedModel, allowedAuthIDs, errMsg := h.getRequestDetails(ctx, modelName)
 	if errMsg != nil {
 		errChan := make(chan *interfaces.ErrorMessage, 1)
 		errChan <- errMsg
@@ -575,6 +784,9 @@ func (h *BaseAPIHandler) ExecuteStreamWithAuthManager(ctx context.Context, handl
 	}
 	reqMeta := requestExecutionMetadata(ctx)
 	reqMeta[coreexecutor.RequestedModelMetadataKey] = normalizedModel
+	if len(allowedAuthIDs) > 0 {
+		reqMeta[coreexecutor.AllowedAuthIDsMetadataKey] = allowedAuthIDs
+	}
 	payload := rawJSON
 	if len(payload) == 0 {
 		payload = nil
@@ -779,7 +991,7 @@ func statusFromError(err error) int {
 	return 0
 }
 
-func (h *BaseAPIHandler) getRequestDetails(modelName string) (providers []string, normalizedModel string, err *interfaces.ErrorMessage) {
+func (h *BaseAPIHandler) getRequestDetails(ctx context.Context, modelName string) (providers []string, normalizedModel string, allowedAuthIDs []string, err *interfaces.ErrorMessage) {
 	resolvedModelName := modelName
 	initialSuffix := thinking.ParseSuffix(modelName)
 	if initialSuffix.ModelName == "auto" {
@@ -807,12 +1019,21 @@ func (h *BaseAPIHandler) getRequestDetails(modelName string) (providers []string
 	}
 
 	if len(providers) == 0 {
-		return nil, "", &interfaces.ErrorMessage{StatusCode: http.StatusBadGateway, Error: fmt.Errorf("unknown provider for model %s", modelName)}
+		return nil, "", nil, &interfaces.ErrorMessage{StatusCode: http.StatusBadGateway, Error: fmt.Errorf("unknown provider for model %s", modelName)}
+	}
+
+	restrictions := accessRestrictionsFromContext(ctx)
+	filteredProviders, resolvedAuthIDs := h.resolveRestrictedTargets(restrictions, providers, resolvedModelName)
+	if len(filteredProviders) == 0 && !restrictions.IsZero() {
+		return nil, "", nil, &interfaces.ErrorMessage{
+			StatusCode: http.StatusForbidden,
+			Error:      fmt.Errorf("model '%s' is not allowed for this API key", modelName),
+		}
 	}
 
 	// The thinking suffix is preserved in the model name itself, so no
 	// metadata-based configuration passing is needed.
-	return providers, resolvedModelName, nil
+	return filteredProviders, resolvedModelName, resolvedAuthIDs, nil
 }
 
 func cloneBytes(src []byte) []byte {

@@ -48,7 +48,7 @@ func (h *GeminiAPIHandler) Models() []map[string]any {
 // GeminiModels handles the Gemini models listing endpoint.
 // It returns a JSON response containing available Gemini models and their specifications.
 func (h *GeminiAPIHandler) GeminiModels(c *gin.Context) {
-	rawModels := h.Models()
+	rawModels := h.FilterModelsForRequest(c, h.Models(), "name", "id")
 	normalizedModels := make([]map[string]any, 0, len(rawModels))
 	defaultMethods := []string{"generateContent"}
 	for _, model := range rawModels {
@@ -93,9 +93,19 @@ func (h *GeminiAPIHandler) GeminiGetHandler(c *gin.Context) {
 		return
 	}
 	action := strings.TrimPrefix(request.Action, "/")
+	if !h.IsModelAllowedForRequest(c, action) {
+		c.JSON(http.StatusForbidden, handlers.ErrorResponse{
+			Error: handlers.ErrorDetail{
+				Message: fmt.Sprintf("model '%s' is not allowed for this API key", action),
+				Type:    "forbidden",
+				Code:    "model_not_allowed",
+			},
+		})
+		return
+	}
 
 	// Get dynamic models from the global registry and find the matching one
-	availableModels := h.Models()
+	availableModels := h.FilterModelsForRequest(c, h.Models(), "name", "id")
 	var targetModel map[string]any
 
 	for _, model := range availableModels {

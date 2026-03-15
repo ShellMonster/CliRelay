@@ -521,7 +521,7 @@ func (m *Manager) Execute(ctx context.Context, providers []string, req cliproxye
 			return resp, nil
 		}
 		lastErr = errExec
-		wait, shouldRetry := m.shouldRetryAfterError(errExec, attempt, routedProviders, req.Model, maxWait)
+		wait, shouldRetry := m.shouldRetryAfterError(errExec, attempt, routedProviders, req.Model, maxWait, opts.Metadata)
 		if !shouldRetry {
 			break
 		}
@@ -553,7 +553,7 @@ func (m *Manager) ExecuteCount(ctx context.Context, providers []string, req clip
 			return resp, nil
 		}
 		lastErr = errExec
-		wait, shouldRetry := m.shouldRetryAfterError(errExec, attempt, routedProviders, req.Model, maxWait)
+		wait, shouldRetry := m.shouldRetryAfterError(errExec, attempt, routedProviders, req.Model, maxWait, opts.Metadata)
 		if !shouldRetry {
 			break
 		}
@@ -585,7 +585,7 @@ func (m *Manager) ExecuteStream(ctx context.Context, providers []string, req cli
 			return result, nil
 		}
 		lastErr = errStream
-		wait, shouldRetry := m.shouldRetryAfterError(errStream, attempt, routedProviders, req.Model, maxWait)
+		wait, shouldRetry := m.shouldRetryAfterError(errStream, attempt, routedProviders, req.Model, maxWait, opts.Metadata)
 		if !shouldRetry {
 			break
 		}
@@ -853,6 +853,58 @@ func pinnedAuthIDFromMetadata(meta map[string]any) string {
 	default:
 		return ""
 	}
+}
+
+func allowedAuthIDsFromMetadata(meta map[string]any) map[string]struct{} {
+	if len(meta) == 0 {
+		return nil
+	}
+	raw, ok := meta[cliproxyexecutor.AllowedAuthIDsMetadataKey]
+	if !ok || raw == nil {
+		return nil
+	}
+
+	values := make([]string, 0)
+	switch v := raw.(type) {
+	case []string:
+		values = append(values, v...)
+	case []any:
+		for _, item := range v {
+			if str, ok := item.(string); ok {
+				values = append(values, str)
+			}
+		}
+	case string:
+		if strings.TrimSpace(v) != "" {
+			values = append(values, strings.Split(v, ",")...)
+		}
+	default:
+		return nil
+	}
+
+	if len(values) == 0 {
+		return nil
+	}
+	allowed := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		normalized := strings.TrimSpace(value)
+		if normalized == "" {
+			continue
+		}
+		allowed[normalized] = struct{}{}
+	}
+	if len(allowed) == 0 {
+		return nil
+	}
+	return allowed
+}
+
+func authAllowedByMetadata(authID string, allowed map[string]struct{}) bool {
+	if len(allowed) == 0 {
+		return true
+	}
+	_, ok := allowed[strings.TrimSpace(authID)]
+	return ok
 }
 
 func publishSelectedAuthMetadata(meta map[string]any, authID string) {
@@ -1324,7 +1376,7 @@ func (m *Manager) retrySettings() (int, time.Duration) {
 	return int(m.requestRetry.Load()), time.Duration(m.maxRetryInterval.Load())
 }
 
-func (m *Manager) closestCooldownWait(providers []string, model string, attempt int) (time.Duration, bool) {
+func (m *Manager) closestCooldownWait(providers []string, model string, attempt int, meta map[string]any) (time.Duration, bool) {
 	if m == nil || len(providers) == 0 {
 		return 0, false
 	}
@@ -1341,6 +1393,7 @@ func (m *Manager) closestCooldownWait(providers []string, model string, attempt 
 		}
 		providerSet[key] = struct{}{}
 	}
+	allowedAuthIDs := allowedAuthIDsFromMetadata(meta)
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	var (
@@ -1349,6 +1402,9 @@ func (m *Manager) closestCooldownWait(providers []string, model string, attempt 
 	)
 	for _, auth := range m.auths {
 		if auth == nil {
+			continue
+		}
+		if !authAllowedByMetadata(auth.ID, allowedAuthIDs) {
 			continue
 		}
 		providerKey := strings.TrimSpace(strings.ToLower(auth.Provider))
@@ -1381,7 +1437,7 @@ func (m *Manager) closestCooldownWait(providers []string, model string, attempt 
 	return minWait, found
 }
 
-func (m *Manager) shouldRetryAfterError(err error, attempt int, providers []string, model string, maxWait time.Duration) (time.Duration, bool) {
+func (m *Manager) shouldRetryAfterError(err error, attempt int, providers []string, model string, maxWait time.Duration, meta map[string]any) (time.Duration, bool) {
 	if err == nil {
 		return 0, false
 	}
@@ -1394,7 +1450,7 @@ func (m *Manager) shouldRetryAfterError(err error, attempt int, providers []stri
 	if isRequestInvalidError(err) {
 		return 0, false
 	}
-	wait, found := m.closestCooldownWait(providers, model, attempt)
+	wait, found := m.closestCooldownWait(providers, model, attempt, meta)
 	if !found || wait > maxWait {
 		return 0, false
 	}
@@ -1875,6 +1931,7 @@ func (m *Manager) CloseExecutionSession(sessionID string) {
 
 func (m *Manager) pickNext(ctx context.Context, provider, model string, opts cliproxyexecutor.Options, tried map[string]struct{}) (*Auth, ProviderExecutor, error) {
 	pinnedAuthID := pinnedAuthIDFromMetadata(opts.Metadata)
+	allowedAuthIDs := allowedAuthIDsFromMetadata(opts.Metadata)
 
 	m.mu.RLock()
 	executor, okExecutor := m.executors[provider]
@@ -1897,6 +1954,9 @@ func (m *Manager) pickNext(ctx context.Context, provider, model string, opts cli
 			continue
 		}
 		if pinnedAuthID != "" && candidate.ID != pinnedAuthID {
+			continue
+		}
+		if !authAllowedByMetadata(candidate.ID, allowedAuthIDs) {
 			continue
 		}
 		if _, used := tried[candidate.ID]; used {
@@ -1939,6 +1999,7 @@ func (m *Manager) pickNextMixed(ctx context.Context, providers []string, model s
 	}
 
 	pinnedAuthID := pinnedAuthIDFromMetadata(opts.Metadata)
+	allowedAuthIDs := allowedAuthIDsFromMetadata(opts.Metadata)
 
 	providerSet := make(map[string]struct{}, len(providers))
 	for _, provider := range providers {
@@ -1968,6 +2029,9 @@ func (m *Manager) pickNextMixed(ctx context.Context, providers []string, model s
 			continue
 		}
 		if pinnedAuthID != "" && candidate.ID != pinnedAuthID {
+			continue
+		}
+		if !authAllowedByMetadata(candidate.ID, allowedAuthIDs) {
 			continue
 		}
 		providerKey := strings.TrimSpace(strings.ToLower(candidate.Provider))

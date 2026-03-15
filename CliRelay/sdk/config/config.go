@@ -11,6 +11,7 @@ type SDKConfig = internalconfig.SDKConfig
 type Config = internalconfig.Config
 
 type StreamingConfig = internalconfig.StreamingConfig
+type APIKeyProviderAccess = internalconfig.APIKeyProviderAccess
 type TLSConfig = internalconfig.TLSConfig
 type RemoteManagement = internalconfig.RemoteManagement
 type RoutingConfig = internalconfig.RoutingConfig

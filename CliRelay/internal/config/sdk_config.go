@@ -25,7 +25,8 @@ type SDKConfig struct {
 	APIKeys []string `yaml:"api-keys" json:"api-keys"`
 
 	// APIKeyEntries is a list of API key entries with metadata for advanced management.
-	// Keys from both APIKeys and APIKeyEntries are valid for authentication.
+	// Keys from both APIKeys and APIKeyEntries are valid for authentication, but
+	// entries here take precedence over legacy APIKeys when the same key appears in both.
 	APIKeyEntries []APIKeyEntry `yaml:"api-key-entries,omitempty" json:"api-key-entries,omitempty"`
 
 	// PassthroughHeaders controls whether upstream response headers are forwarded to downstream clients.
@@ -72,8 +73,27 @@ type APIKeyEntry struct {
 	// AllowedModels lists model patterns this key can access. Empty means all models.
 	AllowedModels []string `yaml:"allowed-models,omitempty" json:"allowed-models,omitempty"`
 
+	// ProviderAccess limits which providers and provider-scoped models this key can access.
+	// Empty means all providers are allowed.
+	ProviderAccess []APIKeyProviderAccess `yaml:"provider-access,omitempty" json:"provider-access,omitempty"`
+
 	// CreatedAt is the ISO 8601 timestamp when this key was created.
 	CreatedAt string `yaml:"created-at,omitempty" json:"created-at,omitempty"`
+}
+
+// APIKeyProviderAccess describes a provider-scoped access rule for an API key.
+type APIKeyProviderAccess struct {
+	// Provider is the provider identifier, for example "gemini" or "openai-compatibility".
+	Provider string `yaml:"provider" json:"provider"`
+
+	// Channels limits access to the listed provider instances/auth channels. Empty means all
+	// channels under the provider are allowed.
+	Channels []string `yaml:"channels,omitempty" json:"channels,omitempty"`
+
+	// Models limits access to the listed models for this provider. Empty means all models
+	// under the provider are allowed. This remains for backward compatibility; the management
+	// UI now edits global allowed-models separately.
+	Models []string `yaml:"models,omitempty" json:"models,omitempty"`
 }
 
 // AllAPIKeys returns a merged, deduplicated list of all API key strings

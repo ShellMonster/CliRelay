@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	accessrestrictions "github.com/router-for-me/CLIProxyAPI/v6/internal/access/restrictions"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/config"
 )
 
@@ -104,6 +105,91 @@ func (h *Handler) deleteFromStringList(c *gin.Context, target *[]string, after f
 	c.JSON(400, gin.H{"error": "missing index or value"})
 }
 
+func removeLegacyAPIKey(cfg *config.Config, key string) bool {
+	if cfg == nil || len(cfg.APIKeys) == 0 {
+		return false
+	}
+
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return false
+	}
+
+	out := make([]string, 0, len(cfg.APIKeys))
+	changed := false
+	for _, item := range cfg.APIKeys {
+		trimmed := strings.TrimSpace(item)
+		if trimmed != item {
+			changed = true
+		}
+		if trimmed == "" {
+			changed = true
+			continue
+		}
+		if trimmed == key {
+			changed = true
+			continue
+		}
+		out = append(out, trimmed)
+	}
+
+	if !changed {
+		return false
+	}
+	if len(out) == 0 {
+		cfg.APIKeys = nil
+	} else {
+		cfg.APIKeys = out
+	}
+	return true
+}
+
+func removeLegacyAPIKeysCoveredByEntries(cfg *config.Config) bool {
+	if cfg == nil || len(cfg.APIKeys) == 0 || len(cfg.APIKeyEntries) == 0 {
+		return false
+	}
+
+	managedKeys := make(map[string]struct{}, len(cfg.APIKeyEntries))
+	for _, entry := range cfg.APIKeyEntries {
+		key := strings.TrimSpace(entry.Key)
+		if key == "" {
+			continue
+		}
+		managedKeys[key] = struct{}{}
+	}
+	if len(managedKeys) == 0 {
+		return false
+	}
+
+	out := make([]string, 0, len(cfg.APIKeys))
+	changed := false
+	for _, item := range cfg.APIKeys {
+		trimmed := strings.TrimSpace(item)
+		if trimmed != item {
+			changed = true
+		}
+		if trimmed == "" {
+			changed = true
+			continue
+		}
+		if _, exists := managedKeys[trimmed]; exists {
+			changed = true
+			continue
+		}
+		out = append(out, trimmed)
+	}
+
+	if !changed {
+		return false
+	}
+	if len(out) == 0 {
+		cfg.APIKeys = nil
+	} else {
+		cfg.APIKeys = out
+	}
+	return true
+}
+
 // api-keys
 func (h *Handler) GetAPIKeys(c *gin.Context) { c.JSON(200, gin.H{"api-keys": h.cfg.APIKeys}) }
 func (h *Handler) PutAPIKeys(c *gin.Context) {
@@ -146,21 +232,22 @@ func (h *Handler) PutAPIKeyEntries(c *gin.Context) {
 	}
 	// Trim whitespace from key values
 	for i := range arr {
-		arr[i].Key = strings.TrimSpace(arr[i].Key)
-		arr[i].Name = strings.TrimSpace(arr[i].Name)
+		arr[i] = accessrestrictions.NormalizeAPIKeyEntry(arr[i])
 	}
 	h.cfg.APIKeyEntries = arr
+	removeLegacyAPIKeysCoveredByEntries(h.cfg)
 	h.persist(c)
 }
 
 func (h *Handler) PatchAPIKeyEntry(c *gin.Context) {
 	type apiKeyEntryPatch struct {
-		Key           *string   `json:"key"`
-		Name          *string   `json:"name"`
-		DailyLimit    *int      `json:"daily-limit"`
-		TotalQuota    *int      `json:"total-quota"`
-		AllowedModels *[]string `json:"allowed-models"`
-		CreatedAt     *string   `json:"created-at"`
+		Key            *string                        `json:"key"`
+		Name           *string                        `json:"name"`
+		DailyLimit     *int                           `json:"daily-limit"`
+		TotalQuota     *int                           `json:"total-quota"`
+		AllowedModels  *[]string                      `json:"allowed-models"`
+		ProviderAccess *[]config.APIKeyProviderAccess `json:"provider-access"`
+		CreatedAt      *string                        `json:"created-at"`
 	}
 	var body struct {
 		Index *int              `json:"index"`
@@ -192,11 +279,13 @@ func (h *Handler) PatchAPIKeyEntry(c *gin.Context) {
 	}
 
 	entry := h.cfg.APIKeyEntries[targetIndex]
+	previousKey := strings.TrimSpace(entry.Key)
 	if body.Value.Key != nil {
 		trimmed := strings.TrimSpace(*body.Value.Key)
 		if trimmed == "" {
 			// Empty key removes the entry
 			h.cfg.APIKeyEntries = append(h.cfg.APIKeyEntries[:targetIndex], h.cfg.APIKeyEntries[targetIndex+1:]...)
+			removeLegacyAPIKey(h.cfg, previousKey)
 			h.persist(c)
 			return
 		}
@@ -214,10 +303,18 @@ func (h *Handler) PatchAPIKeyEntry(c *gin.Context) {
 	if body.Value.AllowedModels != nil {
 		entry.AllowedModels = append([]string(nil), (*body.Value.AllowedModels)...)
 	}
+	if body.Value.ProviderAccess != nil {
+		entry.ProviderAccess = append([]config.APIKeyProviderAccess(nil), (*body.Value.ProviderAccess)...)
+	}
 	if body.Value.CreatedAt != nil {
 		entry.CreatedAt = strings.TrimSpace(*body.Value.CreatedAt)
 	}
-	h.cfg.APIKeyEntries[targetIndex] = entry
+	normalizedEntry := accessrestrictions.NormalizeAPIKeyEntry(entry)
+	h.cfg.APIKeyEntries[targetIndex] = normalizedEntry
+	if previousKey != "" && previousKey != normalizedEntry.Key {
+		removeLegacyAPIKey(h.cfg, previousKey)
+	}
+	removeLegacyAPIKeysCoveredByEntries(h.cfg)
 	h.persist(c)
 }
 
@@ -231,6 +328,7 @@ func (h *Handler) DeleteAPIKeyEntry(c *gin.Context) {
 		}
 		if len(out) != len(h.cfg.APIKeyEntries) {
 			h.cfg.APIKeyEntries = out
+			removeLegacyAPIKey(h.cfg, val)
 			h.persist(c)
 		} else {
 			c.JSON(404, gin.H{"error": "item not found"})
@@ -240,7 +338,9 @@ func (h *Handler) DeleteAPIKeyEntry(c *gin.Context) {
 	if idxStr := c.Query("index"); idxStr != "" {
 		var idx int
 		if _, err := fmt.Sscanf(idxStr, "%d", &idx); err == nil && idx >= 0 && idx < len(h.cfg.APIKeyEntries) {
+			removedKey := h.cfg.APIKeyEntries[idx].Key
 			h.cfg.APIKeyEntries = append(h.cfg.APIKeyEntries[:idx], h.cfg.APIKeyEntries[idx+1:]...)
+			removeLegacyAPIKey(h.cfg, removedKey)
 			h.persist(c)
 			return
 		}

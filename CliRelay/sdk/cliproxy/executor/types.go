@@ -13,6 +13,8 @@ const RequestedModelMetadataKey = "requested_model"
 const (
 	// UserAgentMetadataKey stores the downstream request User-Agent.
 	UserAgentMetadataKey = "user_agent"
+	// AllowedAuthIDsMetadataKey restricts scheduling to a specific set of auth IDs.
+	AllowedAuthIDsMetadataKey = "allowed_auth_ids"
 	// PinnedAuthMetadataKey locks execution to a specific auth ID.
 	PinnedAuthMetadataKey = "pinned_auth_id"
 	// SelectedAuthMetadataKey stores the auth ID selected by the scheduler.
