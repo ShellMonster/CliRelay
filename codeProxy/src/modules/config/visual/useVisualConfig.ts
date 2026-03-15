@@ -9,22 +9,14 @@ import type {
   UserAgentRoutingRuleEntry,
   VisualConfigValues,
 } from "@/modules/config/visual/types";
-import {
-  DEFAULT_VISUAL_VALUES,
-  makeClientId,
-} from "@/modules/config/visual/types";
+import { DEFAULT_VISUAL_VALUES, makeClientId } from "@/modules/config/visual/types";
 
 function hasOwn(obj: unknown, key: string): obj is Record<string, unknown> {
-  return (
-    obj !== null &&
-    typeof obj === "object" &&
-    Object.prototype.hasOwnProperty.call(obj, key)
-  );
+  return obj !== null && typeof obj === "object" && Object.prototype.hasOwnProperty.call(obj, key);
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
-  if (value === null || typeof value !== "object" || Array.isArray(value))
-    return null;
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
 }
 
@@ -64,10 +56,7 @@ function parseApiKeysText(raw: unknown): string {
   return keys.join("\n");
 }
 
-function ensureRecord(
-  parent: Record<string, unknown>,
-  key: string,
-): Record<string, unknown> {
+function ensureRecord(parent: Record<string, unknown>, key: string): Record<string, unknown> {
   const existing = asRecord(parent[key]);
   if (existing) return existing;
   const next: Record<string, unknown> = {};
@@ -81,11 +70,7 @@ function deleteIfEmpty(parent: Record<string, unknown>, key: string): void {
   if (Object.keys(value).length === 0) delete parent[key];
 }
 
-function setBoolean(
-  obj: Record<string, unknown>,
-  key: string,
-  value: boolean,
-): void {
+function setBoolean(obj: Record<string, unknown>, key: string, value: boolean): void {
   if (value) {
     obj[key] = true;
     return;
@@ -93,11 +78,7 @@ function setBoolean(
   if (hasOwn(obj, key)) obj[key] = false;
 }
 
-function setString(
-  obj: Record<string, unknown>,
-  key: string,
-  value: unknown,
-): void {
+function setString(obj: Record<string, unknown>, key: string, value: unknown): void {
   const safe = typeof value === "string" ? value : "";
   const trimmed = safe.trim();
   if (trimmed !== "") {
@@ -107,11 +88,7 @@ function setString(
   if (hasOwn(obj, key)) delete obj[key];
 }
 
-function setIntFromString(
-  obj: Record<string, unknown>,
-  key: string,
-  value: unknown,
-): void {
+function setIntFromString(obj: Record<string, unknown>, key: string, value: unknown): void {
   const safe = typeof value === "string" ? value : "";
   const trimmed = safe.trim();
   if (trimmed === "") {
@@ -170,13 +147,9 @@ const USER_AGENT_ROUTING_MATCH_MODES = [
   "regex",
 ] as const satisfies ReadonlyArray<UserAgentRoutingMatchMode>;
 
-function parseUserAgentRoutingMatchMode(
-  raw: unknown,
-): UserAgentRoutingMatchMode {
+function parseUserAgentRoutingMatchMode(raw: unknown): UserAgentRoutingMatchMode {
   if (typeof raw !== "string") return "contains";
-  return USER_AGENT_ROUTING_MATCH_MODES.includes(
-    raw as UserAgentRoutingMatchMode,
-  )
+  return USER_AGENT_ROUTING_MATCH_MODES.includes(raw as UserAgentRoutingMatchMode)
     ? (raw as UserAgentRoutingMatchMode)
     : "contains";
 }
@@ -203,21 +176,42 @@ function parseUserAgentRoutingModels(raw: unknown): string[] {
     return raw
       .map((item) => String(item).trim())
       .filter(Boolean)
-      .filter((item, index, arr) => arr.findIndex((value) => value.toLowerCase() === item.toLowerCase()) === index);
+      .filter(
+        (item, index, arr) =>
+          arr.findIndex((value) => value.toLowerCase() === item.toLowerCase()) === index,
+      );
   }
   if (typeof raw === "string") {
     return raw
       .split(/[\n,]+/)
       .map((item) => item.trim())
       .filter(Boolean)
-      .filter((item, index, arr) => arr.findIndex((value) => value.toLowerCase() === item.toLowerCase()) === index);
+      .filter(
+        (item, index, arr) =>
+          arr.findIndex((value) => value.toLowerCase() === item.toLowerCase()) === index,
+      );
   }
   return [];
 }
 
-function parseUserAgentRoutingRules(
-  rules: unknown,
-): UserAgentRoutingRuleEntry[] {
+function parseUserAgentRoutingExactValues(raw: unknown): string[] {
+  if (Array.isArray(raw)) {
+    return raw
+      .map((item) => String(item).trim())
+      .filter(Boolean)
+      .filter((item, index, arr) => arr.indexOf(item) === index);
+  }
+  if (typeof raw === "string") {
+    return raw
+      .split(/[\n,]+/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .filter((item, index, arr) => arr.indexOf(item) === index);
+  }
+  return [];
+}
+
+function parseUserAgentRoutingRules(rules: unknown): UserAgentRoutingRuleEntry[] {
   if (!Array.isArray(rules)) return [];
 
   return rules
@@ -240,9 +234,7 @@ function parseUserAgentRoutingRules(
         id: `ua-routing-rule-${index}`,
         name: typeof record.name === "string" ? record.name : "",
         enabled,
-        matchMode: parseUserAgentRoutingMatchMode(
-          record["match-mode"] ?? record.matchMode,
-        ),
+        matchMode: parseUserAgentRoutingMatchMode(record["match-mode"] ?? record.matchMode),
         pattern,
         models: parseUserAgentRoutingModels(record.models),
         forceProviders: parseUserAgentRoutingProviders(
@@ -250,6 +242,12 @@ function parseUserAgentRoutingRules(
         ),
         preferProviders: parseUserAgentRoutingProviders(
           record["prefer-providers"] ?? record.preferProviders,
+        ),
+        forceChannels: parseUserAgentRoutingExactValues(
+          record["force-channels"] ?? record.forceChannels,
+        ),
+        preferChannels: parseUserAgentRoutingExactValues(
+          record["prefer-channels"] ?? record.preferChannels,
         ),
       } satisfies UserAgentRoutingRuleEntry;
     })
@@ -272,10 +270,21 @@ function serializeUserAgentRoutingRulesForYaml(
         .map((provider) => provider.trim().toLowerCase())
         .filter(Boolean)
         .filter((provider, index, arr) => arr.indexOf(provider) === index);
+      const forceChannels = (rule.forceChannels || [])
+        .map((channel) => channel.trim())
+        .filter(Boolean)
+        .filter((channel, index, arr) => arr.indexOf(channel) === index);
+      const preferChannels = (rule.preferChannels || [])
+        .map((channel) => channel.trim())
+        .filter(Boolean)
+        .filter((channel, index, arr) => arr.indexOf(channel) === index);
       const models = (rule.models || [])
         .map((model) => model.trim())
         .filter(Boolean)
-        .filter((model, index, arr) => arr.findIndex((value) => value.toLowerCase() === model.toLowerCase()) === index);
+        .filter(
+          (model, index, arr) =>
+            arr.findIndex((value) => value.toLowerCase() === model.toLowerCase()) === index,
+        );
 
       const next: Record<string, unknown> = {
         enabled: rule.enabled,
@@ -285,8 +294,9 @@ function serializeUserAgentRoutingRulesForYaml(
       if (rule.name.trim()) next.name = rule.name.trim();
       if (models.length > 0) next.models = models;
       if (forceProviders.length > 0) next["force-providers"] = forceProviders;
-      if (preferProviders.length > 0)
-        next["prefer-providers"] = preferProviders;
+      if (preferProviders.length > 0) next["prefer-providers"] = preferProviders;
+      if (forceChannels.length > 0) next["force-channels"] = forceChannels;
+      if (preferChannels.length > 0) next["prefer-channels"] = preferChannels;
       return next;
     })
     .filter((rule): rule is Record<string, unknown> => Boolean(rule));
@@ -303,11 +313,8 @@ function parsePayloadRules(rules: unknown): PayloadRule[] {
       ? modelsRaw.map((model, modelIndex) => {
           const modelRecord = asRecord(model);
           const nameRaw =
-            typeof model === "string"
-              ? model
-              : (modelRecord?.name ?? modelRecord?.id ?? "");
-          const name =
-            typeof nameRaw === "string" ? nameRaw : String(nameRaw ?? "");
+            typeof model === "string" ? model : (modelRecord?.name ?? modelRecord?.id ?? "");
+          const name = typeof nameRaw === "string" ? nameRaw : String(nameRaw ?? "");
           return {
             id: `model-${index}-${modelIndex}`,
             name,
@@ -344,11 +351,8 @@ function parsePayloadFilterRules(rules: unknown): PayloadFilterRule[] {
       ? modelsRaw.map((model, modelIndex) => {
           const modelRecord = asRecord(model);
           const nameRaw =
-            typeof model === "string"
-              ? model
-              : (modelRecord?.name ?? modelRecord?.id ?? "");
-          const name =
-            typeof nameRaw === "string" ? nameRaw : String(nameRaw ?? "");
+            typeof model === "string" ? model : (modelRecord?.name ?? modelRecord?.id ?? "");
+          const name = typeof nameRaw === "string" ? nameRaw : String(nameRaw ?? "");
           return {
             id: `filter-model-${index}-${modelIndex}`,
             name,
@@ -364,9 +368,7 @@ function parsePayloadFilterRules(rules: unknown): PayloadFilterRule[] {
   });
 }
 
-function serializePayloadRulesForYaml(
-  rules: PayloadRule[],
-): Array<Record<string, unknown>> {
+function serializePayloadRulesForYaml(rules: PayloadRule[]): Array<Record<string, unknown>> {
   return rules
     .map((rule) => {
       const models = (rule.models || [])
@@ -459,9 +461,7 @@ export function useVisualConfig() {
           typeof remoteManagement?.["secret-key"] === "string"
             ? remoteManagement["secret-key"]
             : "",
-        rmDisableControlPanel: Boolean(
-          remoteManagement?.["disable-control-panel"],
-        ),
+        rmDisableControlPanel: Boolean(remoteManagement?.["disable-control-panel"]),
         rmPanelRepo:
           typeof remoteManagement?.["panel-github-repository"] === "string"
             ? remoteManagement["panel-github-repository"]
@@ -469,8 +469,7 @@ export function useVisualConfig() {
               ? remoteManagement["panel-repo"]
               : "",
 
-        authDir:
-          typeof parsed["auth-dir"] === "string" ? parsed["auth-dir"] : "",
+        authDir: typeof parsed["auth-dir"] === "string" ? parsed["auth-dir"] : "",
         apiKeysText: parseApiKeysText(parsed["api-keys"]),
 
         debug: Boolean(parsed.debug),
@@ -482,23 +481,17 @@ export function useVisualConfig() {
           ? Boolean(parsed["usage-log-content-enabled"])
           : true,
 
-        proxyUrl:
-          typeof parsed["proxy-url"] === "string" ? parsed["proxy-url"] : "",
+        proxyUrl: typeof parsed["proxy-url"] === "string" ? parsed["proxy-url"] : "",
         forceModelPrefix: Boolean(parsed["force-model-prefix"]),
         requestRetry: String(parsed["request-retry"] ?? ""),
         maxRetryInterval: String(parsed["max-retry-interval"] ?? ""),
         wsAuth: Boolean(parsed["ws-auth"]),
 
         quotaSwitchProject: Boolean(quotaExceeded?.["switch-project"] ?? true),
-        quotaSwitchPreviewModel: Boolean(
-          quotaExceeded?.["switch-preview-model"] ?? true,
-        ),
+        quotaSwitchPreviewModel: Boolean(quotaExceeded?.["switch-preview-model"] ?? true),
 
-        routingStrategy:
-          routing?.strategy === "fill-first" ? "fill-first" : "round-robin",
-        routingUserAgentRules: parseUserAgentRoutingRules(
-          routing?.["user-agent-rules"],
-        ),
+        routingStrategy: routing?.strategy === "fill-first" ? "fill-first" : "round-robin",
+        routingUserAgentRules: parseUserAgentRoutingRules(routing?.["user-agent-rules"]),
 
         payloadDefaultRules: parsePayloadRules(payload?.default),
         payloadOverrideRules: parsePayloadRules(payload?.override),
@@ -507,9 +500,7 @@ export function useVisualConfig() {
         streaming: {
           keepaliveSeconds: String(streaming?.["keepalive-seconds"] ?? ""),
           bootstrapRetries: String(streaming?.["bootstrap-retries"] ?? ""),
-          nonstreamKeepaliveInterval: String(
-            parsed["nonstream-keepalive-interval"] ?? "",
-          ),
+          nonstreamKeepaliveInterval: String(parsed["nonstream-keepalive-interval"] ?? ""),
         },
       };
 
@@ -524,10 +515,7 @@ export function useVisualConfig() {
   const applyVisualChangesToYaml = useCallback(
     (currentYaml: string): string => {
       try {
-        const parsed = (parseYaml(currentYaml) || {}) as Record<
-          string,
-          unknown
-        >;
+        const parsed = (parseYaml(currentYaml) || {}) as Record<string, unknown>;
         const values = visualValues;
 
         setString(parsed, "host", values.host);
@@ -579,21 +567,9 @@ export function useVisualConfig() {
         setBoolean(parsed, "debug", values.debug);
         setBoolean(parsed, "commercial-mode", values.commercialMode);
         setBoolean(parsed, "logging-to-file", values.loggingToFile);
-        setIntFromString(
-          parsed,
-          "logs-max-total-size-mb",
-          values.logsMaxTotalSizeMb,
-        );
-        setBoolean(
-          parsed,
-          "usage-statistics-enabled",
-          values.usageStatisticsEnabled,
-        );
-        setBoolean(
-          parsed,
-          "usage-log-content-enabled",
-          values.usageLogContentEnabled,
-        );
+        setIntFromString(parsed, "logs-max-total-size-mb", values.logsMaxTotalSizeMb);
+        setBoolean(parsed, "usage-statistics-enabled", values.usageStatisticsEnabled);
+        setBoolean(parsed, "usage-log-content-enabled", values.usageLogContentEnabled);
 
         setString(parsed, "proxy-url", values.proxyUrl);
         setBoolean(parsed, "force-model-prefix", values.forceModelPrefix);
@@ -643,9 +619,7 @@ export function useVisualConfig() {
             : "";
 
         const streamingDefined =
-          hasOwn(parsed, "streaming") ||
-          keepaliveSeconds.trim() ||
-          bootstrapRetries.trim();
+          hasOwn(parsed, "streaming") || keepaliveSeconds.trim() || bootstrapRetries.trim();
         if (streamingDefined) {
           const streaming = ensureRecord(parsed, "streaming");
           setIntFromString(streaming, "keepalive-seconds", keepaliveSeconds);
@@ -653,11 +627,7 @@ export function useVisualConfig() {
           deleteIfEmpty(parsed, "streaming");
         }
 
-        setIntFromString(
-          parsed,
-          "nonstream-keepalive-interval",
-          nonstreamKeepaliveInterval,
-        );
+        setIntFromString(parsed, "nonstream-keepalive-interval", nonstreamKeepaliveInterval);
 
         if (
           hasOwn(parsed, "payload") ||
@@ -667,23 +637,17 @@ export function useVisualConfig() {
         ) {
           const payload = ensureRecord(parsed, "payload");
           if (values.payloadDefaultRules.length > 0) {
-            payload.default = serializePayloadRulesForYaml(
-              values.payloadDefaultRules,
-            );
+            payload.default = serializePayloadRulesForYaml(values.payloadDefaultRules);
           } else if (hasOwn(payload, "default")) {
             delete payload.default;
           }
           if (values.payloadOverrideRules.length > 0) {
-            payload.override = serializePayloadRulesForYaml(
-              values.payloadOverrideRules,
-            );
+            payload.override = serializePayloadRulesForYaml(values.payloadOverrideRules);
           } else if (hasOwn(payload, "override")) {
             delete payload.override;
           }
           if (values.payloadFilterRules.length > 0) {
-            payload.filter = serializePayloadFilterRulesForYaml(
-              values.payloadFilterRules,
-            );
+            payload.filter = serializePayloadFilterRulesForYaml(values.payloadFilterRules);
           } else if (hasOwn(payload, "filter")) {
             delete payload.filter;
           }
@@ -702,21 +666,18 @@ export function useVisualConfig() {
     [visualValues],
   );
 
-  const setVisualValues = useCallback(
-    (newValues: Partial<VisualConfigValues>) => {
-      setVisualValuesState((prev) => {
-        const next: VisualConfigValues = {
-          ...prev,
-          ...newValues,
-        } as VisualConfigValues;
-        if (newValues.streaming) {
-          next.streaming = { ...prev.streaming, ...newValues.streaming };
-        }
-        return next;
-      });
-    },
-    [],
-  );
+  const setVisualValues = useCallback((newValues: Partial<VisualConfigValues>) => {
+    setVisualValuesState((prev) => {
+      const next: VisualConfigValues = {
+        ...prev,
+        ...newValues,
+      } as VisualConfigValues;
+      if (newValues.streaming) {
+        next.streaming = { ...prev.streaming, ...newValues.streaming };
+      }
+      return next;
+    });
+  }, []);
 
   const createEmptyPayloadRule = useCallback((): PayloadRule => {
     return {

@@ -510,18 +510,19 @@ func (m *Manager) Execute(ctx context.Context, providers []string, req cliproxye
 	if len(normalized) == 0 {
 		return cliproxyexecutor.Response{}, &Error{Code: "provider_not_found", Message: "no provider supplied"}
 	}
-	routedProviders, orderedByProvider := m.userAgentRoutedProviders(normalized, opts.Metadata, req.Model)
+	route := m.userAgentRoutedProviders(normalized, opts.Metadata, req.Model)
+	opts = applyUserAgentRoutingDecision(opts, route)
 
 	_, maxWait := m.retrySettings()
 
 	var lastErr error
 	for attempt := 0; ; attempt++ {
-		resp, errExec := m.executeMixedOnce(ctx, routedProviders, req, opts, orderedByProvider)
+		resp, errExec := m.executeMixedOnce(ctx, route.providers, req, opts, route.orderedByProvider)
 		if errExec == nil {
 			return resp, nil
 		}
 		lastErr = errExec
-		wait, shouldRetry := m.shouldRetryAfterError(errExec, attempt, routedProviders, req.Model, maxWait, opts.Metadata)
+		wait, shouldRetry := m.shouldRetryAfterError(errExec, attempt, route.providers, req.Model, maxWait, opts.Metadata)
 		if !shouldRetry {
 			break
 		}
@@ -542,18 +543,19 @@ func (m *Manager) ExecuteCount(ctx context.Context, providers []string, req clip
 	if len(normalized) == 0 {
 		return cliproxyexecutor.Response{}, &Error{Code: "provider_not_found", Message: "no provider supplied"}
 	}
-	routedProviders, orderedByProvider := m.userAgentRoutedProviders(normalized, opts.Metadata, req.Model)
+	route := m.userAgentRoutedProviders(normalized, opts.Metadata, req.Model)
+	opts = applyUserAgentRoutingDecision(opts, route)
 
 	_, maxWait := m.retrySettings()
 
 	var lastErr error
 	for attempt := 0; ; attempt++ {
-		resp, errExec := m.executeCountMixedOnce(ctx, routedProviders, req, opts, orderedByProvider)
+		resp, errExec := m.executeCountMixedOnce(ctx, route.providers, req, opts, route.orderedByProvider)
 		if errExec == nil {
 			return resp, nil
 		}
 		lastErr = errExec
-		wait, shouldRetry := m.shouldRetryAfterError(errExec, attempt, routedProviders, req.Model, maxWait, opts.Metadata)
+		wait, shouldRetry := m.shouldRetryAfterError(errExec, attempt, route.providers, req.Model, maxWait, opts.Metadata)
 		if !shouldRetry {
 			break
 		}
@@ -574,18 +576,19 @@ func (m *Manager) ExecuteStream(ctx context.Context, providers []string, req cli
 	if len(normalized) == 0 {
 		return nil, &Error{Code: "provider_not_found", Message: "no provider supplied"}
 	}
-	routedProviders, orderedByProvider := m.userAgentRoutedProviders(normalized, opts.Metadata, req.Model)
+	route := m.userAgentRoutedProviders(normalized, opts.Metadata, req.Model)
+	opts = applyUserAgentRoutingDecision(opts, route)
 
 	_, maxWait := m.retrySettings()
 
 	var lastErr error
 	for attempt := 0; ; attempt++ {
-		result, errStream := m.executeStreamMixedOnce(ctx, routedProviders, req, opts, orderedByProvider)
+		result, errStream := m.executeStreamMixedOnce(ctx, route.providers, req, opts, route.orderedByProvider)
 		if errStream == nil {
 			return result, nil
 		}
 		lastErr = errStream
-		wait, shouldRetry := m.shouldRetryAfterError(errStream, attempt, routedProviders, req.Model, maxWait, opts.Metadata)
+		wait, shouldRetry := m.shouldRetryAfterError(errStream, attempt, route.providers, req.Model, maxWait, opts.Metadata)
 		if !shouldRetry {
 			break
 		}
@@ -856,47 +859,7 @@ func pinnedAuthIDFromMetadata(meta map[string]any) string {
 }
 
 func allowedAuthIDsFromMetadata(meta map[string]any) map[string]struct{} {
-	if len(meta) == 0 {
-		return nil
-	}
-	raw, ok := meta[cliproxyexecutor.AllowedAuthIDsMetadataKey]
-	if !ok || raw == nil {
-		return nil
-	}
-
-	values := make([]string, 0)
-	switch v := raw.(type) {
-	case []string:
-		values = append(values, v...)
-	case []any:
-		for _, item := range v {
-			if str, ok := item.(string); ok {
-				values = append(values, str)
-			}
-		}
-	case string:
-		if strings.TrimSpace(v) != "" {
-			values = append(values, strings.Split(v, ",")...)
-		}
-	default:
-		return nil
-	}
-
-	if len(values) == 0 {
-		return nil
-	}
-	allowed := make(map[string]struct{}, len(values))
-	for _, value := range values {
-		normalized := strings.TrimSpace(value)
-		if normalized == "" {
-			continue
-		}
-		allowed[normalized] = struct{}{}
-	}
-	if len(allowed) == 0 {
-		return nil
-	}
-	return allowed
+	return authIDsFromMetadataKey(meta, cliproxyexecutor.AllowedAuthIDsMetadataKey)
 }
 
 func authAllowedByMetadata(authID string, allowed map[string]struct{}) bool {
@@ -1185,18 +1148,32 @@ func (m *Manager) normalizeProviders(providers []string) []string {
 	return result
 }
 
-func (m *Manager) userAgentRoutedProviders(providers []string, meta map[string]any, requestedModel string) ([]string, bool) {
+type userAgentRoutingDecision struct {
+	providers         []string
+	orderedByProvider bool
+	allowedAuthIDs    []string
+	preferredAuthIDs  []string
+}
+
+func newUserAgentRoutingDecision(providers []string) userAgentRoutingDecision {
+	return userAgentRoutingDecision{
+		providers: append([]string(nil), providers...),
+	}
+}
+
+func (m *Manager) userAgentRoutedProviders(providers []string, meta map[string]any, requestedModel string) userAgentRoutingDecision {
+	decision := newUserAgentRoutingDecision(providers)
 	if m == nil || len(providers) == 0 {
-		return providers, false
+		return decision
 	}
 	userAgent := userAgentFromMetadata(meta)
 	if userAgent == "" {
-		return providers, false
+		return decision
 	}
 
 	cfg, _ := m.runtimeConfig.Load().(*internalconfig.Config)
 	if cfg == nil || len(cfg.Routing.UserAgentRules) == 0 {
-		return providers, false
+		return decision
 	}
 
 	for _, rule := range cfg.Routing.UserAgentRules {
@@ -1206,14 +1183,45 @@ func (m *Manager) userAgentRoutedProviders(providers []string, meta map[string]a
 			continue
 		}
 
-		routedProviders, ordered := applyUserAgentRoutingRule(providers, rule)
-		if len(routedProviders) == 0 {
-			continue
+		nextDecision, ok := m.applyUserAgentRoutingRule(providers, meta, requestedModel, rule)
+		if ok {
+			return nextDecision
 		}
-		return routedProviders, ordered
 	}
 
-	return providers, false
+	return decision
+}
+
+func applyUserAgentRoutingDecision(opts cliproxyexecutor.Options, decision userAgentRoutingDecision) cliproxyexecutor.Options {
+	allowed := normalizeExactUserAgentRoutingValues(decision.allowedAuthIDs)
+	preferred := normalizeExactUserAgentRoutingValues(decision.preferredAuthIDs)
+	if len(allowed) == 0 && len(preferred) == 0 {
+		return opts
+	}
+
+	existingAllowed := allowedAuthIDsFromMetadata(opts.Metadata)
+	if len(existingAllowed) > 0 {
+		if len(allowed) > 0 {
+			allowed = filterExactValuesByLookup(allowed, existingAllowed)
+		}
+		preferred = filterExactValuesByLookup(preferred, existingAllowed)
+	}
+	if len(allowed) > 0 {
+		preferred = filterExactValuesByLookup(preferred, exactLookupFromValues(allowed))
+	}
+	if len(allowed) == 0 && len(preferred) == 0 {
+		return opts
+	}
+
+	meta := cloneMetadataMap(opts.Metadata)
+	if len(allowed) > 0 {
+		meta[cliproxyexecutor.AllowedAuthIDsMetadataKey] = append([]string(nil), allowed...)
+	}
+	if len(preferred) > 0 {
+		meta[cliproxyexecutor.PreferredAuthIDsMetadataKey] = append([]string(nil), preferred...)
+	}
+	opts.Metadata = meta
+	return opts
 }
 
 func userAgentFromMetadata(meta map[string]any) string {
@@ -1344,57 +1352,209 @@ func userAgentRoutingStripNamespace(model string) string {
 	return strings.TrimSpace(model[lastSlash+1:])
 }
 
-func applyUserAgentRoutingRule(providers []string, rule internalconfig.UserAgentRoutingRule) ([]string, bool) {
-	forced := intersectProvidersByRuleOrder(providers, rule.ForceProviders)
+func (m *Manager) applyUserAgentRoutingRule(providers []string, meta map[string]any, requestedModel string, rule internalconfig.UserAgentRoutingRule) (userAgentRoutingDecision, bool) {
+	decision := newUserAgentRoutingDecision(providers)
+	if len(providers) == 0 {
+		return decision, false
+	}
+
+	providerFamilies := m.userAgentRoutingProviderFamilies(providers)
+	providerRuleApplied := false
+
 	if len(rule.ForceProviders) > 0 {
+		forced := intersectProvidersByRuleOrder(providers, providerFamilies, rule.ForceProviders)
 		if len(forced) == 0 {
-			return nil, false
+			return decision, false
 		}
+		decision.providers = forced
+		decision.orderedByProvider = true
+		providerRuleApplied = true
 		if len(rule.PreferProviders) > 0 {
-			return prioritizeProvidersByRule(forced, rule.PreferProviders), true
+			decision.providers = prioritizeProvidersByRule(forced, providerFamilies, rule.PreferProviders)
 		}
-		return forced, true
+	} else if len(rule.PreferProviders) > 0 && hasProviderOverlap(providers, providerFamilies, rule.PreferProviders) {
+		decision.providers = prioritizeProvidersByRule(providers, providerFamilies, rule.PreferProviders)
+		decision.orderedByProvider = true
+		providerRuleApplied = true
 	}
 
-	if len(rule.PreferProviders) > 0 {
-		preferred := prioritizeProvidersByRule(providers, rule.PreferProviders)
-		if len(preferred) > 0 && hasProviderOverlap(providers, rule.PreferProviders) {
-			return preferred, true
+	candidateAuthIDs := m.userAgentRoutingCandidateAuthIDs(decision.providers, requestedModel, meta)
+	if len(rule.ForceChannels) > 0 {
+		forcedAuthIDs := intersectExactValuesByRuleOrder(candidateAuthIDs, rule.ForceChannels)
+		if len(forcedAuthIDs) == 0 {
+			return decision, false
 		}
-		return nil, false
+		decision.allowedAuthIDs = forcedAuthIDs
+		candidateAuthIDs = forcedAuthIDs
 	}
 
-	return nil, false
+	channelRuleApplied := len(decision.allowedAuthIDs) > 0
+	if len(rule.PreferChannels) > 0 {
+		preferredAuthIDs := intersectExactValuesByRuleOrder(candidateAuthIDs, rule.PreferChannels)
+		if len(preferredAuthIDs) > 0 {
+			decision.preferredAuthIDs = preferredAuthIDs
+			channelRuleApplied = true
+		}
+	}
+
+	if providerRuleApplied || channelRuleApplied {
+		return decision, true
+	}
+	return decision, false
 }
 
-func intersectProvidersByRuleOrder(providers, allowed []string) []string {
-	if len(providers) == 0 || len(allowed) == 0 {
+func (m *Manager) userAgentRoutingProviderFamilies(providers []string) map[string]string {
+	if len(providers) == 0 {
 		return nil
 	}
+
+	providerLookup := make(map[string]struct{}, len(providers))
+	families := make(map[string]string, len(providers))
+	for i := range providers {
+		key := strings.TrimSpace(strings.ToLower(providers[i]))
+		if key == "" {
+			continue
+		}
+		providerLookup[key] = struct{}{}
+		families[key] = key
+	}
+
+	m.mu.RLock()
+	for _, candidate := range m.auths {
+		if candidate == nil {
+			continue
+		}
+		providerKey := strings.TrimSpace(strings.ToLower(candidate.Provider))
+		if providerKey == "" {
+			continue
+		}
+		if _, ok := providerLookup[providerKey]; !ok {
+			continue
+		}
+		families[providerKey] = userAgentRoutingProviderFamilyForAuth(candidate)
+	}
+	m.mu.RUnlock()
+
+	return families
+}
+
+func userAgentRoutingProviderFamilyForAuth(auth *Auth) string {
+	if auth == nil {
+		return ""
+	}
+	if auth.Attributes != nil && strings.TrimSpace(auth.Attributes["compat_name"]) != "" {
+		return "openai-compatibility"
+	}
+	provider := strings.ToLower(strings.TrimSpace(auth.Provider))
+	if provider == "openai" {
+		return "openai-compatibility"
+	}
+	return provider
+}
+
+func (m *Manager) userAgentRoutingCandidateAuthIDs(providers []string, requestedModel string, meta map[string]any) []string {
+	if m == nil || len(providers) == 0 {
+		return nil
+	}
+
+	pinnedAuthID := pinnedAuthIDFromMetadata(meta)
+	allowedAuthIDs := allowedAuthIDsFromMetadata(meta)
+
 	providerSet := make(map[string]struct{}, len(providers))
 	for i := range providers {
-		providerSet[providers[i]] = struct{}{}
+		key := strings.TrimSpace(strings.ToLower(providers[i]))
+		if key == "" {
+			continue
+		}
+		providerSet[key] = struct{}{}
 	}
-	out := make([]string, 0, len(allowed))
-	seen := make(map[string]struct{}, len(allowed))
-	for i := range allowed {
-		provider := strings.ToLower(strings.TrimSpace(allowed[i]))
-		if provider == "" {
+
+	if len(providerSet) == 0 {
+		return nil
+	}
+
+	modelKey := strings.TrimSpace(requestedModel)
+	if modelKey != "" {
+		if parsed := thinking.ParseSuffix(modelKey); parsed.ModelName != "" {
+			modelKey = strings.TrimSpace(parsed.ModelName)
+		}
+	}
+	registryRef := registry.GetGlobalRegistry()
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	out := make([]string, 0, len(m.auths))
+	seen := make(map[string]struct{}, len(m.auths))
+	for _, candidate := range m.auths {
+		if candidate == nil || candidate.Disabled {
 			continue
 		}
-		if _, ok := providerSet[provider]; !ok {
+		if pinnedAuthID != "" && candidate.ID != pinnedAuthID {
 			continue
 		}
-		if _, ok := seen[provider]; ok {
+		if !authAllowedByMetadata(candidate.ID, allowedAuthIDs) {
 			continue
 		}
-		seen[provider] = struct{}{}
-		out = append(out, provider)
+		providerKey := strings.TrimSpace(strings.ToLower(candidate.Provider))
+		if providerKey == "" {
+			continue
+		}
+		if _, ok := providerSet[providerKey]; !ok {
+			continue
+		}
+		if _, ok := m.executors[providerKey]; !ok {
+			continue
+		}
+		if modelKey != "" && registryRef != nil && !registryRef.ClientSupportsModel(candidate.ID, modelKey) {
+			continue
+		}
+		if _, exists := seen[candidate.ID]; exists {
+			continue
+		}
+		seen[candidate.ID] = struct{}{}
+		out = append(out, candidate.ID)
 	}
 	return out
 }
 
-func prioritizeProvidersByRule(providers, preferred []string) []string {
+func intersectProvidersByRuleOrder(providers []string, providerFamilies map[string]string, allowed []string) []string {
+	if len(providers) == 0 || len(allowed) == 0 {
+		return nil
+	}
+
+	groupedProviders := make(map[string][]string, len(providers))
+	for i := range providers {
+		provider := strings.TrimSpace(strings.ToLower(providers[i]))
+		if provider == "" {
+			continue
+		}
+		family := strings.TrimSpace(strings.ToLower(providerFamilies[provider]))
+		if family == "" {
+			family = provider
+		}
+		groupedProviders[family] = append(groupedProviders[family], provider)
+	}
+
+	out := make([]string, 0, len(providers))
+	seen := make(map[string]struct{}, len(providers))
+	for i := range allowed {
+		family := strings.TrimSpace(strings.ToLower(allowed[i]))
+		if family == "" {
+			continue
+		}
+		for _, provider := range groupedProviders[family] {
+			if _, ok := seen[provider]; ok {
+				continue
+			}
+			seen[provider] = struct{}{}
+			out = append(out, provider)
+		}
+	}
+	return out
+}
+
+func prioritizeProvidersByRule(providers []string, providerFamilies map[string]string, preferred []string) []string {
 	if len(providers) == 0 {
 		return nil
 	}
@@ -1402,21 +1562,15 @@ func prioritizeProvidersByRule(providers, preferred []string) []string {
 		return append([]string(nil), providers...)
 	}
 
-	providerSet := make(map[string]struct{}, len(providers))
-	for i := range providers {
-		providerSet[providers[i]] = struct{}{}
+	preferredProviders := intersectProvidersByRuleOrder(providers, providerFamilies, preferred)
+	if len(preferredProviders) == 0 {
+		return append([]string(nil), providers...)
 	}
 
 	out := make([]string, 0, len(providers))
 	seen := make(map[string]struct{}, len(providers))
-	for i := range preferred {
-		provider := strings.ToLower(strings.TrimSpace(preferred[i]))
-		if provider == "" {
-			continue
-		}
-		if _, ok := providerSet[provider]; !ok {
-			continue
-		}
+	for i := range preferredProviders {
+		provider := preferredProviders[i]
 		if _, ok := seen[provider]; ok {
 			continue
 		}
@@ -1434,24 +1588,163 @@ func prioritizeProvidersByRule(providers, preferred []string) []string {
 	return out
 }
 
-func hasProviderOverlap(providers, preferred []string) bool {
+func hasProviderOverlap(providers []string, providerFamilies map[string]string, preferred []string) bool {
 	if len(providers) == 0 || len(preferred) == 0 {
 		return false
 	}
-	providerSet := make(map[string]struct{}, len(providers))
+	familySet := make(map[string]struct{}, len(providers))
 	for i := range providers {
-		providerSet[providers[i]] = struct{}{}
-	}
-	for i := range preferred {
-		provider := strings.ToLower(strings.TrimSpace(preferred[i]))
+		provider := strings.TrimSpace(strings.ToLower(providers[i]))
 		if provider == "" {
 			continue
 		}
-		if _, ok := providerSet[provider]; ok {
+		family := strings.TrimSpace(strings.ToLower(providerFamilies[provider]))
+		if family == "" {
+			family = provider
+		}
+		familySet[family] = struct{}{}
+	}
+	for i := range preferred {
+		family := strings.ToLower(strings.TrimSpace(preferred[i]))
+		if family == "" {
+			continue
+		}
+		if _, ok := familySet[family]; ok {
 			return true
 		}
 	}
 	return false
+}
+
+func authIDListFromMetadataKey(meta map[string]any, key string) []string {
+	if len(meta) == 0 {
+		return nil
+	}
+	raw, ok := meta[key]
+	if !ok || raw == nil {
+		return nil
+	}
+
+	values := make([]string, 0)
+	switch v := raw.(type) {
+	case []string:
+		values = append(values, v...)
+	case []any:
+		for _, item := range v {
+			if str, ok := item.(string); ok {
+				values = append(values, str)
+			}
+		}
+	case string:
+		if strings.TrimSpace(v) != "" {
+			values = append(values, strings.Split(v, ",")...)
+		}
+	default:
+		return nil
+	}
+
+	return normalizeExactUserAgentRoutingValues(values)
+}
+
+func authIDsFromMetadataKey(meta map[string]any, key string) map[string]struct{} {
+	values := authIDListFromMetadataKey(meta, key)
+	if len(values) == 0 {
+		return nil
+	}
+	out := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		out[value] = struct{}{}
+	}
+	return out
+}
+
+func preferredAuthIDOrderFromMetadata(meta map[string]any) []string {
+	return authIDListFromMetadataKey(meta, cliproxyexecutor.PreferredAuthIDsMetadataKey)
+}
+
+func cloneMetadataMap(meta map[string]any) map[string]any {
+	if len(meta) == 0 {
+		return make(map[string]any)
+	}
+	out := make(map[string]any, len(meta)+2)
+	for key, value := range meta {
+		out[key] = value
+	}
+	return out
+}
+
+func normalizeExactUserAgentRoutingValues(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		if _, exists := seen[trimmed]; exists {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		out = append(out, trimmed)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func exactLookupFromValues(values []string) map[string]struct{} {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		out[trimmed] = struct{}{}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func filterExactValuesByLookup(values []string, lookup map[string]struct{}) []string {
+	if len(values) == 0 || len(lookup) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		if _, ok := lookup[trimmed]; !ok {
+			continue
+		}
+		if _, exists := seen[trimmed]; exists {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		out = append(out, trimmed)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func intersectExactValuesByRuleOrder(available, allowed []string) []string {
+	if len(available) == 0 || len(allowed) == 0 {
+		return nil
+	}
+	return filterExactValuesByLookup(allowed, exactLookupFromValues(available))
 }
 
 func (m *Manager) retrySettings() (int, time.Duration) {

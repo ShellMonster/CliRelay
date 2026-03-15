@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"testing"
+	"time"
 
 	internalconfig "github.com/router-for-me/CLIProxyAPI/v6/internal/config"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/registry"
@@ -69,6 +70,120 @@ func TestManagerExecute_UserAgentPreferProviders(t *testing.T) {
 	authID := executeUserAgentRoutedRequest(t, manager, "opencode/1.0.0", "", []string{"codex", "codex-compat"})
 	if authID != "auth-compat" {
 		t.Fatalf("selected auth = %q, want %q", authID, "auth-compat")
+	}
+}
+
+func TestManagerExecute_UserAgentForceChannels(t *testing.T) {
+	manager := newUserAgentRoutingTestManager(t, []internalconfig.UserAgentRoutingRule{
+		{
+			Name:          "opencode-force-channel",
+			Enabled:       boolPtr(true),
+			MatchMode:     "contains",
+			Pattern:       "opencode",
+			ForceChannels: []string{"auth-compat"},
+		},
+	})
+
+	authID := executeUserAgentRoutedRequest(t, manager, "opencode/1.0.0", "", []string{"codex", "codex-compat"})
+	if authID != "auth-compat" {
+		t.Fatalf("selected auth = %q, want %q", authID, "auth-compat")
+	}
+}
+
+func TestManagerExecute_UserAgentPreferChannels(t *testing.T) {
+	manager := newUserAgentRoutingTestManager(t, []internalconfig.UserAgentRoutingRule{
+		{
+			Name:           "opencode-prefer-channel",
+			Enabled:        boolPtr(true),
+			MatchMode:      "contains",
+			Pattern:        "opencode",
+			PreferChannels: []string{"auth-compat"},
+		},
+	})
+
+	authID := executeUserAgentRoutedRequest(t, manager, "opencode/1.0.0", "", []string{"codex", "codex-compat"})
+	if authID != "auth-compat" {
+		t.Fatalf("selected auth = %q, want %q", authID, "auth-compat")
+	}
+}
+
+func TestManagerExecute_UserAgentPreferChannelsFallsBackWhenNoMatch(t *testing.T) {
+	manager := newUserAgentRoutingTestManager(t, []internalconfig.UserAgentRoutingRule{
+		{
+			Name:           "opencode-prefer-missing-channel",
+			Enabled:        boolPtr(true),
+			MatchMode:      "contains",
+			Pattern:        "opencode",
+			PreferChannels: []string{"missing-auth"},
+		},
+	})
+
+	authID := executeUserAgentRoutedRequest(t, manager, "opencode/1.0.0", "", []string{"codex", "codex-compat"})
+	if authID != "auth-codex" {
+		t.Fatalf("selected auth = %q, want %q", authID, "auth-codex")
+	}
+}
+
+func TestManagerExecute_UserAgentPreferChannelsFallsBackWhenPreferredUnavailable(t *testing.T) {
+	manager := newUserAgentRoutingTestManager(t, []internalconfig.UserAgentRoutingRule{
+		{
+			Name:           "opencode-prefer-unavailable-channel",
+			Enabled:        boolPtr(true),
+			MatchMode:      "contains",
+			Pattern:        "opencode",
+			PreferChannels: []string{"auth-compat"},
+		},
+	})
+
+	manager.auths["auth-compat"].Unavailable = true
+	manager.auths["auth-compat"].NextRetryAfter = time.Now().Add(time.Hour)
+
+	authID := executeUserAgentRoutedRequest(t, manager, "opencode/1.0.0", "", []string{"codex", "codex-compat"})
+	if authID != "auth-codex" {
+		t.Fatalf("selected auth = %q, want %q", authID, "auth-codex")
+	}
+}
+
+func TestManagerExecute_UserAgentPreferChannelsHonorsRuleOrder(t *testing.T) {
+	manager := newUserAgentRoutingTestManager(t, []internalconfig.UserAgentRoutingRule{
+		{
+			Name:           "opencode-prefer-channel-order",
+			Enabled:        boolPtr(true),
+			MatchMode:      "contains",
+			Pattern:        "opencode",
+			PreferChannels: []string{"auth-compat-2", "auth-compat"},
+		},
+	})
+
+	authID := executeUserAgentRoutedRequest(t, manager, "opencode/1.0.0", "", []string{"codex", "codex-compat"})
+	if authID != "auth-compat-2" {
+		t.Fatalf("selected auth = %q, want %q", authID, "auth-compat-2")
+	}
+}
+
+func TestManagerExecute_UserAgentForceChannelsIntersectExistingAllowedAuthIDs(t *testing.T) {
+	manager := newUserAgentRoutingTestManager(t, []internalconfig.UserAgentRoutingRule{
+		{
+			Name:          "opencode-force-channel",
+			Enabled:       boolPtr(true),
+			MatchMode:     "contains",
+			Pattern:       "opencode",
+			ForceChannels: []string{"auth-compat"},
+		},
+	})
+
+	authID := executeUserAgentRoutedRequestWithMetadata(
+		t,
+		manager,
+		"opencode/1.0.0",
+		"",
+		[]string{"codex", "codex-compat"},
+		map[string]any{
+			cliproxyexecutor.AllowedAuthIDsMetadataKey: []string{"auth-codex"},
+		},
+	)
+	if authID != "auth-codex" {
+		t.Fatalf("selected auth = %q, want %q", authID, "auth-codex")
 	}
 }
 
@@ -170,6 +285,7 @@ func newUserAgentRoutingTestManager(t *testing.T, rules []internalconfig.UserAge
 	for _, auth := range []*Auth{
 		{ID: "auth-codex", Provider: "codex"},
 		{ID: "auth-compat", Provider: "codex-compat"},
+		{ID: "auth-compat-2", Provider: "codex-compat"},
 	} {
 		if _, err := manager.Register(context.Background(), auth); err != nil {
 			t.Fatalf("register auth %s: %v", auth.ID, err)
@@ -183,12 +299,16 @@ func newUserAgentRoutingTestManager(t *testing.T, rules []internalconfig.UserAge
 	}
 	modelRegistry.RegisterClient("auth-codex", "codex", models)
 	modelRegistry.RegisterClient("auth-compat", "codex-compat", models)
-	if !modelRegistry.ClientSupportsModel("auth-codex", "gpt-5") || !modelRegistry.ClientSupportsModel("auth-compat", "gpt-5") {
+	modelRegistry.RegisterClient("auth-compat-2", "codex-compat", models)
+	if !modelRegistry.ClientSupportsModel("auth-codex", "gpt-5") ||
+		!modelRegistry.ClientSupportsModel("auth-compat", "gpt-5") ||
+		!modelRegistry.ClientSupportsModel("auth-compat-2", "gpt-5") {
 		t.Fatalf("test fixture failed to register expected models")
 	}
 	t.Cleanup(func() {
 		modelRegistry.UnregisterClient("auth-codex")
 		modelRegistry.UnregisterClient("auth-compat")
+		modelRegistry.UnregisterClient("auth-compat-2")
 	})
 
 	return manager
@@ -197,12 +317,22 @@ func newUserAgentRoutingTestManager(t *testing.T, rules []internalconfig.UserAge
 func executeUserAgentRoutedRequest(t *testing.T, manager *Manager, userAgent, model string, providers []string) string {
 	t.Helper()
 
+	return executeUserAgentRoutedRequestWithMetadata(t, manager, userAgent, model, providers, nil)
+}
+
+func executeUserAgentRoutedRequestWithMetadata(t *testing.T, manager *Manager, userAgent, model string, providers []string, metadata map[string]any) string {
+	t.Helper()
+
 	selectedAuthID := ""
+	meta := map[string]any{
+		cliproxyexecutor.UserAgentMetadataKey:            userAgent,
+		cliproxyexecutor.SelectedAuthCallbackMetadataKey: func(authID string) { selectedAuthID = authID },
+	}
+	for key, value := range metadata {
+		meta[key] = value
+	}
 	opts := cliproxyexecutor.Options{
-		Metadata: map[string]any{
-			cliproxyexecutor.UserAgentMetadataKey:            userAgent,
-			cliproxyexecutor.SelectedAuthCallbackMetadataKey: func(authID string) { selectedAuthID = authID },
-		},
+		Metadata: meta,
 	}
 	_, err := manager.Execute(context.Background(), providers, cliproxyexecutor.Request{Model: model}, opts)
 	if err != nil {

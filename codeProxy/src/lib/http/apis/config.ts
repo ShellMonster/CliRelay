@@ -5,6 +5,12 @@ import type { Config } from "@/types";
 export interface UserAgentRoutingProviderOption {
   id: string;
   label: string;
+  channels: UserAgentRoutingChannelOption[];
+}
+
+export interface UserAgentRoutingChannelOption {
+  id: string;
+  label: string;
 }
 
 export interface UserAgentRoutingModelOption {
@@ -71,7 +77,18 @@ export const configApi = {
         const id = String(record.id ?? "").trim();
         if (!id) return null;
         const label = String(record.label ?? id).trim() || id;
-        return { id, label } satisfies UserAgentRoutingProviderOption;
+        const channelsRaw = Array.isArray(record.channels) ? record.channels : [];
+        const channels = channelsRaw
+          .map((channel) => {
+            if (!channel || typeof channel !== "object") return null;
+            const channelRecord = channel as Record<string, unknown>;
+            const channelID = String(channelRecord.id ?? "").trim();
+            if (!channelID) return null;
+            const channelLabel = String(channelRecord.label ?? channelID).trim() || channelID;
+            return { id: channelID, label: channelLabel } satisfies UserAgentRoutingChannelOption;
+          })
+          .filter(Boolean) as UserAgentRoutingChannelOption[];
+        return { id, label, channels } satisfies UserAgentRoutingProviderOption;
       })
       .filter(Boolean) as UserAgentRoutingProviderOption[];
 

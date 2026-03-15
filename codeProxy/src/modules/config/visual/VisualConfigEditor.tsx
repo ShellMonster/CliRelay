@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, ChevronDown, Copy, Plus, Trash2 } from "lucide-react";
-import { configApi } from "@/lib/http/apis/config";
+import { configApi, type UserAgentRoutingProviderOption } from "@/lib/http/apis/config";
 import type {
   PayloadFilterRule,
   PayloadModelEntry,
@@ -23,21 +23,16 @@ import { Card } from "@/modules/ui/Card";
 import { ConfirmModal } from "@/modules/ui/ConfirmModal";
 import { TextInput } from "@/modules/ui/Input";
 import { Modal } from "@/modules/ui/Modal";
-import {
-  MultiSelect,
-  type MultiSelectOption,
-} from "@/modules/ui/MultiSelect";
+import { MultiSelect, type MultiSelectOption } from "@/modules/ui/MultiSelect";
 import { ToggleSwitch } from "@/modules/ui/ToggleSwitch";
 import { useToast } from "@/modules/ui/ToastProvider";
 
-const isValidApiKeyCharset = (key: string): boolean =>
-  /^[\x21-\x7E]+$/.test(key);
+const isValidApiKeyCharset = (key: string): boolean => /^[\x21-\x7E]+$/.test(key);
 
 const maskApiKey = (value: string): string => {
   const trimmed = value.trim();
   if (!trimmed) return "--";
-  if (trimmed.length <= 10)
-    return `${trimmed.slice(0, 2)}***${trimmed.slice(-2)}`;
+  if (trimmed.length <= 10) return `${trimmed.slice(0, 2)}***${trimmed.slice(-2)}`;
   return `${trimmed.slice(0, 6)}***${trimmed.slice(-4)}`;
 };
 
@@ -55,6 +50,8 @@ const createEmptyUserAgentRoutingRule = (): UserAgentRoutingRuleEntry => ({
   models: [],
   forceProviders: [],
   preferProviders: [],
+  forceChannels: [],
+  preferChannels: [],
 });
 
 const normalizeUserAgentRoutingModels = (values: string[]): string[] =>
@@ -63,8 +60,7 @@ const normalizeUserAgentRoutingModels = (values: string[]): string[] =>
     .filter(Boolean)
     .filter(
       (value, index, arr) =>
-        arr.findIndex((item) => item.toLowerCase() === value.toLowerCase()) ===
-        index,
+        arr.findIndex((item) => item.toLowerCase() === value.toLowerCase()) === index,
     );
 
 const normalizeUserAgentRoutingProviders = (values: string[]): string[] =>
@@ -73,10 +69,13 @@ const normalizeUserAgentRoutingProviders = (values: string[]): string[] =>
     .filter(Boolean)
     .filter((value, index, arr) => arr.indexOf(value) === index);
 
-const summarizeUserAgentRoutingValues = (
-  values: string[],
-  emptyLabel: string,
-): string => {
+const normalizeUserAgentRoutingExactValues = (values: string[]): string[] =>
+  values
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .filter((value, index, arr) => arr.indexOf(value) === index);
+
+const summarizeUserAgentRoutingValues = (values: string[], emptyLabel: string): string => {
   if (!values.length) return emptyLabel;
   if (values.length <= 2) return values.join(", ");
   return `${values.slice(0, 2).join(", ")} +${values.length - 2}`;
@@ -97,9 +96,58 @@ const mergeUserAgentRoutingOptions = (
     if (optionMap.has(key)) return;
     optionMap.set(key, { value: trimmed, label: trimmed });
   });
-  return Array.from(optionMap.values()).sort((a, b) =>
-    a.label.localeCompare(b.label, "zh-CN"),
+  return Array.from(optionMap.values()).sort((a, b) => a.label.localeCompare(b.label, "zh-CN"));
+};
+
+const mergeUserAgentRoutingExactOptions = (
+  baseOptions: MultiSelectOption[],
+  selectedValues: string[],
+): MultiSelectOption[] => {
+  const optionMap = new Map<string, MultiSelectOption>();
+  baseOptions.forEach((option) => {
+    optionMap.set(option.value, option);
+  });
+  selectedValues.forEach((value) => {
+    const trimmed = value.trim();
+    if (!trimmed || optionMap.has(trimmed)) return;
+    optionMap.set(trimmed, { value: trimmed, label: trimmed });
+  });
+  return Array.from(optionMap.values()).sort((a, b) => a.label.localeCompare(b.label, "zh-CN"));
+};
+
+const collectUserAgentRoutingChannelIDs = (
+  providerIDs: string[],
+  providerOptionMap: Map<string, UserAgentRoutingProviderOption>,
+): Set<string> => {
+  const channelIDs = new Set<string>();
+  providerIDs.forEach((providerID) => {
+    providerOptionMap.get(providerID)?.channels.forEach((channel) => {
+      const channelID = channel.id.trim();
+      if (channelID) channelIDs.add(channelID);
+    });
+  });
+  return channelIDs;
+};
+
+const filterUserAgentRoutingChannelsByProviders = (
+  channels: string[],
+  providerIDs: string[],
+  providerOptionMap: Map<string, UserAgentRoutingProviderOption>,
+  preserveWithoutProviders: boolean,
+): string[] => {
+  const normalizedChannels = normalizeUserAgentRoutingExactValues(channels);
+  const normalizedProviders = normalizeUserAgentRoutingProviders(providerIDs);
+  if (normalizedProviders.length === 0) {
+    return preserveWithoutProviders ? normalizedChannels : [];
+  }
+  const allowedChannelIDs = collectUserAgentRoutingChannelIDs(
+    normalizedProviders,
+    providerOptionMap,
   );
+  if (allowedChannelIDs.size === 0) {
+    return [];
+  }
+  return normalizedChannels.filter((channelID) => allowedChannelIDs.has(channelID));
 };
 
 function Field({
@@ -113,12 +161,8 @@ function Field({
 }) {
   return (
     <div className="space-y-1">
-      <div className="text-sm font-semibold text-slate-900 dark:text-white">
-        {label}
-      </div>
-      {hint ? (
-        <div className="text-xs text-slate-600 dark:text-white/65">{hint}</div>
-      ) : null}
+      <div className="text-sm font-semibold text-slate-900 dark:text-white">{label}</div>
+      {hint ? <div className="text-xs text-slate-600 dark:text-white/65">{hint}</div> : null}
       <div className="pt-1">{children}</div>
     </div>
   );
@@ -275,9 +319,7 @@ function ApiKeysEditor({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="text-sm font-semibold text-slate-900 dark:text-white">
-          API Keys
-        </div>
+        <div className="text-sm font-semibold text-slate-900 dark:text-white">API Keys</div>
         <Button size="sm" onClick={openAddModal} disabled={disabled}>
           <Plus size={14} />
           新增
@@ -351,11 +393,7 @@ function ApiKeysEditor({
         title={editingIndex !== null ? "编辑 API Key" : "新增 API Key"}
         footer={
           <>
-            <Button
-              variant="secondary"
-              onClick={closeModal}
-              disabled={disabled}
-            >
+            <Button variant="secondary" onClick={closeModal} disabled={disabled}>
               取消
             </Button>
             <Button onClick={handleSave} disabled={disabled}>
@@ -373,9 +411,7 @@ function ApiKeysEditor({
             disabled={disabled}
           />
           {formError ? (
-            <p className="mt-2 text-sm text-rose-600 dark:text-rose-300">
-              {formError}
-            </p>
+            <p className="mt-2 text-sm text-rose-600 dark:text-rose-300">{formError}</p>
           ) : null}
         </Field>
       </Modal>
@@ -453,9 +489,7 @@ function PayloadRulesEditor({
 
   const removeModel = (ruleIndex: number, modelIndex: number) => {
     onChange(
-      updateRuleModels(rules, ruleIndex, (models) =>
-        models.filter((_, i) => i !== modelIndex),
-      ),
+      updateRuleModels(rules, ruleIndex, (models) => models.filter((_, i) => i !== modelIndex)),
     );
   };
 
@@ -483,9 +517,7 @@ function PayloadRulesEditor({
 
   const removeParam = (ruleIndex: number, paramIndex: number) => {
     onChange(
-      updateRuleParams(rules, ruleIndex, (params) =>
-        params.filter((_, i) => i !== paramIndex),
-      ),
+      updateRuleParams(rules, ruleIndex, (params) => params.filter((_, i) => i !== paramIndex)),
     );
   };
 
@@ -563,10 +595,7 @@ function PayloadRulesEditor({
 
                 <div className="space-y-2">
                   {(rule.models || []).map((model, modelIndex) => (
-                    <div
-                      key={model.id}
-                      className="grid gap-2 lg:grid-cols-[1fr_180px_auto]"
-                    >
+                    <div key={model.id} className="grid gap-2 lg:grid-cols-[1fr_180px_auto]">
                       <TextInput
                         value={model.name}
                         onChange={(e) =>
@@ -581,9 +610,7 @@ function PayloadRulesEditor({
                         value={(model.protocol ?? "") as string}
                         onChange={(value) =>
                           updateModel(ruleIndex, modelIndex, {
-                            protocol: (value || undefined) as
-                              | PayloadProtocol
-                              | undefined,
+                            protocol: (value || undefined) as PayloadProtocol | undefined,
                           })
                         }
                         options={VISUAL_CONFIG_PROTOCOL_OPTIONS}
@@ -667,9 +694,7 @@ function PayloadRulesEditor({
                         {param.valueType === "json" ? (
                           <TextArea
                             value={param.value}
-                            onChange={(value) =>
-                              updateParam(ruleIndex, paramIndex, { value })
-                            }
+                            onChange={(value) => updateParam(ruleIndex, paramIndex, { value })}
                             placeholder={getValuePlaceholder(param.valueType)}
                             disabled={disabled}
                             ariaLabel="JSON 值"
@@ -723,20 +748,13 @@ function PayloadFilterRulesEditor({
   };
 
   const updateRule = (index: number, patch: Partial<PayloadFilterRule>) => {
-    onChange(
-      (rules || []).map((rule, i) =>
-        i === index ? { ...rule, ...patch } : rule,
-      ),
-    );
+    onChange((rules || []).map((rule, i) => (i === index ? { ...rule, ...patch } : rule)));
   };
 
   const addModel = (ruleIndex: number) => {
     const rule = rules[ruleIndex];
     updateRule(ruleIndex, {
-      models: [
-        ...rule.models,
-        { id: makeClientId(), name: "", protocol: undefined },
-      ],
+      models: [...rule.models, { id: makeClientId(), name: "", protocol: undefined }],
     });
   };
 
@@ -754,9 +772,7 @@ function PayloadFilterRulesEditor({
   ) => {
     const rule = rules[ruleIndex];
     updateRule(ruleIndex, {
-      models: rule.models.map((m, i) =>
-        i === modelIndex ? { ...m, ...patch } : m,
-      ),
+      models: rule.models.map((m, i) => (i === modelIndex ? { ...m, ...patch } : m)),
     });
   };
 
@@ -772,16 +788,10 @@ function PayloadFilterRulesEditor({
     });
   };
 
-  const updateParam = (
-    ruleIndex: number,
-    paramIndex: number,
-    nextValue: string,
-  ) => {
+  const updateParam = (ruleIndex: number, paramIndex: number, nextValue: string) => {
     const rule = rules[ruleIndex];
     updateRule(ruleIndex, {
-      params: (rule.params || []).map((p, i) =>
-        i === paramIndex ? nextValue : p,
-      ),
+      params: (rule.params || []).map((p, i) => (i === paramIndex ? nextValue : p)),
     });
   };
 
@@ -840,10 +850,7 @@ function PayloadFilterRulesEditor({
 
                 <div className="space-y-2">
                   {(rule.models || []).map((model, modelIndex) => (
-                    <div
-                      key={model.id}
-                      className="grid gap-2 lg:grid-cols-[1fr_180px_auto]"
-                    >
+                    <div key={model.id} className="grid gap-2 lg:grid-cols-[1fr_180px_auto]">
                       <TextInput
                         value={model.name}
                         onChange={(e) =>
@@ -858,9 +865,7 @@ function PayloadFilterRulesEditor({
                         value={(model.protocol ?? "") as string}
                         onChange={(value) =>
                           updateModel(ruleIndex, modelIndex, {
-                            protocol: (value || undefined) as
-                              | PayloadProtocol
-                              | undefined,
+                            protocol: (value || undefined) as PayloadProtocol | undefined,
                           })
                         }
                         options={VISUAL_CONFIG_PROTOCOL_OPTIONS}
@@ -911,11 +916,7 @@ function PayloadFilterRulesEditor({
                         <TextInput
                           value={param}
                           onChange={(e) =>
-                            updateParam(
-                              ruleIndex,
-                              paramIndex,
-                              e.currentTarget.value,
-                            )
+                            updateParam(ruleIndex, paramIndex, e.currentTarget.value)
                           }
                           placeholder="例如：messages.0.content"
                           disabled={disabled}
@@ -956,13 +957,9 @@ function UserAgentRoutingRulesEditor({
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [deleteIndex, setDeleteIndex] = useState<number | null>(null);
   const [formError, setFormError] = useState("");
-  const [draft, setDraft] = useState<UserAgentRoutingRuleEntry>(
-    createEmptyUserAgentRoutingRule(),
-  );
+  const [draft, setDraft] = useState<UserAgentRoutingRuleEntry>(createEmptyUserAgentRoutingRule());
   const [optionsLoading, setOptionsLoading] = useState(false);
-  const [providerOptions, setProviderOptions] = useState<MultiSelectOption[]>(
-    [],
-  );
+  const [providerOptions, setProviderOptions] = useState<UserAgentRoutingProviderOption[]>([]);
   const [modelOptions, setModelOptions] = useState<MultiSelectOption[]>([]);
 
   useEffect(() => {
@@ -972,12 +969,7 @@ function UserAgentRoutingRulesEditor({
       .getUserAgentRoutingOptions()
       .then((data) => {
         if (!active) return;
-        setProviderOptions(
-          data.providers.map((option) => ({
-            value: option.id,
-            label: option.label,
-          })),
-        );
+        setProviderOptions(data.providers);
         setModelOptions(
           data.models.map((option) => ({
             value: option.id,
@@ -989,10 +981,7 @@ function UserAgentRoutingRulesEditor({
         if (!active) return;
         notify({
           type: "error",
-          message:
-            error instanceof Error
-              ? error.message
-              : "加载 UA 路由规则选项失败",
+          message: error instanceof Error ? error.message : "加载 UA 路由规则选项失败",
         });
       })
       .finally(() => {
@@ -1005,19 +994,111 @@ function UserAgentRoutingRulesEditor({
     };
   }, [notify]);
 
+  const providerOptionMap = useMemo(() => {
+    const optionMap = new Map<string, UserAgentRoutingProviderOption>();
+    providerOptions.forEach((option) => {
+      optionMap.set(option.id, option);
+    });
+    return optionMap;
+  }, [providerOptions]);
+
   const providerSelectOptions = useMemo(
     () =>
-      mergeUserAgentRoutingOptions(providerOptions, [
-        ...draft.forceProviders,
-        ...draft.preferProviders,
-      ]),
+      mergeUserAgentRoutingOptions(
+        providerOptions.map((option) => ({
+          value: option.id,
+          label: option.label,
+        })),
+        [...draft.forceProviders, ...draft.preferProviders],
+      ),
     [draft.forceProviders, draft.preferProviders, providerOptions],
   );
+
+  const updateForceProviders = useCallback(
+    (forceProviders: string[]) => {
+      const nextForceProviders = normalizeUserAgentRoutingProviders(forceProviders);
+      setDraft((prev) => ({
+        ...prev,
+        forceProviders: nextForceProviders,
+        forceChannels: filterUserAgentRoutingChannelsByProviders(
+          prev.forceChannels,
+          nextForceProviders,
+          providerOptionMap,
+          false,
+        ),
+      }));
+    },
+    [providerOptionMap],
+  );
+
+  const updatePreferProviders = useCallback(
+    (preferProviders: string[]) => {
+      const nextPreferProviders = normalizeUserAgentRoutingProviders(preferProviders);
+      setDraft((prev) => ({
+        ...prev,
+        preferProviders: nextPreferProviders,
+        preferChannels: filterUserAgentRoutingChannelsByProviders(
+          prev.preferChannels,
+          nextPreferProviders,
+          providerOptionMap,
+          false,
+        ),
+      }));
+    },
+    [providerOptionMap],
+  );
+
+  const forceChannelSelectOptions = useMemo(() => {
+    const channelOptions: MultiSelectOption[] = [];
+    draft.forceProviders.forEach((providerID) => {
+      const provider = providerOptionMap.get(providerID);
+      provider?.channels.forEach((channel) => {
+        channelOptions.push({
+          value: channel.id,
+          label: channel.label,
+        });
+      });
+    });
+    return mergeUserAgentRoutingExactOptions(channelOptions, draft.forceChannels);
+  }, [draft.forceChannels, draft.forceProviders, providerOptionMap]);
+
+  const preferChannelSelectOptions = useMemo(() => {
+    const channelOptions: MultiSelectOption[] = [];
+    draft.preferProviders.forEach((providerID) => {
+      const provider = providerOptionMap.get(providerID);
+      provider?.channels.forEach((channel) => {
+        channelOptions.push({
+          value: channel.id,
+          label: channel.label,
+        });
+      });
+    });
+    return mergeUserAgentRoutingExactOptions(channelOptions, draft.preferChannels);
+  }, [draft.preferChannels, draft.preferProviders, providerOptionMap]);
+
+  const forceChannelsDisabled =
+    disabled ||
+    optionsLoading ||
+    (draft.forceProviders.length === 0 && draft.forceChannels.length === 0);
+  const preferChannelsDisabled =
+    disabled ||
+    optionsLoading ||
+    (draft.preferProviders.length === 0 && draft.preferChannels.length === 0);
 
   const modelSelectOptions = useMemo(
     () => mergeUserAgentRoutingOptions(modelOptions, draft.models),
     [draft.models, modelOptions],
   );
+
+  const forceChannelsHint =
+    draft.forceProviders.length > 0
+      ? "命中后只保留这些 provider 类型下的指定供应商。"
+      : "先选择 force-providers，再选择该类型下的实际供应商。";
+
+  const preferChannelsHint =
+    draft.preferProviders.length > 0
+      ? "命中后优先尝试这些 provider 类型下的指定供应商；其他同类型供应商仍可回退。"
+      : "先选择 prefer-providers，再选择该类型下的实际供应商。";
 
   const openAddModal = () => {
     setEditingIndex(null);
@@ -1035,6 +1116,8 @@ function UserAgentRoutingRulesEditor({
       models: [...(current.models || [])],
       forceProviders: [...(current.forceProviders || [])],
       preferProviders: [...(current.preferProviders || [])],
+      forceChannels: [...(current.forceChannels || [])],
+      preferChannels: [...(current.preferChannels || [])],
     });
     setFormError("");
     setModalOpen(true);
@@ -1050,6 +1133,10 @@ function UserAgentRoutingRulesEditor({
   const removeRule = (index: number) => {
     onChange((rules || []).filter((_, i) => i !== index));
     setDeleteIndex(null);
+    notify({
+      type: "info",
+      message: "规则已从当前草稿移除，仍需点击页面顶部“保存”写入 config.yaml",
+    });
   };
 
   const saveRule = () => {
@@ -1059,31 +1146,49 @@ function UserAgentRoutingRulesEditor({
       return;
     }
 
+    const forceProviders = normalizeUserAgentRoutingProviders(draft.forceProviders);
+    const preferProviders = normalizeUserAgentRoutingProviders(draft.preferProviders);
+
     const nextRule: UserAgentRoutingRuleEntry = {
       ...draft,
       name: draft.name.trim(),
       pattern,
       models: normalizeUserAgentRoutingModels(draft.models),
-      forceProviders: normalizeUserAgentRoutingProviders(draft.forceProviders),
-      preferProviders: normalizeUserAgentRoutingProviders(
-        draft.preferProviders,
+      forceProviders,
+      preferProviders,
+      forceChannels: filterUserAgentRoutingChannelsByProviders(
+        draft.forceChannels,
+        forceProviders,
+        providerOptionMap,
+        true,
+      ),
+      preferChannels: filterUserAgentRoutingChannelsByProviders(
+        draft.preferChannels,
+        preferProviders,
+        providerOptionMap,
+        true,
       ),
     };
 
     const nextRules =
       editingIndex === null
         ? [...(rules || []), nextRule]
-        : (rules || []).map((rule, index) =>
-            index === editingIndex ? nextRule : rule,
-          );
+        : (rules || []).map((rule, index) => (index === editingIndex ? nextRule : rule));
     onChange(nextRules);
     closeModal();
+    notify({
+      type: "info",
+      message:
+        editingIndex === null
+          ? "规则已加入当前草稿，仍需点击页面顶部“保存”写入 config.yaml"
+          : "规则修改已加入当前草稿，仍需点击页面顶部“保存”写入 config.yaml",
+    });
   };
 
   return (
     <Card
       title="UA 路由规则"
-      description="首个命中的规则生效。可仅按 UA 匹配，也可同时限定模型；`force-providers` 会缩小 provider 范围，`prefer-providers` 只调整优先级。"
+      description="首个命中的规则生效。可仅按 UA 匹配，也可同时限定模型；`force/prefer-providers` 控制 provider 类型，`force/prefer-channels` 控制该类型下的实际供应商。"
       actions={
         <Button size="sm" onClick={openAddModal} disabled={disabled}>
           <Plus size={14} />
@@ -1091,6 +1196,10 @@ function UserAgentRoutingRulesEditor({
         </Button>
       }
     >
+      <p className="mb-3 text-xs font-medium text-amber-700 dark:text-amber-300">
+        弹窗里的“添加到草稿 / 更新草稿”只会修改当前页面草稿；还需要点击页面顶部“保存”才能真正写入
+        config.yaml。
+      </p>
       {rules.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate-200 bg-white/60 p-4 text-center text-sm text-slate-600 dark:border-neutral-800 dark:bg-neutral-950/40 dark:text-white/65">
           暂无 UA 路由规则
@@ -1123,7 +1232,9 @@ function UserAgentRoutingRulesEditor({
                 </div>
 
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-600 dark:text-white/65">
-                  <span>UA：{rule.matchMode} / {rule.pattern || "--"}</span>
+                  <span>
+                    UA：{rule.matchMode} / {rule.pattern || "--"}
+                  </span>
                   <span>
                     模型：{summarizeUserAgentRoutingValues(rule.models || [], "全部模型")}
                   </span>
@@ -1132,6 +1243,14 @@ function UserAgentRoutingRulesEditor({
                   </span>
                   <span>
                     优先：{summarizeUserAgentRoutingValues(rule.preferProviders || [], "未设置")}
+                  </span>
+                  <span>
+                    强制供应商：
+                    {summarizeUserAgentRoutingValues(rule.forceChannels || [], "未设置")}
+                  </span>
+                  <span>
+                    优先供应商：
+                    {summarizeUserAgentRoutingValues(rule.preferChannels || [], "未设置")}
                   </span>
                 </div>
               </div>
@@ -1170,7 +1289,7 @@ function UserAgentRoutingRulesEditor({
             </Button>
             <Button onClick={saveRule} disabled={disabled}>
               <Check size={14} />
-              {editingIndex === null ? "添加" : "保存"}
+              {editingIndex === null ? "添加到草稿" : "更新草稿"}
             </Button>
           </>
         }
@@ -1180,9 +1299,10 @@ function UserAgentRoutingRulesEditor({
             <Field label="name" hint="仅用于识别规则来源。">
               <TextInput
                 value={draft.name}
-                onChange={(e) =>
-                  setDraft((prev) => ({ ...prev, name: e.currentTarget.value }))
-                }
+                onChange={(e) => {
+                  const value = e.currentTarget.value;
+                  setDraft((prev) => ({ ...prev, name: value }));
+                }}
                 placeholder="例如：OpenCode 定向"
                 disabled={disabled}
               />
@@ -1207,42 +1327,31 @@ function UserAgentRoutingRulesEditor({
             <ToggleSwitch
               label={draft.enabled ? "已启用" : "已禁用"}
               checked={draft.enabled}
-              onCheckedChange={(next) =>
-                setDraft((prev) => ({ ...prev, enabled: next }))
-              }
+              onCheckedChange={(next) => setDraft((prev) => ({ ...prev, enabled: next }))}
               disabled={disabled}
             />
           </Field>
 
-          <Field
-            label="pattern"
-            hint="匹配 User-Agent；contains 忽略大小写，regex 使用原始正则。"
-          >
+          <Field label="pattern" hint="匹配 User-Agent；contains 忽略大小写，regex 使用原始正则。">
             <TextInput
               value={draft.pattern}
-              onChange={(e) =>
-                setDraft((prev) => ({ ...prev, pattern: e.currentTarget.value }))
-              }
+              onChange={(e) => {
+                const value = e.currentTarget.value;
+                setDraft((prev) => ({ ...prev, pattern: value }));
+              }}
               placeholder="例如：opencode 或 ^opencode/"
               disabled={disabled}
             />
             {formError ? (
-              <p className="mt-2 text-sm text-rose-600 dark:text-rose-300">
-                {formError}
-              </p>
+              <p className="mt-2 text-sm text-rose-600 dark:text-rose-300">{formError}</p>
             ) : null}
           </Field>
 
-          <Field
-            label="models"
-            hint="可选。为空表示只按 UA 匹配；选择后需要 UA 与模型同时命中。"
-          >
+          <Field label="models" hint="可选。为空表示只按 UA 匹配；选择后需要 UA 与模型同时命中。">
             <MultiSelect
               options={modelSelectOptions}
               value={draft.models}
-              onChange={(models) =>
-                setDraft((prev) => ({ ...prev, models }))
-              }
+              onChange={(models) => setDraft((prev) => ({ ...prev, models }))}
               placeholder="选择模型"
               emptyLabel="全部模型"
               searchPlaceholder="搜索模型..."
@@ -1258,16 +1367,11 @@ function UserAgentRoutingRulesEditor({
           </Field>
 
           <div className="grid gap-3 lg:grid-cols-2">
-            <Field
-              label="force-providers"
-              hint="命中后只保留这些 provider。"
-            >
+            <Field label="force-providers" hint="命中后只保留这些 provider。">
               <MultiSelect
                 options={providerSelectOptions}
                 value={draft.forceProviders}
-                onChange={(forceProviders) =>
-                  setDraft((prev) => ({ ...prev, forceProviders }))
-                }
+                onChange={updateForceProviders}
                 placeholder="选择 provider"
                 emptyLabel="未设置"
                 searchPlaceholder="搜索 provider..."
@@ -1283,9 +1387,7 @@ function UserAgentRoutingRulesEditor({
               <MultiSelect
                 options={providerSelectOptions}
                 value={draft.preferProviders}
-                onChange={(preferProviders) =>
-                  setDraft((prev) => ({ ...prev, preferProviders }))
-                }
+                onChange={updatePreferProviders}
                 placeholder="选择 provider"
                 emptyLabel="未设置"
                 searchPlaceholder="搜索 provider..."
@@ -1296,8 +1398,40 @@ function UserAgentRoutingRulesEditor({
             </Field>
           </div>
 
+          <div className="grid gap-3 lg:grid-cols-2">
+            <Field label="force-channels" hint={forceChannelsHint}>
+              <MultiSelect
+                options={forceChannelSelectOptions}
+                value={draft.forceChannels}
+                onChange={(forceChannels) => setDraft((prev) => ({ ...prev, forceChannels }))}
+                placeholder="选择实际供应商"
+                emptyLabel="未设置"
+                searchPlaceholder="搜索实际供应商..."
+                selectAllLabel="清空选择"
+                emptyResultLabel="无匹配供应商"
+                disabled={forceChannelsDisabled}
+              />
+            </Field>
+            <Field label="prefer-channels" hint={preferChannelsHint}>
+              <MultiSelect
+                options={preferChannelSelectOptions}
+                value={draft.preferChannels}
+                onChange={(preferChannels) => setDraft((prev) => ({ ...prev, preferChannels }))}
+                placeholder="选择实际供应商"
+                emptyLabel="未设置"
+                searchPlaceholder="搜索实际供应商..."
+                selectAllLabel="清空选择"
+                emptyResultLabel="无匹配供应商"
+                disabled={preferChannelsDisabled}
+              />
+            </Field>
+          </div>
+
           <p className="text-xs text-slate-600 dark:text-white/65">
-            Provider 和模型选项基于当前已加载的认证与模型注册表生成。
+            Provider、实际供应商和模型选项基于当前已加载的认证与模型注册表生成。
+          </p>
+          <p className="text-xs font-medium text-amber-700 dark:text-amber-300">
+            当前弹窗只会修改页面草稿；关闭弹窗后，还需要点击页面顶部“保存”才能真正写入 config.yaml。
           </p>
         </div>
       </Modal>
@@ -1436,9 +1570,7 @@ export function VisualConfigEditor({
               label="禁用控制面板"
               description="remote-management.disable-control-panel"
               checked={values.rmDisableControlPanel}
-              onCheckedChange={(next) =>
-                update({ rmDisableControlPanel: next })
-              }
+              onCheckedChange={(next) => update({ rmDisableControlPanel: next })}
               disabled={disabled}
             />
           </div>
@@ -1451,10 +1583,7 @@ export function VisualConfigEditor({
                 disabled={disabled}
               />
             </Field>
-            <Field
-              label="panel-github-repository"
-              hint="面板仓库地址（如需）。"
-            >
+            <Field label="panel-github-repository" hint="面板仓库地址（如需）。">
               <TextInput
                 value={values.rmPanelRepo}
                 onChange={(e) => update({ rmPanelRepo: e.currentTarget.value })}
@@ -1494,27 +1623,20 @@ export function VisualConfigEditor({
               label="使用统计"
               description="usage-statistics-enabled"
               checked={values.usageStatisticsEnabled}
-              onCheckedChange={(next) =>
-                update({ usageStatisticsEnabled: next })
-              }
+              onCheckedChange={(next) => update({ usageStatisticsEnabled: next })}
               disabled={disabled}
             />
             <ToggleSwitch
               label="存储请求/响应内容"
               description="usage-log-content-enabled"
               checked={values.usageLogContentEnabled}
-              onCheckedChange={(next) =>
-                update({ usageLogContentEnabled: next })
-              }
+              onCheckedChange={(next) => update({ usageLogContentEnabled: next })}
               disabled={disabled}
             />
           </div>
         </Card>
 
-        <Card
-          title="代理与重试"
-          description="proxy-url、request-retry、max-retry-interval。"
-        >
+        <Card title="代理与重试" description="proxy-url、request-retry、max-retry-interval。">
           <div className="space-y-4">
             <Field label="proxy-url" hint="为空表示不使用代理。">
               <TextInput
@@ -1528,9 +1650,7 @@ export function VisualConfigEditor({
               <Field label="request-retry" hint="非负整数。">
                 <TextInput
                   value={values.requestRetry}
-                  onChange={(e) =>
-                    update({ requestRetry: e.currentTarget.value })
-                  }
+                  onChange={(e) => update({ requestRetry: e.currentTarget.value })}
                   placeholder="0"
                   inputMode="numeric"
                   disabled={disabled}
@@ -1539,9 +1659,7 @@ export function VisualConfigEditor({
               <Field label="max-retry-interval" hint="非负整数（秒）。">
                 <TextInput
                   value={values.maxRetryInterval}
-                  onChange={(e) =>
-                    update({ maxRetryInterval: e.currentTarget.value })
-                  }
+                  onChange={(e) => update({ maxRetryInterval: e.currentTarget.value })}
                   placeholder="0"
                   inputMode="numeric"
                   disabled={disabled}
@@ -1572,9 +1690,7 @@ export function VisualConfigEditor({
             <Field label="logs-max-total-size-mb" hint="日志总大小上限（MB）。">
               <TextInput
                 value={values.logsMaxTotalSizeMb}
-                onChange={(e) =>
-                  update({ logsMaxTotalSizeMb: e.currentTarget.value })
-                }
+                onChange={(e) => update({ logsMaxTotalSizeMb: e.currentTarget.value })}
                 placeholder="0"
                 inputMode="numeric"
                 disabled={disabled}
@@ -1599,9 +1715,7 @@ export function VisualConfigEditor({
               label="切换 Preview Model"
               description="quota-exceeded.switch-preview-model"
               checked={values.quotaSwitchPreviewModel}
-              onCheckedChange={(next) =>
-                update({ quotaSwitchPreviewModel: next })
-              }
+              onCheckedChange={(next) => update({ quotaSwitchPreviewModel: next })}
               disabled={disabled}
             />
           </div>
@@ -1615,9 +1729,7 @@ export function VisualConfigEditor({
               <Field label="routing.strategy" hint="选择路由策略。">
                 <SelectInput
                   value={values.routingStrategy}
-                  onChange={(value) =>
-                    update({ routingStrategy: value as RoutingStrategy })
-                  }
+                  onChange={(value) => update({ routingStrategy: value as RoutingStrategy })}
                   options={routingOptions}
                   disabled={disabled}
                   ariaLabel="routing.strategy"
@@ -1632,10 +1744,7 @@ export function VisualConfigEditor({
           >
             <div className="space-y-4">
               <div className="grid gap-3 lg:grid-cols-2">
-                <Field
-                  label="streaming.keepalive-seconds"
-                  hint="非负整数（秒）。"
-                >
+                <Field label="streaming.keepalive-seconds" hint="非负整数（秒）。">
                   <TextInput
                     value={values.streaming.keepaliveSeconds}
                     onChange={(e) =>
@@ -1668,10 +1777,7 @@ export function VisualConfigEditor({
                   />
                 </Field>
               </div>
-              <Field
-                label="nonstream-keepalive-interval"
-                hint="非负整数（秒）。"
-              >
+              <Field label="nonstream-keepalive-interval" hint="非负整数（秒）。">
                 <TextInput
                   value={values.streaming.nonstreamKeepaliveInterval}
                   onChange={(e) =>

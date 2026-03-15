@@ -249,17 +249,54 @@ func getAvailableAuths(auths []*Auth, provider, model string, now time.Time) ([]
 	return available, nil
 }
 
+func preferredAvailableAuths(auths []*Auth, preferredOrder []string) []*Auth {
+	if len(auths) == 0 || len(preferredOrder) == 0 {
+		return auths
+	}
+
+	authByID := make(map[string]*Auth, len(auths))
+	for i := 0; i < len(auths); i++ {
+		candidate := auths[i]
+		if candidate == nil {
+			continue
+		}
+		authByID[strings.TrimSpace(candidate.ID)] = candidate
+	}
+
+	preferred := make([]*Auth, 0, len(preferredOrder))
+	seen := make(map[string]struct{}, len(preferredOrder))
+	for i := 0; i < len(preferredOrder); i++ {
+		authID := strings.TrimSpace(preferredOrder[i])
+		if authID == "" {
+			continue
+		}
+		if _, ok := seen[authID]; ok {
+			continue
+		}
+		seen[authID] = struct{}{}
+		candidate, ok := authByID[authID]
+		if !ok {
+			continue
+		}
+		preferred = append(preferred, candidate)
+	}
+	if len(preferred) > 0 {
+		return preferred
+	}
+	return auths
+}
+
 // Pick selects the next available auth for the provider in a round-robin manner.
 // For gemini-cli virtual auths (identified by the gemini_virtual_parent attribute),
 // a two-level round-robin is used: first cycling across credential groups (parent
 // accounts), then cycling within each group's project auths.
 func (s *RoundRobinSelector) Pick(ctx context.Context, provider, model string, opts cliproxyexecutor.Options, auths []*Auth) (*Auth, error) {
-	_ = opts
 	now := time.Now()
 	available, err := getAvailableAuths(auths, provider, model, now)
 	if err != nil {
 		return nil, err
 	}
+	available = preferredAvailableAuths(available, preferredAuthIDOrderFromMetadata(opts.Metadata))
 	available = preferCodexWebsocketAuths(ctx, provider, available)
 	key := provider + ":" + canonicalModelKey(model)
 	s.mu.Lock()
@@ -353,12 +390,12 @@ func groupByVirtualParent(auths []*Auth) (map[string][]*Auth, []string) {
 
 // Pick selects the first available auth for the provider in a deterministic manner.
 func (s *FillFirstSelector) Pick(ctx context.Context, provider, model string, opts cliproxyexecutor.Options, auths []*Auth) (*Auth, error) {
-	_ = opts
 	now := time.Now()
 	available, err := getAvailableAuths(auths, provider, model, now)
 	if err != nil {
 		return nil, err
 	}
+	available = preferredAvailableAuths(available, preferredAuthIDOrderFromMetadata(opts.Metadata))
 	available = preferCodexWebsocketAuths(ctx, provider, available)
 	return available[0], nil
 }

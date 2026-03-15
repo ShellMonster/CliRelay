@@ -219,6 +219,12 @@ type UserAgentRoutingRule struct {
 
 	// PreferProviders keeps the existing candidate set but prioritizes these providers first.
 	PreferProviders []string `yaml:"prefer-providers,omitempty" json:"prefer-providers,omitempty"`
+
+	// ForceChannels narrows the provider candidates to specific auth/channel IDs.
+	ForceChannels []string `yaml:"force-channels,omitempty" json:"force-channels,omitempty"`
+
+	// PreferChannels keeps the candidate set but prioritizes these auth/channel IDs first.
+	PreferChannels []string `yaml:"prefer-channels,omitempty" json:"prefer-channels,omitempty"`
 }
 
 // OAuthModelAlias defines a model ID alias for a specific channel.
@@ -756,6 +762,8 @@ func sanitizeUserAgentRoutingRules(rules []UserAgentRoutingRule) []UserAgentRout
 
 		rule.ForceProviders = normalizeProviderNames(rule.ForceProviders)
 		rule.PreferProviders = normalizeProviderNames(rule.PreferProviders)
+		rule.ForceChannels = normalizeExactNames(rule.ForceChannels)
+		rule.PreferChannels = normalizeExactNames(rule.PreferChannels)
 		rule.Models = normalizeUserAgentRoutingModels(rule.Models)
 		out = append(out, rule)
 	}
@@ -770,6 +778,29 @@ func normalizeProviderNames(names []string) []string {
 	seen := make(map[string]struct{}, len(names))
 	for _, name := range names {
 		normalized := strings.ToLower(strings.TrimSpace(name))
+		if normalized == "" {
+			continue
+		}
+		if _, ok := seen[normalized]; ok {
+			continue
+		}
+		seen[normalized] = struct{}{}
+		out = append(out, normalized)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func normalizeExactNames(names []string) []string {
+	if len(names) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(names))
+	seen := make(map[string]struct{}, len(names))
+	for _, name := range names {
+		normalized := strings.TrimSpace(name)
 		if normalized == "" {
 			continue
 		}

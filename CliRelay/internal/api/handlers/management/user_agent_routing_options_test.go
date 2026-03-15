@@ -58,6 +58,12 @@ func TestBuildUserAgentRoutingOptions_GroupsProvidersAndModels(t *testing.T) {
 	if options.Providers[1].ID != "openai-compatibility" {
 		t.Fatalf("expected second provider to be openai-compatibility, got %#v", options.Providers)
 	}
+	if len(options.Providers[0].Channels) != 1 || options.Providers[0].Channels[0].ID != "codex-auth-1" {
+		t.Fatalf("expected codex channels to include codex-auth-1, got %#v", options.Providers[0].Channels)
+	}
+	if len(options.Providers[1].Channels) != 1 || options.Providers[1].Channels[0].ID != "compat-auth-1" {
+		t.Fatalf("expected compat channels to include compat-auth-1, got %#v", options.Providers[1].Channels)
+	}
 
 	gotModels := make(map[string]struct{}, len(options.Models))
 	for _, model := range options.Models {
@@ -103,6 +109,9 @@ func TestBuildUserAgentRoutingOptions_UsesConfiguredFallbackModels(t *testing.T)
 
 	if len(options.Providers) != 1 || options.Providers[0].ID != "codex-compat" {
 		t.Fatalf("expected codex-compat provider option, got %#v", options.Providers)
+	}
+	if len(options.Providers[0].Channels) != 1 || options.Providers[0].Channels[0].ID != "codex-compat-auth-1" {
+		t.Fatalf("expected codex-compat channels to include auth id, got %#v", options.Providers[0].Channels)
 	}
 
 	gotModels := make(map[string]struct{}, len(options.Models))
