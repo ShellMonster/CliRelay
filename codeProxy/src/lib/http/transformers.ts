@@ -106,6 +106,27 @@ const normalizeUserAgentRoutingProviders = (input: unknown): string[] => {
   return normalized;
 };
 
+const normalizeUserAgentRoutingModels = (input: unknown): string[] => {
+  const rawList = Array.isArray(input)
+    ? input
+    : typeof input === "string"
+      ? input.split(/[\n,]/)
+      : [];
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+
+  rawList.forEach((item) => {
+    const trimmed = String(item ?? "").trim();
+    if (!trimmed) return;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    normalized.push(trimmed);
+  });
+
+  return normalized;
+};
+
 const normalizeUserAgentRoutingRules = (
   input: unknown,
 ): UserAgentRoutingRuleConfig[] => {
@@ -125,6 +146,7 @@ const normalizeUserAgentRoutingRules = (
       enabled: enabled === undefined ? true : enabled,
       matchMode,
       pattern,
+      models: normalizeUserAgentRoutingModels(item.models),
       forceProviders: normalizeUserAgentRoutingProviders(
         item["force-providers"] ?? item.forceProviders,
       ),

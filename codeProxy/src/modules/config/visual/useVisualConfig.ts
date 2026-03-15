@@ -198,6 +198,23 @@ function parseUserAgentRoutingProviders(raw: unknown): string[] {
   return [];
 }
 
+function parseUserAgentRoutingModels(raw: unknown): string[] {
+  if (Array.isArray(raw)) {
+    return raw
+      .map((item) => String(item).trim())
+      .filter(Boolean)
+      .filter((item, index, arr) => arr.findIndex((value) => value.toLowerCase() === item.toLowerCase()) === index);
+  }
+  if (typeof raw === "string") {
+    return raw
+      .split(/[\n,]+/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .filter((item, index, arr) => arr.findIndex((value) => value.toLowerCase() === item.toLowerCase()) === index);
+  }
+  return [];
+}
+
 function parseUserAgentRoutingRules(
   rules: unknown,
 ): UserAgentRoutingRuleEntry[] {
@@ -227,6 +244,7 @@ function parseUserAgentRoutingRules(
           record["match-mode"] ?? record.matchMode,
         ),
         pattern,
+        models: parseUserAgentRoutingModels(record.models),
         forceProviders: parseUserAgentRoutingProviders(
           record["force-providers"] ?? record.forceProviders,
         ),
@@ -254,6 +272,10 @@ function serializeUserAgentRoutingRulesForYaml(
         .map((provider) => provider.trim().toLowerCase())
         .filter(Boolean)
         .filter((provider, index, arr) => arr.indexOf(provider) === index);
+      const models = (rule.models || [])
+        .map((model) => model.trim())
+        .filter(Boolean)
+        .filter((model, index, arr) => arr.findIndex((value) => value.toLowerCase() === model.toLowerCase()) === index);
 
       const next: Record<string, unknown> = {
         enabled: rule.enabled,
@@ -261,6 +283,7 @@ function serializeUserAgentRoutingRulesForYaml(
         pattern,
       };
       if (rule.name.trim()) next.name = rule.name.trim();
+      if (models.length > 0) next.models = models;
       if (forceProviders.length > 0) next["force-providers"] = forceProviders;
       if (preferProviders.length > 0)
         next["prefer-providers"] = preferProviders;

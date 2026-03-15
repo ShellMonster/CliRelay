@@ -510,7 +510,7 @@ func (m *Manager) Execute(ctx context.Context, providers []string, req cliproxye
 	if len(normalized) == 0 {
 		return cliproxyexecutor.Response{}, &Error{Code: "provider_not_found", Message: "no provider supplied"}
 	}
-	routedProviders, orderedByProvider := m.userAgentRoutedProviders(normalized, opts.Metadata)
+	routedProviders, orderedByProvider := m.userAgentRoutedProviders(normalized, opts.Metadata, req.Model)
 
 	_, maxWait := m.retrySettings()
 
@@ -542,7 +542,7 @@ func (m *Manager) ExecuteCount(ctx context.Context, providers []string, req clip
 	if len(normalized) == 0 {
 		return cliproxyexecutor.Response{}, &Error{Code: "provider_not_found", Message: "no provider supplied"}
 	}
-	routedProviders, orderedByProvider := m.userAgentRoutedProviders(normalized, opts.Metadata)
+	routedProviders, orderedByProvider := m.userAgentRoutedProviders(normalized, opts.Metadata, req.Model)
 
 	_, maxWait := m.retrySettings()
 
@@ -574,7 +574,7 @@ func (m *Manager) ExecuteStream(ctx context.Context, providers []string, req cli
 	if len(normalized) == 0 {
 		return nil, &Error{Code: "provider_not_found", Message: "no provider supplied"}
 	}
-	routedProviders, orderedByProvider := m.userAgentRoutedProviders(normalized, opts.Metadata)
+	routedProviders, orderedByProvider := m.userAgentRoutedProviders(normalized, opts.Metadata, req.Model)
 
 	_, maxWait := m.retrySettings()
 
@@ -1185,7 +1185,7 @@ func (m *Manager) normalizeProviders(providers []string) []string {
 	return result
 }
 
-func (m *Manager) userAgentRoutedProviders(providers []string, meta map[string]any) ([]string, bool) {
+func (m *Manager) userAgentRoutedProviders(providers []string, meta map[string]any, requestedModel string) ([]string, bool) {
 	if m == nil || len(providers) == 0 {
 		return providers, false
 	}
@@ -1200,7 +1200,9 @@ func (m *Manager) userAgentRoutedProviders(providers []string, meta map[string]a
 	}
 
 	for _, rule := range cfg.Routing.UserAgentRules {
-		if !userAgentRoutingRuleEnabled(rule) || !userAgentRoutingRuleMatches(rule, userAgent) {
+		if !userAgentRoutingRuleEnabled(rule) ||
+			!userAgentRoutingRuleMatches(rule, userAgent) ||
+			!userAgentRoutingRuleMatchesModel(rule, requestedModel) {
 			continue
 		}
 
@@ -1257,6 +1259,55 @@ func userAgentRoutingRuleMatches(rule internalconfig.UserAgentRoutingRule, userA
 	default:
 		return strings.Contains(strings.ToLower(userAgent), strings.ToLower(pattern))
 	}
+}
+
+func userAgentRoutingRuleMatchesModel(rule internalconfig.UserAgentRoutingRule, requestedModel string) bool {
+	if len(rule.Models) == 0 {
+		return true
+	}
+	requestedLookup := buildUserAgentRoutingModelLookup([]string{requestedModel})
+	if len(requestedLookup) == 0 {
+		return false
+	}
+	ruleLookup := buildUserAgentRoutingModelLookup(rule.Models)
+	if len(ruleLookup) == 0 {
+		return false
+	}
+	for key := range requestedLookup {
+		if _, exists := ruleLookup[key]; exists {
+			return true
+		}
+	}
+	return false
+}
+
+func buildUserAgentRoutingModelLookup(models []string) map[string]struct{} {
+	if len(models) == 0 {
+		return nil
+	}
+	lookup := make(map[string]struct{}, len(models)*2)
+	for _, model := range models {
+		for _, key := range userAgentRoutingModelLookupKeys(model) {
+			lookup[key] = struct{}{}
+		}
+	}
+	if len(lookup) == 0 {
+		return nil
+	}
+	return lookup
+}
+
+func userAgentRoutingModelLookupKeys(model string) []string {
+	trimmed := strings.TrimSpace(model)
+	if trimmed == "" {
+		return nil
+	}
+	keys := []string{strings.ToLower(trimmed)}
+	baseModel := strings.TrimSpace(thinking.ParseSuffix(trimmed).ModelName)
+	if baseModel != "" && !strings.EqualFold(baseModel, trimmed) {
+		keys = append(keys, strings.ToLower(baseModel))
+	}
+	return keys
 }
 
 func applyUserAgentRoutingRule(providers []string, rule internalconfig.UserAgentRoutingRule) ([]string, bool) {

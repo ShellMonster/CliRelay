@@ -209,6 +209,10 @@ type UserAgentRoutingRule struct {
 	MatchMode string `yaml:"match-mode,omitempty" json:"match-mode,omitempty"`
 	Pattern   string `yaml:"pattern,omitempty" json:"pattern,omitempty"`
 
+	// Models optionally restrict the rule to specific requested models. Empty means
+	// the rule only matches on User-Agent.
+	Models []string `yaml:"models,omitempty" json:"models,omitempty"`
+
 	// ForceProviders narrows the provider set to the intersection of these providers and
 	// the model's existing provider candidates.
 	ForceProviders []string `yaml:"force-providers,omitempty" json:"force-providers,omitempty"`
@@ -752,6 +756,7 @@ func sanitizeUserAgentRoutingRules(rules []UserAgentRoutingRule) []UserAgentRout
 
 		rule.ForceProviders = normalizeProviderNames(rule.ForceProviders)
 		rule.PreferProviders = normalizeProviderNames(rule.PreferProviders)
+		rule.Models = normalizeUserAgentRoutingModels(rule.Models)
 		out = append(out, rule)
 	}
 	return out
@@ -773,6 +778,30 @@ func normalizeProviderNames(names []string) []string {
 		}
 		seen[normalized] = struct{}{}
 		out = append(out, normalized)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func normalizeUserAgentRoutingModels(models []string) []string {
+	if len(models) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(models))
+	seen := make(map[string]struct{}, len(models))
+	for _, model := range models {
+		trimmed := strings.TrimSpace(model)
+		if trimmed == "" {
+			continue
+		}
+		key := strings.ToLower(trimmed)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, trimmed)
 	}
 	if len(out) == 0 {
 		return nil

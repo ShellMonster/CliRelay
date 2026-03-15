@@ -1,5 +1,6 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, ChevronDown, Copy, Plus, Trash2 } from "lucide-react";
+import { configApi } from "@/lib/http/apis/config";
 import type {
   PayloadFilterRule,
   PayloadModelEntry,
@@ -22,6 +23,10 @@ import { Card } from "@/modules/ui/Card";
 import { ConfirmModal } from "@/modules/ui/ConfirmModal";
 import { TextInput } from "@/modules/ui/Input";
 import { Modal } from "@/modules/ui/Modal";
+import {
+  MultiSelect,
+  type MultiSelectOption,
+} from "@/modules/ui/MultiSelect";
 import { ToggleSwitch } from "@/modules/ui/ToggleSwitch";
 import { useToast } from "@/modules/ui/ToastProvider";
 
@@ -41,15 +46,61 @@ const USER_AGENT_ROUTING_MATCH_MODE_OPTIONS = [
   { value: "regex", label: "regex（正则）" },
 ] satisfies ReadonlyArray<{ value: UserAgentRoutingMatchMode; label: string }>;
 
-const parseProviderList = (value: string): string[] =>
-  value
-    .split(/[\n,]+/)
-    .map((item) => item.trim().toLowerCase())
-    .filter(Boolean)
-    .filter((item, index, arr) => arr.indexOf(item) === index);
+const createEmptyUserAgentRoutingRule = (): UserAgentRoutingRuleEntry => ({
+  id: makeClientId(),
+  name: "",
+  enabled: true,
+  matchMode: "contains",
+  pattern: "",
+  models: [],
+  forceProviders: [],
+  preferProviders: [],
+});
 
-const formatProviderList = (providers: string[]): string =>
-  providers.join("\n");
+const normalizeUserAgentRoutingModels = (values: string[]): string[] =>
+  values
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .filter(
+      (value, index, arr) =>
+        arr.findIndex((item) => item.toLowerCase() === value.toLowerCase()) ===
+        index,
+    );
+
+const normalizeUserAgentRoutingProviders = (values: string[]): string[] =>
+  values
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean)
+    .filter((value, index, arr) => arr.indexOf(value) === index);
+
+const summarizeUserAgentRoutingValues = (
+  values: string[],
+  emptyLabel: string,
+): string => {
+  if (!values.length) return emptyLabel;
+  if (values.length <= 2) return values.join(", ");
+  return `${values.slice(0, 2).join(", ")} +${values.length - 2}`;
+};
+
+const mergeUserAgentRoutingOptions = (
+  baseOptions: MultiSelectOption[],
+  selectedValues: string[],
+): MultiSelectOption[] => {
+  const optionMap = new Map<string, MultiSelectOption>();
+  baseOptions.forEach((option) => {
+    optionMap.set(option.value.toLowerCase(), option);
+  });
+  selectedValues.forEach((value) => {
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    const key = trimmed.toLowerCase();
+    if (optionMap.has(key)) return;
+    optionMap.set(key, { value: trimmed, label: trimmed });
+  });
+  return Array.from(optionMap.values()).sort((a, b) =>
+    a.label.localeCompare(b.label, "zh-CN"),
+  );
+};
 
 function Field({
   label,
@@ -900,42 +951,141 @@ function UserAgentRoutingRulesEditor({
   disabled?: boolean;
   onChange: (rules: UserAgentRoutingRuleEntry[]) => void;
 }) {
-  const addRule = () => {
-    onChange([
-      ...(rules || []),
-      {
-        id: makeClientId(),
-        name: "",
-        enabled: true,
-        matchMode: "contains",
-        pattern: "",
-        forceProviders: [],
-        preferProviders: [],
-      },
-    ]);
+  const { notify } = useToast();
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [deleteIndex, setDeleteIndex] = useState<number | null>(null);
+  const [formError, setFormError] = useState("");
+  const [draft, setDraft] = useState<UserAgentRoutingRuleEntry>(
+    createEmptyUserAgentRoutingRule(),
+  );
+  const [optionsLoading, setOptionsLoading] = useState(false);
+  const [providerOptions, setProviderOptions] = useState<MultiSelectOption[]>(
+    [],
+  );
+  const [modelOptions, setModelOptions] = useState<MultiSelectOption[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    setOptionsLoading(true);
+    void configApi
+      .getUserAgentRoutingOptions()
+      .then((data) => {
+        if (!active) return;
+        setProviderOptions(
+          data.providers.map((option) => ({
+            value: option.id,
+            label: option.label,
+          })),
+        );
+        setModelOptions(
+          data.models.map((option) => ({
+            value: option.id,
+            label: option.label,
+          })),
+        );
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        notify({
+          type: "error",
+          message:
+            error instanceof Error
+              ? error.message
+              : "加载 UA 路由规则选项失败",
+        });
+      })
+      .finally(() => {
+        if (!active) return;
+        setOptionsLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [notify]);
+
+  const providerSelectOptions = useMemo(
+    () =>
+      mergeUserAgentRoutingOptions(providerOptions, [
+        ...draft.forceProviders,
+        ...draft.preferProviders,
+      ]),
+    [draft.forceProviders, draft.preferProviders, providerOptions],
+  );
+
+  const modelSelectOptions = useMemo(
+    () => mergeUserAgentRoutingOptions(modelOptions, draft.models),
+    [draft.models, modelOptions],
+  );
+
+  const openAddModal = () => {
+    setEditingIndex(null);
+    setDraft(createEmptyUserAgentRoutingRule());
+    setFormError("");
+    setModalOpen(true);
   };
 
-  const updateRule = (
-    index: number,
-    patch: Partial<UserAgentRoutingRuleEntry>,
-  ) => {
-    onChange(
-      (rules || []).map((rule, i) =>
-        i === index ? { ...rule, ...patch } : rule,
-      ),
-    );
+  const openEditModal = (index: number) => {
+    const current = rules[index];
+    if (!current) return;
+    setEditingIndex(index);
+    setDraft({
+      ...current,
+      models: [...(current.models || [])],
+      forceProviders: [...(current.forceProviders || [])],
+      preferProviders: [...(current.preferProviders || [])],
+    });
+    setFormError("");
+    setModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setModalOpen(false);
+    setEditingIndex(null);
+    setDraft(createEmptyUserAgentRoutingRule());
+    setFormError("");
   };
 
   const removeRule = (index: number) => {
     onChange((rules || []).filter((_, i) => i !== index));
+    setDeleteIndex(null);
+  };
+
+  const saveRule = () => {
+    const pattern = draft.pattern.trim();
+    if (!pattern) {
+      setFormError("pattern 不能为空");
+      return;
+    }
+
+    const nextRule: UserAgentRoutingRuleEntry = {
+      ...draft,
+      name: draft.name.trim(),
+      pattern,
+      models: normalizeUserAgentRoutingModels(draft.models),
+      forceProviders: normalizeUserAgentRoutingProviders(draft.forceProviders),
+      preferProviders: normalizeUserAgentRoutingProviders(
+        draft.preferProviders,
+      ),
+    };
+
+    const nextRules =
+      editingIndex === null
+        ? [...(rules || []), nextRule]
+        : (rules || []).map((rule, index) =>
+            index === editingIndex ? nextRule : rule,
+          );
+    onChange(nextRules);
+    closeModal();
   };
 
   return (
     <Card
       title="UA 路由规则"
-      description="首个命中的规则生效。`force-providers` 会缩小 provider 范围，`prefer-providers` 只调整优先级。"
+      description="首个命中的规则生效。可仅按 UA 匹配，也可同时限定模型；`force-providers` 会缩小 provider 范围，`prefer-providers` 只调整优先级。"
       actions={
-        <Button size="sm" onClick={addRule} disabled={disabled}>
+        <Button size="sm" onClick={openAddModal} disabled={disabled}>
           <Plus size={14} />
           新增规则
         </Button>
@@ -946,117 +1096,224 @@ function UserAgentRoutingRulesEditor({
           暂无 UA 路由规则
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {rules.map((rule, index) => (
             <div
               key={rule.id}
-              className="space-y-4 rounded-2xl border border-slate-200 bg-white/60 p-4 dark:border-neutral-800 dark:bg-neutral-950/40"
+              className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white/60 px-4 py-3 dark:border-neutral-800 dark:bg-neutral-950/40"
             >
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="text-sm font-semibold text-slate-900 dark:text-white">
-                  规则 {index + 1}
-                </div>
-                <div className="flex flex-wrap items-center gap-3">
-                  <ToggleSwitch
-                    label="启用"
-                    checked={rule.enabled}
-                    onCheckedChange={(next) =>
-                      updateRule(index, { enabled: next })
-                    }
-                    disabled={disabled}
-                  />
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    onClick={() => removeRule(index)}
-                    disabled={disabled}
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700 dark:bg-white/10 dark:text-white/80">
+                    #{index + 1}
+                  </span>
+                  <span className="text-sm font-semibold text-slate-900 dark:text-white">
+                    {rule.name.trim() || `规则 ${index + 1}`}
+                  </span>
+                  <span
+                    className={[
+                      "inline-flex rounded-full px-2 py-0.5 text-xs font-medium",
+                      rule.enabled
+                        ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"
+                        : "bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-white/45",
+                    ].join(" ")}
                   >
-                    <Trash2 size={14} />
-                    删除
-                  </Button>
+                    {rule.enabled ? "已启用" : "已禁用"}
+                  </span>
+                </div>
+
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-600 dark:text-white/65">
+                  <span>UA：{rule.matchMode} / {rule.pattern || "--"}</span>
+                  <span>
+                    模型：{summarizeUserAgentRoutingValues(rule.models || [], "全部模型")}
+                  </span>
+                  <span>
+                    强制：{summarizeUserAgentRoutingValues(rule.forceProviders || [], "未设置")}
+                  </span>
+                  <span>
+                    优先：{summarizeUserAgentRoutingValues(rule.preferProviders || [], "未设置")}
+                  </span>
                 </div>
               </div>
-
-              <div className="grid gap-3 lg:grid-cols-2">
-                <Field label="name" hint="仅用于识别规则来源。">
-                  <TextInput
-                    value={rule.name}
-                    onChange={(e) =>
-                      updateRule(index, { name: e.currentTarget.value })
-                    }
-                    placeholder="例如：OpenCode 定向"
-                    disabled={disabled}
-                  />
-                </Field>
-                <Field label="match-mode" hint="contains 大多数场景更稳。">
-                  <SelectInput
-                    value={rule.matchMode}
-                    onChange={(value) =>
-                      updateRule(index, {
-                        matchMode: value as UserAgentRoutingMatchMode,
-                      })
-                    }
-                    options={USER_AGENT_ROUTING_MATCH_MODE_OPTIONS}
-                    disabled={disabled}
-                    ariaLabel="user-agent match mode"
-                  />
-                </Field>
-              </div>
-
-              <Field
-                label="pattern"
-                hint="匹配 User-Agent；contains 忽略大小写，regex 使用原始正则。"
-              >
-                <TextInput
-                  value={rule.pattern}
-                  onChange={(e) =>
-                    updateRule(index, { pattern: e.currentTarget.value })
-                  }
-                  placeholder="例如：opencode 或 ^opencode/"
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => openEditModal(index)}
                   disabled={disabled}
-                />
-              </Field>
-
-              <div className="grid gap-3 lg:grid-cols-2">
-                <Field
-                  label="force-providers"
-                  hint="命中后只保留这些 provider。逗号或换行分隔，如 codex-compat。"
                 >
-                  <TextArea
-                    value={formatProviderList(rule.forceProviders)}
-                    onChange={(value) =>
-                      updateRule(index, {
-                        forceProviders: parseProviderList(value),
-                      })
-                    }
-                    placeholder={"codex-compat\ncodex"}
-                    disabled={disabled}
-                    ariaLabel="force providers"
-                    rows={4}
-                  />
-                </Field>
-                <Field
-                  label="prefer-providers"
-                  hint="命中后优先尝试这些 provider；未命中的 provider 仍可回退。"
+                  编辑
+                </Button>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  onClick={() => setDeleteIndex(index)}
+                  disabled={disabled}
                 >
-                  <TextArea
-                    value={formatProviderList(rule.preferProviders)}
-                    onChange={(value) =>
-                      updateRule(index, {
-                        preferProviders: parseProviderList(value),
-                      })
-                    }
-                    placeholder={"codex-compat\nopenai-compatibility"}
-                    disabled={disabled}
-                    ariaLabel="prefer providers"
-                    rows={4}
-                  />
-                </Field>
+                  <Trash2 size={14} />
+                  删除
+                </Button>
               </div>
             </div>
           ))}
         </div>
       )}
+
+      <Modal
+        open={modalOpen}
+        onClose={closeModal}
+        title={editingIndex === null ? "新增 UA 路由规则" : "编辑 UA 路由规则"}
+        footer={
+          <>
+            <Button variant="secondary" onClick={closeModal} disabled={disabled}>
+              取消
+            </Button>
+            <Button onClick={saveRule} disabled={disabled}>
+              <Check size={14} />
+              {editingIndex === null ? "添加" : "保存"}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div className="grid gap-3 lg:grid-cols-2">
+            <Field label="name" hint="仅用于识别规则来源。">
+              <TextInput
+                value={draft.name}
+                onChange={(e) =>
+                  setDraft((prev) => ({ ...prev, name: e.currentTarget.value }))
+                }
+                placeholder="例如：OpenCode 定向"
+                disabled={disabled}
+              />
+            </Field>
+            <Field label="match-mode" hint="contains 大多数场景更稳。">
+              <SelectInput
+                value={draft.matchMode}
+                onChange={(value) =>
+                  setDraft((prev) => ({
+                    ...prev,
+                    matchMode: value as UserAgentRoutingMatchMode,
+                  }))
+                }
+                options={USER_AGENT_ROUTING_MATCH_MODE_OPTIONS}
+                disabled={disabled}
+                ariaLabel="user-agent match mode"
+              />
+            </Field>
+          </div>
+
+          <Field label="enabled" hint="关闭后保留规则但不参与匹配。">
+            <ToggleSwitch
+              label={draft.enabled ? "已启用" : "已禁用"}
+              checked={draft.enabled}
+              onCheckedChange={(next) =>
+                setDraft((prev) => ({ ...prev, enabled: next }))
+              }
+              disabled={disabled}
+            />
+          </Field>
+
+          <Field
+            label="pattern"
+            hint="匹配 User-Agent；contains 忽略大小写，regex 使用原始正则。"
+          >
+            <TextInput
+              value={draft.pattern}
+              onChange={(e) =>
+                setDraft((prev) => ({ ...prev, pattern: e.currentTarget.value }))
+              }
+              placeholder="例如：opencode 或 ^opencode/"
+              disabled={disabled}
+            />
+            {formError ? (
+              <p className="mt-2 text-sm text-rose-600 dark:text-rose-300">
+                {formError}
+              </p>
+            ) : null}
+          </Field>
+
+          <Field
+            label="models"
+            hint="可选。为空表示只按 UA 匹配；选择后需要 UA 与模型同时命中。"
+          >
+            <MultiSelect
+              options={modelSelectOptions}
+              value={draft.models}
+              onChange={(models) =>
+                setDraft((prev) => ({ ...prev, models }))
+              }
+              placeholder="选择模型"
+              emptyLabel="全部模型"
+              searchPlaceholder="搜索模型..."
+              selectAllLabel="全部模型"
+              emptyResultLabel="无匹配模型"
+              disabled={disabled || optionsLoading}
+            />
+            <p className="mt-2 text-xs text-slate-600 dark:text-white/65">
+              {optionsLoading
+                ? "正在加载模型选项..."
+                : `共 ${modelSelectOptions.length} 个可选模型`}
+            </p>
+          </Field>
+
+          <div className="grid gap-3 lg:grid-cols-2">
+            <Field
+              label="force-providers"
+              hint="命中后只保留这些 provider。"
+            >
+              <MultiSelect
+                options={providerSelectOptions}
+                value={draft.forceProviders}
+                onChange={(forceProviders) =>
+                  setDraft((prev) => ({ ...prev, forceProviders }))
+                }
+                placeholder="选择 provider"
+                emptyLabel="未设置"
+                searchPlaceholder="搜索 provider..."
+                selectAllLabel="清空选择"
+                emptyResultLabel="无匹配 provider"
+                disabled={disabled || optionsLoading}
+              />
+            </Field>
+            <Field
+              label="prefer-providers"
+              hint="命中后优先尝试这些 provider；未命中的 provider 仍可回退。"
+            >
+              <MultiSelect
+                options={providerSelectOptions}
+                value={draft.preferProviders}
+                onChange={(preferProviders) =>
+                  setDraft((prev) => ({ ...prev, preferProviders }))
+                }
+                placeholder="选择 provider"
+                emptyLabel="未设置"
+                searchPlaceholder="搜索 provider..."
+                selectAllLabel="清空选择"
+                emptyResultLabel="无匹配 provider"
+                disabled={disabled || optionsLoading}
+              />
+            </Field>
+          </div>
+
+          <p className="text-xs text-slate-600 dark:text-white/65">
+            Provider 和模型选项基于当前已加载的认证与模型注册表生成。
+          </p>
+        </div>
+      </Modal>
+
+      <ConfirmModal
+        open={deleteIndex !== null}
+        title="删除 UA 路由规则"
+        description="确定要删除这条 UA 路由规则吗？此操作不可恢复。"
+        confirmText="删除"
+        variant="danger"
+        onClose={() => setDeleteIndex(null)}
+        onConfirm={() => {
+          if (deleteIndex === null) return;
+          removeRule(deleteIndex);
+        }}
+      />
     </Card>
   );
 }

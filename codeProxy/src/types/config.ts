@@ -20,6 +20,7 @@ export interface UserAgentRoutingRuleConfig {
   enabled?: boolean;
   matchMode?: "contains" | "regex";
   pattern?: string;
+  models?: string[];
   forceProviders?: string[];
   preferProviders?: string[];
 }

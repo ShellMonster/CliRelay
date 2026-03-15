@@ -48,6 +48,7 @@ export type UserAgentRoutingRuleEntry = {
   enabled: boolean;
   matchMode: UserAgentRoutingMatchMode;
   pattern: string;
+  models: string[];
   forceProviders: string[];
   preferProviders: string[];
 };

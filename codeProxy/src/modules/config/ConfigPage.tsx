@@ -555,6 +555,10 @@ function RuntimeConfigPanel({
                       Pattern：{rule.pattern?.trim() || "--"}
                     </div>
                     <div className="text-xs text-slate-600 dark:text-white/65">
+                      模型：
+                      {rule.models?.length ? rule.models.join(", ") : "全部模型"}
+                    </div>
+                    <div className="text-xs text-slate-600 dark:text-white/65">
                       Force：
                       {rule.forceProviders?.length
                         ? rule.forceProviders.join(", ")

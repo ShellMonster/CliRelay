@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	internalconfig "github.com/router-for-me/CLIProxyAPI/v6/internal/config"
+	"github.com/router-for-me/CLIProxyAPI/v6/internal/registry"
 	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/executor"
 )
 
@@ -38,8 +39,6 @@ func (e userAgentRoutingTestExecutor) HttpRequest(_ context.Context, _ *Auth, _ 
 }
 
 func TestManagerExecute_UserAgentForceProviders(t *testing.T) {
-	t.Parallel()
-
 	manager := newUserAgentRoutingTestManager(t, []internalconfig.UserAgentRoutingRule{
 		{
 			Name:           "opencode-force-compat",
@@ -50,15 +49,13 @@ func TestManagerExecute_UserAgentForceProviders(t *testing.T) {
 		},
 	})
 
-	authID := executeUserAgentRoutedRequest(t, manager, "opencode/1.0.0", []string{"codex", "codex-compat"})
+	authID := executeUserAgentRoutedRequest(t, manager, "opencode/1.0.0", "", []string{"codex", "codex-compat"})
 	if authID != "auth-compat" {
 		t.Fatalf("selected auth = %q, want %q", authID, "auth-compat")
 	}
 }
 
 func TestManagerExecute_UserAgentPreferProviders(t *testing.T) {
-	t.Parallel()
-
 	manager := newUserAgentRoutingTestManager(t, []internalconfig.UserAgentRoutingRule{
 		{
 			Name:            "opencode-prefer-compat",
@@ -69,15 +66,13 @@ func TestManagerExecute_UserAgentPreferProviders(t *testing.T) {
 		},
 	})
 
-	authID := executeUserAgentRoutedRequest(t, manager, "opencode/1.0.0", []string{"codex", "codex-compat"})
+	authID := executeUserAgentRoutedRequest(t, manager, "opencode/1.0.0", "", []string{"codex", "codex-compat"})
 	if authID != "auth-compat" {
 		t.Fatalf("selected auth = %q, want %q", authID, "auth-compat")
 	}
 }
 
 func TestManagerExecute_UserAgentRoutingNoMatchKeepsDefaultSelection(t *testing.T) {
-	t.Parallel()
-
 	manager := newUserAgentRoutingTestManager(t, []internalconfig.UserAgentRoutingRule{
 		{
 			Name:            "opencode-prefer-compat",
@@ -88,15 +83,13 @@ func TestManagerExecute_UserAgentRoutingNoMatchKeepsDefaultSelection(t *testing.
 		},
 	})
 
-	authID := executeUserAgentRoutedRequest(t, manager, "codex-cli/0.1.0", []string{"codex", "codex-compat"})
+	authID := executeUserAgentRoutedRequest(t, manager, "codex-cli/0.1.0", "", []string{"codex", "codex-compat"})
 	if authID != "auth-codex" {
 		t.Fatalf("selected auth = %q, want %q", authID, "auth-codex")
 	}
 }
 
 func TestManagerExecute_UserAgentForceProvidersFallsBackWhenNoIntersection(t *testing.T) {
-	t.Parallel()
-
 	manager := newUserAgentRoutingTestManager(t, []internalconfig.UserAgentRoutingRule{
 		{
 			Name:           "missing-provider",
@@ -107,7 +100,43 @@ func TestManagerExecute_UserAgentForceProvidersFallsBackWhenNoIntersection(t *te
 		},
 	})
 
-	authID := executeUserAgentRoutedRequest(t, manager, "opencode/1.0.0", []string{"codex", "codex-compat"})
+	authID := executeUserAgentRoutedRequest(t, manager, "opencode/1.0.0", "", []string{"codex", "codex-compat"})
+	if authID != "auth-codex" {
+		t.Fatalf("selected auth = %q, want %q", authID, "auth-codex")
+	}
+}
+
+func TestManagerExecute_UserAgentAndModelRoutingMatch(t *testing.T) {
+	manager := newUserAgentRoutingTestManager(t, []internalconfig.UserAgentRoutingRule{
+		{
+			Name:           "opencode-gpt5-force-compat",
+			Enabled:        boolPtr(true),
+			MatchMode:      "contains",
+			Pattern:        "opencode",
+			Models:         []string{"gpt-5"},
+			ForceProviders: []string{"codex-compat"},
+		},
+	})
+
+	authID := executeUserAgentRoutedRequest(t, manager, "opencode/1.0.0", "gpt-5(high)", []string{"codex", "codex-compat"})
+	if authID != "auth-compat" {
+		t.Fatalf("selected auth = %q, want %q", authID, "auth-compat")
+	}
+}
+
+func TestManagerExecute_UserAgentModelMismatchKeepsDefaultSelection(t *testing.T) {
+	manager := newUserAgentRoutingTestManager(t, []internalconfig.UserAgentRoutingRule{
+		{
+			Name:           "opencode-gpt5-force-compat",
+			Enabled:        boolPtr(true),
+			MatchMode:      "contains",
+			Pattern:        "opencode",
+			Models:         []string{"gpt-5"},
+			ForceProviders: []string{"codex-compat"},
+		},
+	})
+
+	authID := executeUserAgentRoutedRequest(t, manager, "opencode/1.0.0", "gpt-4.1", []string{"codex", "codex-compat"})
 	if authID != "auth-codex" {
 		t.Fatalf("selected auth = %q, want %q", authID, "auth-codex")
 	}
@@ -134,22 +163,42 @@ func newUserAgentRoutingTestManager(t *testing.T, rules []internalconfig.UserAge
 		}
 	}
 
+	modelRegistry := registry.GetGlobalRegistry()
+	models := []*registry.ModelInfo{
+		{ID: "gpt-5"},
+		{ID: "gpt-4.1"},
+	}
+	modelRegistry.RegisterClient("auth-codex", "codex", models)
+	modelRegistry.RegisterClient("auth-compat", "codex-compat", models)
+	if !modelRegistry.ClientSupportsModel("auth-codex", "gpt-5") || !modelRegistry.ClientSupportsModel("auth-compat", "gpt-5") {
+		t.Fatalf("test fixture failed to register expected models")
+	}
+	t.Cleanup(func() {
+		modelRegistry.UnregisterClient("auth-codex")
+		modelRegistry.UnregisterClient("auth-compat")
+	})
+
 	return manager
 }
 
-func executeUserAgentRoutedRequest(t *testing.T, manager *Manager, userAgent string, providers []string) string {
+func executeUserAgentRoutedRequest(t *testing.T, manager *Manager, userAgent, model string, providers []string) string {
 	t.Helper()
 
+	selectedAuthID := ""
 	opts := cliproxyexecutor.Options{
 		Metadata: map[string]any{
-			cliproxyexecutor.UserAgentMetadataKey: userAgent,
+			cliproxyexecutor.UserAgentMetadataKey:            userAgent,
+			cliproxyexecutor.SelectedAuthCallbackMetadataKey: func(authID string) { selectedAuthID = authID },
 		},
 	}
-	_, err := manager.Execute(context.Background(), providers, cliproxyexecutor.Request{}, opts)
+	_, err := manager.Execute(context.Background(), providers, cliproxyexecutor.Request{Model: model}, opts)
 	if err != nil {
 		t.Fatalf("execute request: %v", err)
 	}
 
+	if selectedAuthID != "" {
+		return selectedAuthID
+	}
 	authID, _ := opts.Metadata[cliproxyexecutor.SelectedAuthMetadataKey].(string)
 	return authID
 }
