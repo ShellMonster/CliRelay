@@ -51,6 +51,7 @@ const SECTION_KEYS: RawConfigSection[] = [
   "gemini-api-key",
   "codex-api-key",
   "codex-compat-api-key",
+  "copilot-compat-api-key",
   "claude-api-key",
   "vertex-api-key",
   "openai-compatibility",
@@ -94,6 +95,8 @@ const extractSectionValue = (config: Config | null, section?: RawConfigSection) 
       return config.codexApiKeys;
     case "codex-compat-api-key":
       return config.codexCompatApiKeys;
+    case "copilot-compat-api-key":
+      return config.copilotCompatApiKeys;
     case "claude-api-key":
       return config.claudeApiKeys;
     case "vertex-api-key":
@@ -250,6 +253,9 @@ export const useConfigStore = create<ConfigState>((set, get) => ({
           break;
         case "codex-compat-api-key":
           nextConfig.codexCompatApiKeys = value as Config["codexCompatApiKeys"];
+          break;
+        case "copilot-compat-api-key":
+          nextConfig.copilotCompatApiKeys = value as Config["copilotCompatApiKeys"];
           break;
         case "claude-api-key":
           nextConfig.claudeApiKeys = value as Config["claudeApiKeys"];

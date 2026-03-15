@@ -137,6 +137,11 @@ func (h *Handler) buildNameMaps() (keyNameMap, channelNameMap map[string]string)
 			channelNameMap[k.APIKey] = k.Name
 		}
 	}
+	for _, k := range cfg.CopilotCompatKey {
+		if k.APIKey != "" && k.Name != "" {
+			channelNameMap[k.APIKey] = k.Name
+		}
+	}
 	// Vertex keys: no Name field, skip
 
 	// OpenAI compatibility: provider name applies to all its API keys

@@ -509,6 +509,16 @@ export const normalizeConfigResponse = (raw: unknown): Config => {
       .filter(Boolean) as ProviderKeyConfig[];
   }
 
+  const copilotCompatList =
+    raw["copilot-compat-api-key"] ??
+    raw.copilotCompatApiKey ??
+    raw.copilotCompatApiKeys;
+  if (Array.isArray(copilotCompatList)) {
+    config.copilotCompatApiKeys = copilotCompatList
+      .map((item) => normalizeProviderKeyConfig(item))
+      .filter(Boolean) as ProviderKeyConfig[];
+  }
+
   const claudeList =
     raw["claude-api-key"] ?? raw.claudeApiKey ?? raw.claudeApiKeys;
   if (Array.isArray(claudeList)) {

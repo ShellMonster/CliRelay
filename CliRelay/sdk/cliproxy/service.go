@@ -326,7 +326,7 @@ func (s *Service) applyCoreAuthRemoval(ctx context.Context, id string) {
 			log.Errorf("failed to disable auth %s: %v", id, err)
 		}
 		switch strings.ToLower(strings.TrimSpace(existing.Provider)) {
-		case "codex", "codex-compat":
+		case "codex", "codex-compat", "copilot-compat":
 			s.ensureExecutorsForAuth(existing)
 		}
 	}
@@ -386,6 +386,15 @@ func (s *Service) ensureExecutorsForAuthWithMode(a *coreauth.Auth, forceReplace 
 		}
 		return
 	}
+	if providerKey == "copilot-compat" {
+		if !forceReplace {
+			if _, hasExecutor := s.coreManager.Executor(providerKey); hasExecutor {
+				return
+			}
+		}
+		s.coreManager.RegisterExecutor(executor.NewCopilotCompatExecutor(s.cfg))
+		return
+	}
 	// Skip disabled auth entries when (re)binding executors.
 	// Disabled auths can linger during config reloads (e.g., removed OpenAI-compat entries)
 	// and must not override active provider executors (such as iFlow OAuth accounts).
@@ -443,7 +452,7 @@ func (s *Service) rebindExecutors() {
 	for _, auth := range auths {
 		if auth != nil {
 			providerKey := strings.ToLower(strings.TrimSpace(auth.Provider))
-			if providerKey == "codex" || providerKey == "codex-compat" {
+			if providerKey == "codex" || providerKey == "codex-compat" || providerKey == "copilot-compat" {
 				if reboundProviders[providerKey] {
 					continue
 				}
@@ -825,7 +834,7 @@ func (s *Service) registerModelsForAuth(a *coreauth.Auth) {
 			}
 		}
 		models = applyExcludedModels(models, excluded)
-	case "codex", "codex-compat":
+	case "codex", "codex-compat", "copilot-compat":
 		fetchCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		models = executor.FetchCodexModels(fetchCtx, a, s.cfg)
 		cancel()
@@ -835,6 +844,8 @@ func (s *Service) registerModelsForAuth(a *coreauth.Auth) {
 		var entry *config.CodexKey
 		if provider == "codex-compat" {
 			entry = s.resolveConfigCodexCompatKey(a)
+		} else if provider == "copilot-compat" {
+			entry = s.resolveConfigCopilotCompatKey(a)
 		} else {
 			entry = s.resolveConfigCodexKey(a)
 		}
@@ -1068,6 +1079,13 @@ func (s *Service) resolveConfigCodexCompatKey(auth *coreauth.Auth) *config.Codex
 	return resolveConfigCodexLikeKey(s.cfg.CodexCompatKey, auth)
 }
 
+func (s *Service) resolveConfigCopilotCompatKey(auth *coreauth.Auth) *config.CodexKey {
+	if auth == nil || s.cfg == nil {
+		return nil
+	}
+	return resolveConfigCodexLikeKey(s.cfg.CopilotCompatKey, auth)
+}
+
 func resolveConfigCodexLikeKey(entries []config.CodexKey, auth *coreauth.Auth) *config.CodexKey {
 	if auth == nil {
 		return nil
@@ -1099,8 +1117,13 @@ func effectiveAuthModelPrefix(auth *coreauth.Auth) string {
 		return ""
 	}
 	prefix := strings.TrimSpace(auth.Prefix)
-	if prefix == "" && strings.EqualFold(strings.TrimSpace(auth.Provider), "codex-compat") {
-		return config.DefaultCodexCompatPrefix
+	if prefix == "" {
+		switch strings.ToLower(strings.TrimSpace(auth.Provider)) {
+		case "codex-compat":
+			return config.DefaultCodexCompatPrefix
+		case "copilot-compat":
+			return config.DefaultCopilotCompatPrefix
+		}
 	}
 	return prefix
 }

@@ -66,6 +66,9 @@ type APIKeyClientResult struct {
 	// CodexCompatKeyCount is the number of Codex-compatible API keys loaded
 	CodexCompatKeyCount int
 
+	// CopilotCompatKeyCount is the number of Copilot-compatible API keys loaded
+	CopilotCompatKeyCount int
+
 	// OpenAICompatCount is the number of OpenAI compatibility API keys loaded
 	OpenAICompatCount int
 }

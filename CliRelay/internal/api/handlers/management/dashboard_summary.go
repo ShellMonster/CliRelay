@@ -21,6 +21,7 @@ func (h *Handler) GetDashboardSummary(c *gin.Context) {
 	claudeCount := 0
 	codexCount := 0
 	codexCompatCount := 0
+	copilotCompatCount := 0
 	vertexCount := 0
 	openaiCount := 0
 	authFileCount := 0
@@ -31,6 +32,7 @@ func (h *Handler) GetDashboardSummary(c *gin.Context) {
 		claudeCount = len(cfg.ClaudeKey)
 		codexCount = len(cfg.CodexKey)
 		codexCompatCount = len(cfg.CodexCompatKey)
+		copilotCompatCount = len(cfg.CopilotCompatKey)
 		vertexCount = len(cfg.VertexCompatAPIKey)
 		openaiCount = len(cfg.OpenAICompatibility)
 		apiKeyCount = len(cfg.APIKeyEntries)
@@ -44,7 +46,7 @@ func (h *Handler) GetDashboardSummary(c *gin.Context) {
 		}
 	}
 
-	providerTotal := geminiCount + claudeCount + codexCount + codexCompatCount + vertexCount + openaiCount
+	providerTotal := geminiCount + claudeCount + codexCount + codexCompatCount + copilotCompatCount + vertexCount + openaiCount
 
 	// ── Usage KPIs (time-filtered) ──
 	daysStr := c.DefaultQuery("days", "7")
@@ -72,15 +74,16 @@ func (h *Handler) GetDashboardSummary(c *gin.Context) {
 			"total_tokens":     usageSummary.TotalTokens,
 		},
 		"counts": gin.H{
-			"api_keys":          apiKeyCount,
-			"providers_total":   providerTotal,
-			"gemini_keys":       geminiCount,
-			"claude_keys":       claudeCount,
-			"codex_keys":        codexCount,
-			"codex_compat_keys": codexCompatCount,
-			"vertex_keys":       vertexCount,
-			"openai_providers":  openaiCount,
-			"auth_files":        authFileCount,
+			"api_keys":            apiKeyCount,
+			"providers_total":     providerTotal,
+			"gemini_keys":         geminiCount,
+			"claude_keys":         claudeCount,
+			"codex_keys":          codexCount,
+			"codex_compat_keys":   codexCompatCount,
+			"copilot_compat_keys": copilotCompatCount,
+			"vertex_keys":         vertexCount,
+			"openai_providers":    openaiCount,
+			"auth_files":          authFileCount,
 		},
 		"days": days,
 	})

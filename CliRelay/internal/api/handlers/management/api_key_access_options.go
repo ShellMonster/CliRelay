@@ -35,14 +35,15 @@ var apiKeyAccessProviderOrder = map[string]int{
 	"claude":               30,
 	"codex":                40,
 	"codex-compat":         50,
-	"vertex":               60,
-	"openai-compatibility": 70,
-	"ampcode":              80,
-	"antigravity":          90,
-	"qwen":                 100,
-	"kimi":                 110,
-	"iflow":                120,
-	"aistudio":             130,
+	"copilot-compat":       60,
+	"vertex":               70,
+	"openai-compatibility": 80,
+	"ampcode":              90,
+	"antigravity":          100,
+	"qwen":                 110,
+	"kimi":                 120,
+	"iflow":                130,
+	"aistudio":             140,
 }
 
 var apiKeyAccessProviderLabels = map[string]string{
@@ -51,6 +52,7 @@ var apiKeyAccessProviderLabels = map[string]string{
 	"claude":               "Claude",
 	"codex":                "Codex",
 	"codex-compat":         "Codex Compat",
+	"copilot-compat":       "Copilot Compat",
 	"vertex":               "Vertex",
 	"openai-compatibility": "OpenAI Compatible",
 	"ampcode":              "Ampcode",
@@ -314,6 +316,13 @@ func resolveFallbackAPIKeyAccessModels(cfg *config.Config, auth *coreauth.Auth) 
 			}
 		}
 		return registry.GetOpenAIModels()
+	case "copilot-compat":
+		if cfg != nil {
+			if entry := resolveAPIKeyAccessConfigEntry(cfg, auth, cfg.CopilotCompatKey); entry != nil && len(entry.Models) > 0 {
+				return buildAPIKeyAccessConfigModels(entry.Models)
+			}
+		}
+		return registry.GetOpenAIModels()
 	case "openai-compatibility":
 		return resolveAPIKeyAccessOpenAICompatibilityModels(cfg, auth)
 	case "gemini-cli", "aistudio", "qwen", "iflow", "kimi", "antigravity":
@@ -519,8 +528,13 @@ func effectiveAPIKeyAccessModelPrefix(auth *coreauth.Auth) string {
 	}
 
 	prefix := strings.TrimSpace(auth.Prefix)
-	if prefix == "" && strings.EqualFold(strings.TrimSpace(auth.Provider), "codex-compat") {
-		return config.DefaultCodexCompatPrefix
+	if prefix == "" {
+		switch strings.ToLower(strings.TrimSpace(auth.Provider)) {
+		case "codex-compat":
+			return config.DefaultCodexCompatPrefix
+		case "copilot-compat":
+			return config.DefaultCopilotCompatPrefix
+		}
 	}
 	return prefix
 }

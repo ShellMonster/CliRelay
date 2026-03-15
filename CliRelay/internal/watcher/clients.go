@@ -55,8 +55,8 @@ func (w *Watcher) reloadClients(rescanAuth bool, affectedOAuthProviders []string
 		w.clientsMutex.Unlock()
 	}
 
-	geminiAPIKeyCount, vertexCompatAPIKeyCount, claudeAPIKeyCount, codexAPIKeyCount, codexCompatAPIKeyCount, openAICompatCount := BuildAPIKeyClients(cfg)
-	totalAPIKeyClients := geminiAPIKeyCount + vertexCompatAPIKeyCount + claudeAPIKeyCount + codexAPIKeyCount + codexCompatAPIKeyCount + openAICompatCount
+	geminiAPIKeyCount, vertexCompatAPIKeyCount, claudeAPIKeyCount, codexAPIKeyCount, codexCompatAPIKeyCount, copilotCompatAPIKeyCount, openAICompatCount := BuildAPIKeyClients(cfg)
+	totalAPIKeyClients := geminiAPIKeyCount + vertexCompatAPIKeyCount + claudeAPIKeyCount + codexAPIKeyCount + codexCompatAPIKeyCount + copilotCompatAPIKeyCount + openAICompatCount
 	log.Debugf("loaded %d API key clients", totalAPIKeyClients)
 
 	var authFileCount int
@@ -243,12 +243,13 @@ func (w *Watcher) loadFileClients(cfg *config.Config) int {
 	return authFileCount
 }
 
-func BuildAPIKeyClients(cfg *config.Config) (int, int, int, int, int, int) {
+func BuildAPIKeyClients(cfg *config.Config) (int, int, int, int, int, int, int) {
 	geminiAPIKeyCount := 0
 	vertexCompatAPIKeyCount := 0
 	claudeAPIKeyCount := 0
 	codexAPIKeyCount := 0
 	codexCompatAPIKeyCount := 0
+	copilotCompatAPIKeyCount := 0
 	openAICompatCount := 0
 
 	if len(cfg.GeminiKey) > 0 {
@@ -266,12 +267,15 @@ func BuildAPIKeyClients(cfg *config.Config) (int, int, int, int, int, int) {
 	if len(cfg.CodexCompatKey) > 0 {
 		codexCompatAPIKeyCount += len(cfg.CodexCompatKey)
 	}
+	if len(cfg.CopilotCompatKey) > 0 {
+		copilotCompatAPIKeyCount += len(cfg.CopilotCompatKey)
+	}
 	if len(cfg.OpenAICompatibility) > 0 {
 		for _, compatConfig := range cfg.OpenAICompatibility {
 			openAICompatCount += len(compatConfig.APIKeyEntries)
 		}
 	}
-	return geminiAPIKeyCount, vertexCompatAPIKeyCount, claudeAPIKeyCount, codexAPIKeyCount, codexCompatAPIKeyCount, openAICompatCount
+	return geminiAPIKeyCount, vertexCompatAPIKeyCount, claudeAPIKeyCount, codexAPIKeyCount, codexCompatAPIKeyCount, copilotCompatAPIKeyCount, openAICompatCount
 }
 
 func (w *Watcher) persistConfigAsync() {

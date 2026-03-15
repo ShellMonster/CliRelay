@@ -12,6 +12,7 @@ export type ModelDiscoveryProvider =
   | "claude"
   | "codex"
   | "codex-compat"
+  | "copilot-compat"
   | "gemini";
 
 const normalizeApiBase = (baseUrl: string): string => {

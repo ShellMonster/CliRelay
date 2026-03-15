@@ -44,6 +44,7 @@ export interface Config {
   geminiApiKeys?: GeminiKeyConfig[];
   codexApiKeys?: ProviderKeyConfig[];
   codexCompatApiKeys?: ProviderKeyConfig[];
+  copilotCompatApiKeys?: ProviderKeyConfig[];
   claudeApiKeys?: ProviderKeyConfig[];
   vertexApiKeys?: ProviderKeyConfig[];
   openaiCompatibility?: OpenAIProviderConfig[];
@@ -69,6 +70,7 @@ export type RawConfigSection =
   | "gemini-api-key"
   | "codex-api-key"
   | "codex-compat-api-key"
+  | "copilot-compat-api-key"
   | "claude-api-key"
   | "vertex-api-key"
   | "openai-compatibility"

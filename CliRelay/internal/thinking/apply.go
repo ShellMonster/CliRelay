@@ -11,15 +11,16 @@ import (
 
 // providerAppliers maps provider names to their ProviderApplier implementations.
 var providerAppliers = map[string]ProviderApplier{
-	"gemini":      nil,
-	"gemini-cli":  nil,
-	"claude":      nil,
-	"openai":      nil,
-	"codex":       nil,
-	"codex-compat": nil,
-	"iflow":       nil,
-	"antigravity": nil,
-	"kimi":        nil,
+	"gemini":          nil,
+	"gemini-cli":      nil,
+	"claude":          nil,
+	"openai":          nil,
+	"openai-response": nil,
+	"codex":           nil,
+	"codex-compat":    nil,
+	"iflow":           nil,
+	"antigravity":     nil,
+	"kimi":            nil,
 }
 
 // GetProviderApplier returns the ProviderApplier for the given provider name.

@@ -31,6 +31,7 @@ func NewApplier() *Applier {
 }
 
 func init() {
+	thinking.RegisterProvider("openai-response", NewApplier())
 	thinking.RegisterProvider("codex", NewApplier())
 	thinking.RegisterProvider("codex-compat", NewApplier())
 }

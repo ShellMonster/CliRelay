@@ -1344,6 +1344,148 @@ func (h *Handler) DeleteCodexCompatKey(c *gin.Context) {
 	c.JSON(400, gin.H{"error": "missing api-key or index"})
 }
 
+// copilot-compat-api-key: []CodexKey
+func (h *Handler) GetCopilotCompatKeys(c *gin.Context) {
+	c.JSON(200, gin.H{"copilot-compat-api-key": h.cfg.CopilotCompatKey})
+}
+
+func (h *Handler) PutCopilotCompatKeys(c *gin.Context) {
+	data, err := c.GetRawData()
+	if err != nil {
+		c.JSON(400, gin.H{"error": "failed to read body"})
+		return
+	}
+	var arr []config.CodexKey
+	if err = json.Unmarshal(data, &arr); err != nil {
+		var obj struct {
+			Items []config.CodexKey `json:"items"`
+		}
+		if err2 := json.Unmarshal(data, &obj); err2 != nil || len(obj.Items) == 0 {
+			c.JSON(400, gin.H{"error": "invalid body"})
+			return
+		}
+		arr = obj.Items
+	}
+	filtered := make([]config.CodexKey, 0, len(arr))
+	for i := range arr {
+		entry := arr[i]
+		normalizeCopilotCompatKey(&entry)
+		if entry.BaseURL == "" {
+			continue
+		}
+		filtered = append(filtered, entry)
+	}
+	h.cfg.CopilotCompatKey = filtered
+	h.cfg.SanitizeCopilotCompatKeys()
+	h.persist(c)
+}
+
+func (h *Handler) PatchCopilotCompatKey(c *gin.Context) {
+	type codexKeyPatch struct {
+		APIKey                      *string              `json:"api-key"`
+		Prefix                      *string              `json:"prefix"`
+		BaseURL                     *string              `json:"base-url"`
+		Websockets                  *bool                `json:"websockets"`
+		ProxyURL                    *string              `json:"proxy-url"`
+		ParticipateInDefaultRouting *bool                `json:"participate-in-default-routing"`
+		Models                      *[]config.CodexModel `json:"models"`
+		Headers                     *map[string]string   `json:"headers"`
+		ExcludedModels              *[]string            `json:"excluded-models"`
+	}
+	var body struct {
+		Index *int           `json:"index"`
+		Match *string        `json:"match"`
+		Value *codexKeyPatch `json:"value"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil || body.Value == nil {
+		c.JSON(400, gin.H{"error": "invalid body"})
+		return
+	}
+	targetIndex := -1
+	if body.Index != nil && *body.Index >= 0 && *body.Index < len(h.cfg.CopilotCompatKey) {
+		targetIndex = *body.Index
+	}
+	if targetIndex == -1 && body.Match != nil {
+		match := strings.TrimSpace(*body.Match)
+		for i := range h.cfg.CopilotCompatKey {
+			if h.cfg.CopilotCompatKey[i].APIKey == match {
+				targetIndex = i
+				break
+			}
+		}
+	}
+	if targetIndex == -1 {
+		c.JSON(404, gin.H{"error": "item not found"})
+		return
+	}
+
+	entry := h.cfg.CopilotCompatKey[targetIndex]
+	if body.Value.APIKey != nil {
+		entry.APIKey = strings.TrimSpace(*body.Value.APIKey)
+	}
+	if body.Value.Prefix != nil {
+		entry.Prefix = strings.TrimSpace(*body.Value.Prefix)
+	}
+	if body.Value.BaseURL != nil {
+		trimmed := strings.TrimSpace(*body.Value.BaseURL)
+		if trimmed == "" {
+			h.cfg.CopilotCompatKey = append(h.cfg.CopilotCompatKey[:targetIndex], h.cfg.CopilotCompatKey[targetIndex+1:]...)
+			h.cfg.SanitizeCopilotCompatKeys()
+			h.persist(c)
+			return
+		}
+		entry.BaseURL = trimmed
+	}
+	if body.Value.Websockets != nil {
+		entry.Websockets = *body.Value.Websockets
+	}
+	if body.Value.ProxyURL != nil {
+		entry.ProxyURL = strings.TrimSpace(*body.Value.ProxyURL)
+	}
+	if body.Value.ParticipateInDefaultRouting != nil {
+		entry.ParticipateInDefaultRouting = body.Value.ParticipateInDefaultRouting
+	}
+	if body.Value.Models != nil {
+		entry.Models = append([]config.CodexModel(nil), (*body.Value.Models)...)
+	}
+	if body.Value.Headers != nil {
+		entry.Headers = config.NormalizeHeaders(*body.Value.Headers)
+	}
+	if body.Value.ExcludedModels != nil {
+		entry.ExcludedModels = config.NormalizeExcludedModels(*body.Value.ExcludedModels)
+	}
+	normalizeCopilotCompatKey(&entry)
+	h.cfg.CopilotCompatKey[targetIndex] = entry
+	h.cfg.SanitizeCopilotCompatKeys()
+	h.persist(c)
+}
+
+func (h *Handler) DeleteCopilotCompatKey(c *gin.Context) {
+	if val := c.Query("api-key"); val != "" {
+		out := make([]config.CodexKey, 0, len(h.cfg.CopilotCompatKey))
+		for _, v := range h.cfg.CopilotCompatKey {
+			if v.APIKey != val {
+				out = append(out, v)
+			}
+		}
+		h.cfg.CopilotCompatKey = out
+		h.cfg.SanitizeCopilotCompatKeys()
+		h.persist(c)
+		return
+	}
+	if idxStr := c.Query("index"); idxStr != "" {
+		var idx int
+		_, err := fmt.Sscanf(idxStr, "%d", &idx)
+		if err == nil && idx >= 0 && idx < len(h.cfg.CopilotCompatKey) {
+			h.cfg.CopilotCompatKey = append(h.cfg.CopilotCompatKey[:idx], h.cfg.CopilotCompatKey[idx+1:]...)
+			h.cfg.SanitizeCopilotCompatKeys()
+			h.persist(c)
+			return
+		}
+	}
+	c.JSON(400, gin.H{"error": "missing api-key or index"})
+}
+
 func normalizeOpenAICompatibilityEntry(entry *config.OpenAICompatibility) {
 	if entry == nil {
 		return
@@ -1412,6 +1554,10 @@ func normalizeCodexKey(entry *config.CodexKey) {
 
 func normalizeCodexCompatKey(entry *config.CodexKey) {
 	normalizeCodexLikeKey(entry, config.DefaultCodexCompatPrefix)
+}
+
+func normalizeCopilotCompatKey(entry *config.CodexKey) {
+	normalizeCodexLikeKey(entry, config.DefaultCopilotCompatPrefix)
 }
 
 func normalizeCodexLikeKey(entry *config.CodexKey, defaultPrefix string) {

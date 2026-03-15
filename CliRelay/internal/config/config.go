@@ -22,6 +22,7 @@ const (
 	DefaultPanelGitHubRepository = "https://github.com/router-for-me/Cli-Proxy-API-Management-Center"
 	DefaultPprofAddr             = "127.0.0.1:8316"
 	DefaultCodexCompatPrefix     = "codex-compat"
+	DefaultCopilotCompatPrefix   = "copilot-compat"
 )
 
 // Config represents the application's configuration, loaded from a YAML file.
@@ -95,6 +96,10 @@ type Config struct {
 	// OpenAI Responses compatibility clients that require normalized response IDs.
 	CodexCompatKey []CodexKey `yaml:"codex-compat-api-key" json:"codex-compat-api-key"`
 
+	// CopilotCompatKey defines a list of GitHub Copilot-compatible API key configurations
+	// used for clients that need dedicated Copilot headers and request routing behavior.
+	CopilotCompatKey []CodexKey `yaml:"copilot-compat-api-key" json:"copilot-compat-api-key"`
+
 	// ClaudeKey defines a list of Claude API key configurations as specified in the YAML configuration file.
 	ClaudeKey []ClaudeKey `yaml:"claude-api-key" json:"claude-api-key"`
 
@@ -120,7 +125,8 @@ type Config struct {
 	// gemini-cli, vertex, aistudio, antigravity, claude, codex, qwen, iflow.
 	//
 	// NOTE: This does not apply to existing per-credential model alias features under:
-	// gemini-api-key, codex-api-key, codex-compat-api-key, claude-api-key, openai-compatibility,
+	// gemini-api-key, codex-api-key, codex-compat-api-key, copilot-compat-api-key,
+	// claude-api-key, openai-compatibility,
 	// vertex-api-key, and ampcode.
 	OAuthModelAlias map[string][]OAuthModelAlias `yaml:"oauth-model-alias,omitempty" json:"oauth-model-alias,omitempty"`
 
@@ -706,6 +712,9 @@ func LoadConfigOptional(configFile string, optional bool) (*Config, error) {
 	// Sanitize Codex-compat keys: drop entries without base-url and enforce a default prefix
 	cfg.SanitizeCodexCompatKeys()
 
+	// Sanitize Copilot-compat keys: drop entries without base-url and enforce a default prefix
+	cfg.SanitizeCopilotCompatKeys()
+
 	// Sanitize Claude key headers
 	cfg.SanitizeClaudeKeys()
 
@@ -990,6 +999,15 @@ func (cfg *Config) SanitizeCodexCompatKeys() {
 		return
 	}
 	cfg.CodexCompatKey = sanitizeCodexLikeKeys(cfg.CodexCompatKey, DefaultCodexCompatPrefix)
+}
+
+// SanitizeCopilotCompatKeys removes Copilot-compatible API key entries missing a BaseURL.
+// It trims whitespace, preserves order, and guarantees a non-empty prefix.
+func (cfg *Config) SanitizeCopilotCompatKeys() {
+	if cfg == nil {
+		return
+	}
+	cfg.CopilotCompatKey = sanitizeCodexLikeKeys(cfg.CopilotCompatKey, DefaultCopilotCompatPrefix)
 }
 
 func sanitizeCodexLikeKeys(entries []CodexKey, defaultPrefix string) []CodexKey {
@@ -1519,6 +1537,7 @@ func shouldPreserveExplicitZeroValue(path []string, node *yaml.Node) bool {
 		"claude-api-key.participate-in-default-routing",
 		"codex-api-key.participate-in-default-routing",
 		"codex-compat-api-key.participate-in-default-routing",
+		"copilot-compat-api-key.participate-in-default-routing",
 		"openai-compatibility.participate-in-default-routing",
 		"vertex-api-key.participate-in-default-routing":
 		return true

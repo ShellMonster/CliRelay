@@ -179,6 +179,25 @@ export const providersApi = {
   deleteCodexCompatConfig: (apiKey: string) =>
     apiClient.delete("/codex-compat-api-key", undefined, { params: { "api-key": apiKey } }),
 
+  async getCopilotCompatConfigs(): Promise<ProviderKeyConfig[]> {
+    const data = await apiClient.get("/copilot-compat-api-key");
+    return extractArrayPayload(data, "copilot-compat-api-key")
+      .map((item) => normalizeProviderKeyConfig(item))
+      .filter(Boolean) as ProviderKeyConfig[];
+  },
+
+  saveCopilotCompatConfigs: (configs: ProviderKeyConfig[]) =>
+    apiClient.put(
+      "/copilot-compat-api-key",
+      configs.map((item) => serializeProviderKey(item)),
+    ),
+
+  updateCopilotCompatConfig: (index: number, value: ProviderKeyConfig) =>
+    apiClient.patch("/copilot-compat-api-key", { index, value: serializeProviderKey(value) }),
+
+  deleteCopilotCompatConfig: (apiKey: string) =>
+    apiClient.delete("/copilot-compat-api-key", undefined, { params: { "api-key": apiKey } }),
+
   async getClaudeConfigs(): Promise<ProviderKeyConfig[]> {
     const data = await apiClient.get("/claude-api-key");
     return extractArrayPayload(data, "claude-api-key")

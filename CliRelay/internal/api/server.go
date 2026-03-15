@@ -644,6 +644,11 @@ func (s *Server) registerManagementRoutes() {
 		mgmt.PATCH("/codex-compat-api-key", s.mgmt.PatchCodexCompatKey)
 		mgmt.DELETE("/codex-compat-api-key", s.mgmt.DeleteCodexCompatKey)
 
+		mgmt.GET("/copilot-compat-api-key", s.mgmt.GetCopilotCompatKeys)
+		mgmt.PUT("/copilot-compat-api-key", s.mgmt.PutCopilotCompatKeys)
+		mgmt.PATCH("/copilot-compat-api-key", s.mgmt.PatchCopilotCompatKey)
+		mgmt.DELETE("/copilot-compat-api-key", s.mgmt.DeleteCopilotCompatKey)
+
 		mgmt.GET("/openai-compatibility", s.mgmt.GetOpenAICompat)
 		mgmt.PUT("/openai-compatibility", s.mgmt.PutOpenAICompat)
 		mgmt.PATCH("/openai-compatibility", s.mgmt.PatchOpenAICompat)
@@ -1108,6 +1113,7 @@ func (s *Server) UpdateClients(cfg *config.Config) {
 	claudeAPIKeyCount := len(cfg.ClaudeKey)
 	codexAPIKeyCount := len(cfg.CodexKey)
 	codexCompatAPIKeyCount := len(cfg.CodexCompatKey)
+	copilotCompatAPIKeyCount := len(cfg.CopilotCompatKey)
 	vertexAICompatCount := len(cfg.VertexCompatAPIKey)
 	openAICompatCount := 0
 	for i := range cfg.OpenAICompatibility {
@@ -1115,14 +1121,15 @@ func (s *Server) UpdateClients(cfg *config.Config) {
 		openAICompatCount += len(entry.APIKeyEntries)
 	}
 
-	total := authEntries + geminiAPIKeyCount + claudeAPIKeyCount + codexAPIKeyCount + codexCompatAPIKeyCount + vertexAICompatCount + openAICompatCount
-	fmt.Printf("server clients and configuration updated: %d clients (%d auth entries + %d Gemini API keys + %d Claude API keys + %d Codex keys + %d Codex-compat keys + %d Vertex-compat + %d OpenAI-compat)\n",
+	total := authEntries + geminiAPIKeyCount + claudeAPIKeyCount + codexAPIKeyCount + codexCompatAPIKeyCount + copilotCompatAPIKeyCount + vertexAICompatCount + openAICompatCount
+	fmt.Printf("server clients and configuration updated: %d clients (%d auth entries + %d Gemini API keys + %d Claude API keys + %d Codex keys + %d Codex-compat keys + %d Copilot-compat keys + %d Vertex-compat + %d OpenAI-compat)\n",
 		total,
 		authEntries,
 		geminiAPIKeyCount,
 		claudeAPIKeyCount,
 		codexAPIKeyCount,
 		codexCompatAPIKeyCount,
+		copilotCompatAPIKeyCount,
 		vertexAICompatCount,
 		openAICompatCount,
 	)

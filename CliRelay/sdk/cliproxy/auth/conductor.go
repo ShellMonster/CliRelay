@@ -319,6 +319,10 @@ func (m *Manager) rebuildAPIKeyModelAliasLocked(cfg *internalconfig.Config) {
 			if entry := resolveCodexCompatAPIKeyConfig(cfg, auth); entry != nil {
 				compileAPIKeyModelAliasForModels(byAlias, entry.Models)
 			}
+		case "copilot-compat":
+			if entry := resolveCopilotCompatAPIKeyConfig(cfg, auth); entry != nil {
+				compileAPIKeyModelAliasForModels(byAlias, entry.Models)
+			}
 		case "vertex":
 			if entry := resolveVertexAPIKeyConfig(cfg, auth); entry != nil {
 				compileAPIKeyModelAliasForModels(byAlias, entry.Models)
@@ -1014,6 +1018,8 @@ func (m *Manager) applyAPIKeyModelAlias(auth *Auth, requestedModel string) strin
 		upstreamModel = resolveUpstreamModelForCodexAPIKey(cfg, auth, requestedModel)
 	case "codex-compat":
 		upstreamModel = resolveUpstreamModelForCodexCompatAPIKey(cfg, auth, requestedModel)
+	case "copilot-compat":
+		upstreamModel = resolveUpstreamModelForCopilotCompatAPIKey(cfg, auth, requestedModel)
 	case "vertex":
 		upstreamModel = resolveUpstreamModelForVertexAPIKey(cfg, auth, requestedModel)
 	default:
@@ -1100,6 +1106,13 @@ func resolveCodexCompatAPIKeyConfig(cfg *internalconfig.Config, auth *Auth) *int
 	return resolveAPIKeyConfig(cfg.CodexCompatKey, auth)
 }
 
+func resolveCopilotCompatAPIKeyConfig(cfg *internalconfig.Config, auth *Auth) *internalconfig.CodexKey {
+	if cfg == nil {
+		return nil
+	}
+	return resolveAPIKeyConfig(cfg.CopilotCompatKey, auth)
+}
+
 func resolveVertexAPIKeyConfig(cfg *internalconfig.Config, auth *Auth) *internalconfig.VertexCompatKey {
 	if cfg == nil {
 		return nil
@@ -1133,6 +1146,14 @@ func resolveUpstreamModelForCodexAPIKey(cfg *internalconfig.Config, auth *Auth, 
 
 func resolveUpstreamModelForCodexCompatAPIKey(cfg *internalconfig.Config, auth *Auth, requestedModel string) string {
 	entry := resolveCodexCompatAPIKeyConfig(cfg, auth)
+	if entry == nil {
+		return ""
+	}
+	return resolveModelAliasFromConfigModels(requestedModel, asModelAliasEntries(entry.Models))
+}
+
+func resolveUpstreamModelForCopilotCompatAPIKey(cfg *internalconfig.Config, auth *Auth, requestedModel string) string {
+	entry := resolveCopilotCompatAPIKeyConfig(cfg, auth)
 	if entry == nil {
 		return ""
 	}

@@ -26,6 +26,7 @@ type PayloadModelRule = internalconfig.PayloadModelRule
 type GeminiKey = internalconfig.GeminiKey
 type CodexKey = internalconfig.CodexKey
 type CodexCompatKey = internalconfig.CodexKey
+type CopilotCompatKey = internalconfig.CodexKey
 type ClaudeKey = internalconfig.ClaudeKey
 type VertexCompatKey = internalconfig.VertexCompatKey
 type VertexCompatModel = internalconfig.VertexCompatModel
@@ -38,6 +39,7 @@ type TLS = internalconfig.TLSConfig
 const (
 	DefaultPanelGitHubRepository = internalconfig.DefaultPanelGitHubRepository
 	DefaultCodexCompatPrefix     = internalconfig.DefaultCodexCompatPrefix
+	DefaultCopilotCompatPrefix   = internalconfig.DefaultCopilotCompatPrefix
 )
 
 func LoadConfig(configFile string) (*Config, error) { return internalconfig.LoadConfig(configFile) }

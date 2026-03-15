@@ -63,7 +63,7 @@ import {
 } from "@/modules/providers/providers-helpers";
 
 const formatDiscoveryEndpoints = (
-  provider: "openai" | "claude" | "codex" | "codex-compat" | "gemini",
+  provider: "openai" | "claude" | "codex" | "codex-compat" | "copilot-compat" | "gemini",
   baseUrl: string,
 ) => {
   const endpoints = modelsApi.buildModelDiscoveryEndpoints(provider, baseUrl);
@@ -77,7 +77,7 @@ export function ProvidersPage() {
   const navigate = useNavigate();
 
   const [tab, setTab] = useState<
-    "gemini" | "claude" | "codex" | "codex-compat" | "vertex" | "openai" | "ampcode"
+    "gemini" | "claude" | "codex" | "codex-compat" | "copilot-compat" | "vertex" | "openai" | "ampcode"
   >("gemini");
   const [loading, setLoading] = useState(true);
 
@@ -85,6 +85,7 @@ export function ProvidersPage() {
   const [claudeKeys, setClaudeKeys] = useState<ProviderSimpleConfig[]>([]);
   const [codexKeys, setCodexKeys] = useState<ProviderSimpleConfig[]>([]);
   const [codexCompatKeys, setCodexCompatKeys] = useState<ProviderSimpleConfig[]>([]);
+  const [copilotCompatKeys, setCopilotCompatKeys] = useState<ProviderSimpleConfig[]>([]);
   const [vertexKeys, setVertexKeys] = useState<ProviderSimpleConfig[]>([]);
   const [openaiProviders, setOpenaiProviders] = useState<OpenAIProvider[]>([]);
 
@@ -100,7 +101,7 @@ export function ProvidersPage() {
 
   const [editKeyOpen, setEditKeyOpen] = useState(false);
   const [editKeyType, setEditKeyType] = useState<
-    "gemini" | "claude" | "codex" | "codex-compat" | "vertex"
+    "gemini" | "claude" | "codex" | "codex-compat" | "copilot-compat" | "vertex"
   >("gemini");
   const [editKeyIndex, setEditKeyIndex] = useState<number | null>(null);
   const [keyDraft, setKeyDraft] = useState<ProviderKeyDraft>(() => buildProviderKeyDraft(null));
@@ -123,7 +124,7 @@ export function ProvidersPage() {
     | null
     | {
       type: "deleteKey";
-      keyType: "gemini" | "claude" | "codex" | "codex-compat" | "vertex";
+      keyType: "gemini" | "claude" | "codex" | "codex-compat" | "copilot-compat" | "vertex";
       index: number;
     }
     | { type: "deleteOpenAI"; index: number }
@@ -134,11 +135,13 @@ export function ProvidersPage() {
       ? "Gemini"
       : editKeyType === "claude"
         ? "Claude"
-        : editKeyType === "codex"
-          ? "Codex"
-          : editKeyType === "codex-compat"
-            ? "Codex Compat"
-          : "Vertex";
+          : editKeyType === "codex"
+            ? "Codex"
+            : editKeyType === "codex-compat"
+              ? "Codex Compat"
+              : editKeyType === "copilot-compat"
+                ? "Copilot Compat"
+              : "Vertex";
 
   // 按 Tab 加载数据，切换 Tab 时只请求当前 Tab 的数据
   const refreshTab = useCallback(
@@ -157,6 +160,9 @@ export function ProvidersPage() {
             break;
           case "codex-compat":
             setCodexCompatKeys(await providersApi.getCodexCompatConfigs());
+            break;
+          case "copilot-compat":
+            setCopilotCompatKeys(await providersApi.getCopilotCompatConfigs());
             break;
           case "vertex":
             setVertexKeys(await providersApi.getVertexConfigs());
@@ -205,12 +211,12 @@ export function ProvidersPage() {
 
   const buildKeyDraftForType = useCallback(
     (
-      type: "gemini" | "claude" | "codex" | "codex-compat" | "vertex",
+      type: "gemini" | "claude" | "codex" | "codex-compat" | "copilot-compat" | "vertex",
       current: ProviderSimpleConfig | null,
     ) => {
       const draft = buildProviderKeyDraft(current);
-      if (type === "codex-compat" && !draft.prefix.trim()) {
-        draft.prefix = "codex-compat";
+      if ((type === "codex-compat" || type === "copilot-compat") && !draft.prefix.trim()) {
+        draft.prefix = type;
       }
       return draft;
     },
@@ -267,7 +273,7 @@ export function ProvidersPage() {
   }, [location.pathname, navigate]);
 
   const openKeyEditor = useCallback(
-    (type: "gemini" | "claude" | "codex" | "codex-compat" | "vertex", index: number | null) => {
+    (type: "gemini" | "claude" | "codex" | "codex-compat" | "copilot-compat" | "vertex", index: number | null) => {
       const list =
         type === "gemini"
           ? geminiKeys
@@ -277,6 +283,8 @@ export function ProvidersPage() {
               ? codexKeys
               : type === "codex-compat"
                 ? codexCompatKeys
+                : type === "copilot-compat"
+                  ? copilotCompatKeys
                 : vertexKeys;
       const current = index === null ? null : (list[index] ?? null);
       setEditKeyType(type);
@@ -287,7 +295,7 @@ export function ProvidersPage() {
       setKeyDiscoverSelected(new Set());
       setEditKeyOpen(true);
     },
-    [buildKeyDraftForType, claudeKeys, codexCompatKeys, codexKeys, geminiKeys, vertexKeys],
+    [buildKeyDraftForType, claudeKeys, codexCompatKeys, codexKeys, copilotCompatKeys, geminiKeys, vertexKeys],
   );
 
   const commitKeyDraft = useCallback((): ProviderSimpleConfig | null => {
@@ -323,10 +331,12 @@ export function ProvidersPage() {
           ? geminiKeys[editKeyIndex] ?? null
           : editKeyType === "claude"
             ? claudeKeys[editKeyIndex] ?? null
-            : editKeyType === "codex"
-              ? codexKeys[editKeyIndex] ?? null
-              : editKeyType === "codex-compat"
-                ? codexCompatKeys[editKeyIndex] ?? null
+          : editKeyType === "codex"
+            ? codexKeys[editKeyIndex] ?? null
+            : editKeyType === "codex-compat"
+              ? codexCompatKeys[editKeyIndex] ?? null
+              : editKeyType === "copilot-compat"
+                ? copilotCompatKeys[editKeyIndex] ?? null
                 : vertexKeys[editKeyIndex] ?? null;
 
     const result: ProviderSimpleConfig = {
@@ -344,7 +354,7 @@ export function ProvidersPage() {
 
     setKeyDraftError(null);
     return result;
-  }, [claudeKeys, codexCompatKeys, codexKeys, editKeyIndex, editKeyType, geminiKeys, keyDraft, vertexKeys]);
+  }, [claudeKeys, codexCompatKeys, codexKeys, copilotCompatKeys, editKeyIndex, editKeyType, geminiKeys, keyDraft, vertexKeys]);
 
   const saveKeyDraft = useCallback(async () => {
     const value = commitKeyDraft();
@@ -374,6 +384,10 @@ export function ProvidersPage() {
         const next = apply(codexCompatKeys);
         setCodexCompatKeys(next);
         await providersApi.saveCodexCompatConfigs(next);
+      } else if (type === "copilot-compat") {
+        const next = apply(copilotCompatKeys);
+        setCopilotCompatKeys(next);
+        await providersApi.saveCopilotCompatConfigs(next);
       } else {
         const next = apply(vertexKeys);
         setVertexKeys(next);
@@ -390,6 +404,7 @@ export function ProvidersPage() {
     closeKeyEditor,
     codexCompatKeys,
     codexKeys,
+    copilotCompatKeys,
     commitKeyDraft,
     editKeyIndex,
     editKeyType,
@@ -409,7 +424,7 @@ export function ProvidersPage() {
       const apiKey = keyDraft.apiKey.trim();
       let list: { id: string; owned_by?: string }[] = [];
 
-      if (editKeyType === "codex" || editKeyType === "codex-compat") {
+      if (editKeyType === "codex" || editKeyType === "codex-compat" || editKeyType === "copilot-compat") {
         const baseUrl = keyDraft.baseUrl.trim();
         if (!baseUrl) {
           notify({ type: "info", message: "请先填写 baseUrl" });
@@ -483,17 +498,19 @@ export function ProvidersPage() {
   }, [keyDiscoverSelected, keyDiscoveredModels, keyDraft.modelEntries, notify]);
 
   const deleteKey = useCallback(
-    async (type: "gemini" | "claude" | "codex" | "codex-compat" | "vertex", index: number) => {
+    async (type: "gemini" | "claude" | "codex" | "codex-compat" | "copilot-compat" | "vertex", index: number) => {
       const list =
         type === "gemini"
           ? geminiKeys
           : type === "claude"
             ? claudeKeys
             : type === "codex"
-              ? codexKeys
-              : type === "codex-compat"
-                ? codexCompatKeys
-                : vertexKeys;
+            ? codexKeys
+            : type === "codex-compat"
+              ? codexCompatKeys
+              : type === "copilot-compat"
+                ? copilotCompatKeys
+              : vertexKeys;
       const entry = list[index];
       if (!entry) return;
 
@@ -510,6 +527,9 @@ export function ProvidersPage() {
         } else if (type === "codex-compat") {
           await providersApi.deleteCodexCompatConfig(entry.apiKey);
           setCodexCompatKeys((prev) => prev.filter((_, i) => i !== index));
+        } else if (type === "copilot-compat") {
+          await providersApi.deleteCopilotCompatConfig(entry.apiKey);
+          setCopilotCompatKeys((prev) => prev.filter((_, i) => i !== index));
         } else {
           await providersApi.deleteVertexConfig(entry.apiKey);
           setVertexKeys((prev) => prev.filter((_, i) => i !== index));
@@ -519,11 +539,11 @@ export function ProvidersPage() {
         notify({ type: "error", message: err instanceof Error ? err.message : "删除失败" });
       }
     },
-    [claudeKeys, codexCompatKeys, codexKeys, geminiKeys, notify, vertexKeys],
+    [claudeKeys, codexCompatKeys, codexKeys, copilotCompatKeys, geminiKeys, notify, vertexKeys],
   );
 
   const toggleKeyEnabled = useCallback(
-    async (type: "gemini" | "claude" | "codex" | "codex-compat", index: number, enabled: boolean) => {
+    async (type: "gemini" | "claude" | "codex" | "codex-compat" | "copilot-compat", index: number, enabled: boolean) => {
       const list =
         type === "gemini"
           ? geminiKeys
@@ -531,7 +551,9 @@ export function ProvidersPage() {
             ? claudeKeys
             : type === "codex"
               ? codexKeys
-              : codexCompatKeys;
+              : type === "codex-compat"
+                ? codexCompatKeys
+                : copilotCompatKeys;
       const current = list[index];
       if (!current) return;
       const prev = list;
@@ -553,9 +575,12 @@ export function ProvidersPage() {
         } else if (type === "codex") {
           setCodexKeys(nextList);
           await providersApi.saveCodexConfigs(nextList);
-        } else {
+        } else if (type === "codex-compat") {
           setCodexCompatKeys(nextList);
           await providersApi.saveCodexCompatConfigs(nextList);
+        } else {
+          setCopilotCompatKeys(nextList);
+          await providersApi.saveCopilotCompatConfigs(nextList);
         }
         notify({ type: "success", message: enabled ? "已启用" : "已禁用" });
         startTransition(() => void refreshAll());
@@ -563,11 +588,12 @@ export function ProvidersPage() {
         if (type === "gemini") setGeminiKeys(prev);
         else if (type === "claude") setClaudeKeys(prev);
         else if (type === "codex") setCodexKeys(prev);
-        else setCodexCompatKeys(prev);
+        else if (type === "codex-compat") setCodexCompatKeys(prev);
+        else setCopilotCompatKeys(prev);
         notify({ type: "error", message: err instanceof Error ? err.message : "更新失败" });
       }
     },
-    [claudeKeys, codexCompatKeys, codexKeys, geminiKeys, notify, refreshAll, startTransition],
+    [claudeKeys, codexCompatKeys, codexKeys, copilotCompatKeys, geminiKeys, notify, refreshAll, startTransition],
   );
 
   const openOpenAIEditor = useCallback(
@@ -623,16 +649,17 @@ export function ProvidersPage() {
       provider === "claude" ||
       provider === "codex" ||
       provider === "codex-compat" ||
+      provider === "copilot-compat" ||
       provider === "vertex"
     ) {
       setTab(provider as typeof tab);
       if (action === "new") {
-        openKeyEditor(provider as "gemini" | "claude" | "codex" | "codex-compat" | "vertex", null);
+        openKeyEditor(provider as "gemini" | "claude" | "codex" | "codex-compat" | "copilot-compat" | "vertex", null);
         return;
       }
       const index = Number(action);
       if (Number.isFinite(index) && index >= 0) {
-        openKeyEditor(provider as "gemini" | "claude" | "codex" | "codex-compat" | "vertex", index);
+        openKeyEditor(provider as "gemini" | "claude" | "codex" | "codex-compat" | "copilot-compat" | "vertex", index);
       }
       return;
     }
@@ -1037,6 +1064,7 @@ export function ProvidersPage() {
           <TabsTrigger value="claude">Claude</TabsTrigger>
           <TabsTrigger value="codex">Codex</TabsTrigger>
           <TabsTrigger value="codex-compat">Codex Compat</TabsTrigger>
+          <TabsTrigger value="copilot-compat">Copilot Compat</TabsTrigger>
           <TabsTrigger value="vertex">Vertex</TabsTrigger>
           <TabsTrigger value="openai">OpenAI 兼容</TabsTrigger>
           <TabsTrigger value="ampcode">Ampcode</TabsTrigger>
@@ -1101,6 +1129,22 @@ export function ProvidersPage() {
             onEdit={(idx) => openKeyEditor("codex-compat", idx)}
             onDelete={(idx) => setConfirm({ type: "deleteKey", keyType: "codex-compat", index: idx })}
             onToggleEnabled={(idx, enabled) => void toggleKeyEnabled("codex-compat", idx, enabled)}
+            getStats={getSimpleStats}
+            getStatusBar={getSimpleStatusBar}
+          />
+        </TabsContent>
+
+        <TabsContent value="copilot-compat" className="mt-6">
+          <ProviderKeyListCard
+            icon={Settings2}
+            title="Copilot Compat Keys"
+            description="面向 GitHub Copilot / opencode 一类客户端，默认使用 copilot-compat prefix，并按请求形态自动切换 Responses 与 Chat Completions。"
+            loading={loading}
+            items={copilotCompatKeys}
+            onAdd={() => openKeyEditor("copilot-compat", null)}
+            onEdit={(idx) => openKeyEditor("copilot-compat", idx)}
+            onDelete={(idx) => setConfirm({ type: "deleteKey", keyType: "copilot-compat", index: idx })}
+            onToggleEnabled={(idx, enabled) => void toggleKeyEnabled("copilot-compat", idx, enabled)}
             getStats={getSimpleStats}
             getStatusBar={getSimpleStatusBar}
           />
@@ -1421,9 +1465,11 @@ export function ProvidersPage() {
         description={
           editKeyType === "vertex"
             ? "Vertex 的 models 必须填写 alias（name => alias）。Excluded Models 中使用 * 可一键禁用该配置。"
-              : editKeyType === "codex" || editKeyType === "codex-compat"
+              : editKeyType === "codex" || editKeyType === "codex-compat" || editKeyType === "copilot-compat"
                 ? editKeyType === "codex-compat"
                   ? "支持 Excluded Models、自定义 headers / models，以及自动兼容尝试 /models 与 /v1/models 拉取并合并模型；默认 prefix 为 codex-compat，并对 OpenAI Responses 事件 ID 做稳定化。"
+                  : editKeyType === "copilot-compat"
+                    ? "支持 Excluded Models、自定义 headers / models，以及自动兼容尝试 /models 与 /v1/models 拉取并合并模型；默认 prefix 为 copilot-compat，并为 GitHub Copilot 兼容客户端自动切换 Responses / Chat Completions。"
                   : "支持 Excluded Models、自定义 headers / models，以及自动兼容尝试 /models 与 /v1/models 拉取并合并 Codex 模型。"
                 : editKeyType === "claude"
                   ? "支持 Excluded Models、自定义 headers / models，以及自动兼容尝试 Claude /v1/models 与 /models 拉取并合并模型。"
@@ -1631,7 +1677,7 @@ export function ProvidersPage() {
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white/70 p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-950/60">
-            {editKeyType === "codex" || editKeyType === "codex-compat" || editKeyType === "claude" || editKeyType === "gemini" ? (
+            {editKeyType === "codex" || editKeyType === "codex-compat" || editKeyType === "copilot-compat" || editKeyType === "claude" || editKeyType === "gemini" ? (
               <div className="space-y-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-sm font-semibold text-slate-900 dark:text-white">
@@ -1665,7 +1711,7 @@ export function ProvidersPage() {
                       ? keyDraft.baseUrl.trim()
                         ? `自动尝试拉取地址：${formatDiscoveryEndpoints("gemini", keyDraft.baseUrl)}（全部失败时回退静态模型定义）`
                         : "未填写 baseUrl：将回退使用静态模型定义"
-                      : `自动尝试拉取地址：${formatDiscoveryEndpoints(editKeyType === "codex-compat" ? "codex-compat" : "codex", keyDraft.baseUrl)}${editKeyType === "codex-compat" ? "；建议保留 codex-compat prefix 以避免和原 Codex 冲突" : ""}`}
+                      : `自动尝试拉取地址：${formatDiscoveryEndpoints(editKeyType === "codex-compat" ? "codex-compat" : editKeyType === "copilot-compat" ? "copilot-compat" : "codex", keyDraft.baseUrl)}${editKeyType === "codex-compat" ? "；建议保留 codex-compat prefix 以避免和原 Codex 冲突" : editKeyType === "copilot-compat" ? "；建议保留 copilot-compat prefix 以避免和其他供应商冲突" : ""}`}
                 </p>
                 <ModelInputList
                   title="模型列表（可选）"
