@@ -336,6 +336,7 @@ export function ProvidersPage() {
       ...(keyDraft.baseUrl.trim() ? { baseUrl: keyDraft.baseUrl.trim() } : {}),
       ...(current?.websockets !== undefined ? { websockets: current.websockets } : {}),
       ...(keyDraft.proxyUrl.trim() ? { proxyUrl: keyDraft.proxyUrl.trim() } : {}),
+      participateInDefaultRouting: keyDraft.participateInDefaultRouting,
       ...(headers ? { headers } : {}),
       ...(excludedModels ? { excludedModels } : {}),
       ...(modelCommit.models ? { models: modelCommit.models } : {}),
@@ -709,6 +710,7 @@ export function ProvidersPage() {
       name,
       baseUrl,
       ...(openaiDraft.prefix.trim() ? { prefix: openaiDraft.prefix.trim() } : {}),
+      participateInDefaultRouting: openaiDraft.participateInDefaultRouting,
       ...(headers ? { headers } : {}),
       ...(excludedModels ? { excludedModels } : {}),
       ...(priority !== undefined ? { priority } : {}),
@@ -1145,6 +1147,7 @@ export function ProvidersPage() {
                   const statusData = getOpenAIProviderStatusBar(provider);
                   const disabled = hasDisableAllModelsRule(provider.excludedModels);
                   const excludedModels = stripDisableAllModelsRule(provider.excludedModels);
+                  const participateInDefaultRouting = provider.participateInDefaultRouting !== false;
 
                   return (
                     <div
@@ -1156,8 +1159,18 @@ export function ProvidersPage() {
                     >
                       <div className="min-w-0">
                           <div className="md:pr-[280px]">
-                          <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">
-                            {provider.name}
+                          <p className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-white">
+                            <span className="truncate">{provider.name}</span>
+                            <span
+                              className={[
+                                "rounded-full px-2 py-0.5 text-[11px] font-medium",
+                                participateInDefaultRouting
+                                  ? "bg-emerald-600/10 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200"
+                                  : "bg-amber-500/10 text-amber-700 dark:bg-amber-500/15 dark:text-amber-200",
+                              ].join(" ")}
+                            >
+                              {participateInDefaultRouting ? "参与默认路由" : "仅显式路由"}
+                            </span>
                           </p>
                           {provider.prefix ? (
                             <p className="mt-1 truncate font-mono text-xs text-slate-700 dark:text-slate-200">
@@ -1439,6 +1452,16 @@ export function ProvidersPage() {
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-2">
             <ProviderStateBadge enabled={editKeyEnabled} />
+            <span
+              className={[
+                "rounded-full px-2.5 py-1 text-xs font-medium",
+                keyDraft.participateInDefaultRouting
+                  ? "bg-emerald-600/10 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200"
+                  : "bg-amber-500/10 text-amber-700 dark:bg-amber-500/15 dark:text-amber-200",
+              ].join(" ")}
+            >
+              {keyDraft.participateInDefaultRouting ? "参与默认路由" : "仅显式路由"}
+            </span>
             <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 dark:border-neutral-800 dark:bg-neutral-950/60 dark:text-white/75">
               headers：<span className="font-semibold tabular-nums">{editKeyHeaderCount}</span>
             </span>
@@ -1484,6 +1507,24 @@ export function ProvidersPage() {
             <p className="mt-2 text-xs text-slate-500 dark:text-white/55">
               禁用本质是向 Excluded Models 写入 <span className="font-mono">*</span>
               ；你也可以在下方手动编辑。
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white/70 p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-950/60">
+            <ToggleSwitch
+              label="参与默认轮询"
+              description={
+                keyDraft.participateInDefaultRouting
+                  ? "当前：参与默认候选池，会进入常规自动分配。"
+                  : "当前：不参与默认候选池；仅在 Prefix / 指定渠道 / UA 路由等显式命中时使用。"
+              }
+              checked={keyDraft.participateInDefaultRouting}
+              onCheckedChange={(next) =>
+                setKeyDraft((prev) => ({ ...prev, participateInDefaultRouting: next }))
+              }
+            />
+            <p className="mt-2 text-xs text-slate-500 dark:text-white/55">
+              用于把某条渠道从默认轮询池里摘出来，但不影响显式路由场景。
             </p>
           </div>
 
@@ -1762,6 +1803,16 @@ export function ProvidersPage() {
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-2">
             <ProviderStateBadge enabled={editOpenAIEnabled} />
+            <span
+              className={[
+                "rounded-full px-2.5 py-1 text-xs font-medium",
+                openaiDraft.participateInDefaultRouting
+                  ? "bg-emerald-600/10 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200"
+                  : "bg-amber-500/10 text-amber-700 dark:bg-amber-500/15 dark:text-amber-200",
+              ].join(" ")}
+            >
+              {openaiDraft.participateInDefaultRouting ? "参与默认路由" : "仅显式路由"}
+            </span>
             <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 dark:border-neutral-800 dark:bg-neutral-950/60 dark:text-white/75">
               headers：<span className="font-semibold tabular-nums">{editOpenAIHeaderCount}</span>
             </span>
@@ -1783,6 +1834,24 @@ export function ProvidersPage() {
             <p className="mt-2 text-xs text-slate-500 dark:text-white/55">
               禁用本质是向 Excluded Models 写入 <span className="font-mono">*</span>
               ；你也可以在下方手动编辑。
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white/70 p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-950/60">
+            <ToggleSwitch
+              label="参与默认轮询"
+              description={
+                openaiDraft.participateInDefaultRouting
+                  ? "当前：参与默认候选池，会进入常规自动分配。"
+                  : "当前：不参与默认候选池；仅在 Prefix / 指定渠道 / UA 路由等显式命中时使用。"
+              }
+              checked={openaiDraft.participateInDefaultRouting}
+              onCheckedChange={(next) =>
+                setOpenaiDraft((prev) => ({ ...prev, participateInDefaultRouting: next }))
+              }
+            />
+            <p className="mt-2 text-xs text-slate-500 dark:text-white/55">
+              用于把这组 OpenAI 兼容提供商从默认轮询池里摘出来，但不影响显式路由场景。
             </p>
           </div>
 

@@ -2,7 +2,9 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"net/http"
+	"strconv"
 	"testing"
 	"time"
 
@@ -66,6 +68,24 @@ func TestManagerExecute_UserAgentPreferProviders(t *testing.T) {
 			PreferProviders: []string{"codex-compat"},
 		},
 	})
+
+	authID := executeUserAgentRoutedRequest(t, manager, "opencode/1.0.0", "", []string{"codex", "codex-compat"})
+	if authID != "auth-compat" {
+		t.Fatalf("selected auth = %q, want %q", authID, "auth-compat")
+	}
+}
+
+func TestManagerExecute_UserAgentForceProvidersBypassesDefaultRoutingOptOut(t *testing.T) {
+	manager := newUserAgentRoutingTestManager(t, []internalconfig.UserAgentRoutingRule{
+		{
+			Name:           "opencode-force-compat",
+			Enabled:        boolPtr(true),
+			MatchMode:      "contains",
+			Pattern:        "opencode",
+			ForceProviders: []string{"codex-compat"},
+		},
+	})
+	setAuthParticipateInDefaultRouting(manager, "auth-compat", false)
 
 	authID := executeUserAgentRoutedRequest(t, manager, "opencode/1.0.0", "", []string{"codex", "codex-compat"})
 	if authID != "auth-compat" {
@@ -204,6 +224,82 @@ func TestManagerExecute_UserAgentRoutingNoMatchKeepsDefaultSelection(t *testing.
 	}
 }
 
+func TestManagerExecute_DefaultRoutingSkipsOptOutAuthWhenAlternativeExists(t *testing.T) {
+	manager := newUserAgentRoutingTestManager(t, nil)
+	setAuthParticipateInDefaultRouting(manager, "auth-compat", false)
+	setAuthParticipateInDefaultRouting(manager, "auth-compat-2", false)
+
+	authID := executeUserAgentRoutedRequest(t, manager, "", "gpt-5", []string{"codex", "codex-compat"})
+	if authID != "auth-codex" {
+		t.Fatalf("selected auth = %q, want %q", authID, "auth-codex")
+	}
+}
+
+func TestManagerExecute_DefaultRoutingRejectsAllOptOutCandidates(t *testing.T) {
+	manager := newUserAgentRoutingTestManager(t, nil)
+	setAuthParticipateInDefaultRouting(manager, "auth-compat", false)
+	setAuthParticipateInDefaultRouting(manager, "auth-compat-2", false)
+
+	_, err := manager.Execute(
+		context.Background(),
+		[]string{"codex-compat"},
+		cliproxyexecutor.Request{Model: "gpt-5"},
+		cliproxyexecutor.Options{},
+	)
+	assertAuthNotFoundError(t, err)
+}
+
+func TestManagerPickNext_DefaultRoutingRejectsSingleOptOutCandidate(t *testing.T) {
+	manager := newUserAgentRoutingTestManager(t, nil)
+	setAuthParticipateInDefaultRouting(manager, "auth-compat", false)
+
+	_, _, err := manager.pickNext(
+		context.Background(),
+		"codex-compat",
+		"gpt-5",
+		cliproxyexecutor.Options{},
+		map[string]struct{}{
+			"auth-compat-2": {},
+		},
+	)
+	assertAuthNotFoundError(t, err)
+}
+
+func TestManagerExecute_AllowedAuthIDsBypassDefaultRoutingOptOut(t *testing.T) {
+	manager := newUserAgentRoutingTestManager(t, nil)
+	setAuthParticipateInDefaultRouting(manager, "auth-compat", false)
+
+	authID := executeUserAgentRoutedRequestWithMetadata(
+		t,
+		manager,
+		"",
+		"gpt-5",
+		[]string{"codex", "codex-compat"},
+		map[string]any{
+			cliproxyexecutor.AllowedAuthIDsMetadataKey: []string{"auth-compat"},
+		},
+	)
+	if authID != "auth-compat" {
+		t.Fatalf("selected auth = %q, want %q", authID, "auth-compat")
+	}
+}
+
+func TestManagerExecute_ExplicitPrefixBypassesDefaultRoutingOptOut(t *testing.T) {
+	manager := newUserAgentRoutingTestManager(t, nil)
+	setAuthParticipateInDefaultRouting(manager, "auth-compat", false)
+
+	authID := executeUserAgentRoutedRequest(
+		t,
+		manager,
+		"",
+		"codex-compat/gpt-5(high)",
+		[]string{"codex", "codex-compat"},
+	)
+	if authID != "auth-compat" {
+		t.Fatalf("selected auth = %q, want %q", authID, "auth-compat")
+	}
+}
+
 func TestManagerExecute_UserAgentForceProvidersFallsBackWhenNoIntersection(t *testing.T) {
 	manager := newUserAgentRoutingTestManager(t, []internalconfig.UserAgentRoutingRule{
 		{
@@ -284,8 +380,8 @@ func newUserAgentRoutingTestManager(t *testing.T, rules []internalconfig.UserAge
 
 	for _, auth := range []*Auth{
 		{ID: "auth-codex", Provider: "codex"},
-		{ID: "auth-compat", Provider: "codex-compat"},
-		{ID: "auth-compat-2", Provider: "codex-compat"},
+		{ID: "auth-compat", Provider: "codex-compat", Prefix: "codex-compat"},
+		{ID: "auth-compat-2", Provider: "codex-compat", Prefix: "codex-compat"},
 	} {
 		if _, err := manager.Register(context.Background(), auth); err != nil {
 			t.Fatalf("register auth %s: %v", auth.ID, err)
@@ -293,13 +389,19 @@ func newUserAgentRoutingTestManager(t *testing.T, rules []internalconfig.UserAge
 	}
 
 	modelRegistry := registry.GetGlobalRegistry()
-	models := []*registry.ModelInfo{
+	baseModels := []*registry.ModelInfo{
 		{ID: "gpt-5"},
 		{ID: "gpt-4.1"},
 	}
-	modelRegistry.RegisterClient("auth-codex", "codex", models)
-	modelRegistry.RegisterClient("auth-compat", "codex-compat", models)
-	modelRegistry.RegisterClient("auth-compat-2", "codex-compat", models)
+	compatModels := []*registry.ModelInfo{
+		{ID: "gpt-5"},
+		{ID: "codex-compat/gpt-5"},
+		{ID: "gpt-4.1"},
+		{ID: "codex-compat/gpt-4.1"},
+	}
+	modelRegistry.RegisterClient("auth-codex", "codex", baseModels)
+	modelRegistry.RegisterClient("auth-compat", "codex-compat", compatModels)
+	modelRegistry.RegisterClient("auth-compat-2", "codex-compat", compatModels)
 	if !modelRegistry.ClientSupportsModel("auth-codex", "gpt-5") ||
 		!modelRegistry.ClientSupportsModel("auth-compat", "gpt-5") ||
 		!modelRegistry.ClientSupportsModel("auth-compat-2", "gpt-5") {
@@ -312,6 +414,22 @@ func newUserAgentRoutingTestManager(t *testing.T, rules []internalconfig.UserAge
 	})
 
 	return manager
+}
+
+func setAuthParticipateInDefaultRouting(manager *Manager, authID string, enabled bool) {
+	if manager == nil {
+		return
+	}
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	auth := manager.auths[authID]
+	if auth == nil {
+		return
+	}
+	if auth.Attributes == nil {
+		auth.Attributes = make(map[string]string)
+	}
+	auth.Attributes[participateInDefaultRoutingAttribute] = strconv.FormatBool(enabled)
 }
 
 func executeUserAgentRoutedRequest(t *testing.T, manager *Manager, userAgent, model string, providers []string) string {
@@ -348,4 +466,19 @@ func executeUserAgentRoutedRequestWithMetadata(t *testing.T, manager *Manager, u
 
 func boolPtr(v bool) *bool {
 	return &v
+}
+
+func assertAuthNotFoundError(t *testing.T, err error) {
+	t.Helper()
+
+	if err == nil {
+		t.Fatalf("expected auth_not_found error, got nil")
+	}
+	var authErr *Error
+	if !errors.As(err, &authErr) {
+		t.Fatalf("expected *Error, got %T (%v)", err, err)
+	}
+	if authErr.Code != "auth_not_found" {
+		t.Fatalf("expected auth_not_found, got %q (%v)", authErr.Code, authErr)
+	}
 }

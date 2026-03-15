@@ -85,6 +85,7 @@ export type ProviderKeyDraft = {
   prefix: string;
   baseUrl: string;
   proxyUrl: string;
+  participateInDefaultRouting: boolean;
   excludedModelsText: string;
   headersEntries: KeyValueEntry[];
   modelEntries: ModelEntryDraft[];
@@ -140,6 +141,7 @@ export const buildProviderKeyDraft = (input?: ProviderSimpleConfig | null): Prov
   prefix: input?.prefix ?? "",
   baseUrl: input?.baseUrl ?? "",
   proxyUrl: input?.proxyUrl ?? "",
+  participateInDefaultRouting: input?.participateInDefaultRouting !== false,
   excludedModelsText: excludedModelsToText(input?.excludedModels),
   headersEntries: recordToKeyValueEntries(input?.headers),
   modelEntries: buildModelEntries(input?.models),
@@ -149,6 +151,7 @@ export type OpenAIDraft = {
   name: string;
   baseUrl: string;
   prefix: string;
+  participateInDefaultRouting: boolean;
   excludedModelsText: string;
   headersEntries: KeyValueEntry[];
   priorityText: string;
@@ -166,6 +169,7 @@ export const buildOpenAIDraft = (input?: OpenAIProvider | null): OpenAIDraft => 
   name: input?.name ?? "",
   baseUrl: input?.baseUrl ?? "",
   prefix: input?.prefix ?? "",
+  participateInDefaultRouting: input?.participateInDefaultRouting !== false,
   excludedModelsText: excludedModelsToText(input?.excludedModels),
   headersEntries: recordToKeyValueEntries(input?.headers),
   priorityText: input?.priority !== undefined ? String(input.priority) : "",

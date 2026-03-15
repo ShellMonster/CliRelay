@@ -114,6 +114,9 @@ export const serializeProviderKey = (config: ProviderSimpleConfig) => {
   if (config.websockets !== undefined) payload.websockets = config.websockets;
   const proxyUrl = normalizeString(config.proxyUrl);
   if (proxyUrl) payload["proxy-url"] = proxyUrl;
+  if (config.participateInDefaultRouting !== undefined) {
+    payload["participate-in-default-routing"] = config.participateInDefaultRouting;
+  }
   const headers = serializeHeaders(config.headers);
   if (headers) payload.headers = headers;
   const models = serializeModels(config.models);
@@ -132,6 +135,9 @@ export const serializeGeminiKey = (config: ProviderSimpleConfig) => {
   if (prefix) payload.prefix = prefix;
   const baseUrl = normalizeString(config.baseUrl);
   if (baseUrl) payload["base-url"] = baseUrl;
+  if (config.participateInDefaultRouting !== undefined) {
+    payload["participate-in-default-routing"] = config.participateInDefaultRouting;
+  }
   const headers = serializeHeaders(config.headers);
   if (headers) payload.headers = headers;
   const models = serializeModels(config.models);
@@ -148,6 +154,9 @@ export const serializeOpenAIProvider = (provider: OpenAIProvider) => {
   if (baseUrl) payload["base-url"] = baseUrl;
   const prefix = normalizeString(provider.prefix);
   if (prefix) payload.prefix = prefix;
+  if (provider.participateInDefaultRouting !== undefined) {
+    payload["participate-in-default-routing"] = provider.participateInDefaultRouting;
+  }
   const headers = serializeHeaders(provider.headers);
   if (headers) payload.headers = headers;
   const models = serializeModels(provider.models);

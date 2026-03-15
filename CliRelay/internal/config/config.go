@@ -379,6 +379,11 @@ type ClaudeKey struct {
 	// ProxyURL overrides the global proxy setting for this API key if provided.
 	ProxyURL string `yaml:"proxy-url" json:"proxy-url"`
 
+	// ParticipateInDefaultRouting controls whether this credential joins the default
+	// provider pool for automatic routing/load balancing. When false, it can still
+	// be selected by explicit prefix, channel pinning, or user-agent routing rules.
+	ParticipateInDefaultRouting *bool `yaml:"participate-in-default-routing,omitempty" json:"participate-in-default-routing,omitempty"`
+
 	// Models defines upstream model names and aliases for request routing.
 	Models []ClaudeModel `yaml:"models" json:"models"`
 
@@ -433,6 +438,11 @@ type CodexKey struct {
 	// ProxyURL overrides the global proxy setting for this API key if provided.
 	ProxyURL string `yaml:"proxy-url" json:"proxy-url"`
 
+	// ParticipateInDefaultRouting controls whether this credential joins the default
+	// provider pool for automatic routing/load balancing. When false, it can still
+	// be selected by explicit prefix, channel pinning, or user-agent routing rules.
+	ParticipateInDefaultRouting *bool `yaml:"participate-in-default-routing,omitempty" json:"participate-in-default-routing,omitempty"`
+
 	// Models defines upstream model names and aliases for request routing.
 	Models []CodexModel `yaml:"models" json:"models"`
 
@@ -480,6 +490,11 @@ type GeminiKey struct {
 	// ProxyURL optionally overrides the global proxy for this API key.
 	ProxyURL string `yaml:"proxy-url,omitempty" json:"proxy-url,omitempty"`
 
+	// ParticipateInDefaultRouting controls whether this credential joins the default
+	// provider pool for automatic routing/load balancing. When false, it can still
+	// be selected by explicit prefix, channel pinning, or user-agent routing rules.
+	ParticipateInDefaultRouting *bool `yaml:"participate-in-default-routing,omitempty" json:"participate-in-default-routing,omitempty"`
+
 	// Models defines upstream model names and aliases for request routing.
 	Models []GeminiModel `yaml:"models,omitempty" json:"models,omitempty"`
 
@@ -520,6 +535,11 @@ type OpenAICompatibility struct {
 
 	// BaseURL is the base URL for the external OpenAI-compatible API endpoint.
 	BaseURL string `yaml:"base-url" json:"base-url"`
+
+	// ParticipateInDefaultRouting controls whether this provider joins the default
+	// provider pool for automatic routing/load balancing. When false, it can still
+	// be selected by explicit prefix, channel pinning, or user-agent routing rules.
+	ParticipateInDefaultRouting *bool `yaml:"participate-in-default-routing,omitempty" json:"participate-in-default-routing,omitempty"`
 
 	// APIKeyEntries defines API keys with optional per-key proxy configuration.
 	APIKeyEntries []OpenAICompatibilityAPIKey `yaml:"api-key-entries,omitempty" json:"api-key-entries,omitempty"`
@@ -1447,6 +1467,9 @@ func appendPath(path []string, key string) []string {
 // represents a known default value that should not be written to the config file.
 // This prevents non-zero defaults from polluting the config.
 func isKnownDefaultValue(path []string, node *yaml.Node) bool {
+	if shouldPreserveExplicitZeroValue(path, node) {
+		return false
+	}
 	// First check if it's a zero value
 	if isZeroValueNode(node) {
 		return true
@@ -1480,6 +1503,28 @@ func isKnownDefaultValue(path []string, node *yaml.Node) bool {
 	}
 
 	return false
+}
+
+func shouldPreserveExplicitZeroValue(path []string, node *yaml.Node) bool {
+	if node == nil || len(path) == 0 {
+		return false
+	}
+	if node.Kind != yaml.ScalarNode || node.Tag != "!!bool" || node.Value != "false" {
+		return false
+	}
+	switch strings.Join(path, ".") {
+	case "routing.user-agent-rules.enabled",
+		"cloak.cache-user-id",
+		"gemini-api-key.participate-in-default-routing",
+		"claude-api-key.participate-in-default-routing",
+		"codex-api-key.participate-in-default-routing",
+		"codex-compat-api-key.participate-in-default-routing",
+		"openai-compatibility.participate-in-default-routing",
+		"vertex-api-key.participate-in-default-routing":
+		return true
+	default:
+		return false
+	}
 }
 
 // pruneKnownDefaultsInNewNode removes default-valued descendants from a new node

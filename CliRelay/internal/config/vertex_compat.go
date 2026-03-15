@@ -28,6 +28,11 @@ type VertexCompatKey struct {
 	// ProxyURL optionally overrides the global proxy for this API key.
 	ProxyURL string `yaml:"proxy-url,omitempty" json:"proxy-url,omitempty"`
 
+	// ParticipateInDefaultRouting controls whether this credential joins the default
+	// provider pool for automatic routing/load balancing. When false, it can still
+	// be selected by explicit prefix, channel pinning, or user-agent routing rules.
+	ParticipateInDefaultRouting *bool `yaml:"participate-in-default-routing,omitempty" json:"participate-in-default-routing,omitempty"`
+
 	// Headers optionally adds extra HTTP headers for requests sent with this key.
 	// Commonly used for cookies, user-agent, and other authentication headers.
 	Headers map[string]string `yaml:"headers,omitempty" json:"headers,omitempty"`

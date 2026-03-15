@@ -375,14 +375,15 @@ func (h *Handler) PutGeminiKeys(c *gin.Context) {
 }
 func (h *Handler) PatchGeminiKey(c *gin.Context) {
 	type geminiKeyPatch struct {
-		Name           *string               `json:"name"`
-		APIKey         *string               `json:"api-key"`
-		Prefix         *string               `json:"prefix"`
-		BaseURL        *string               `json:"base-url"`
-		ProxyURL       *string               `json:"proxy-url"`
-		Models         *[]config.GeminiModel `json:"models"`
-		Headers        *map[string]string    `json:"headers"`
-		ExcludedModels *[]string             `json:"excluded-models"`
+		Name                        *string               `json:"name"`
+		APIKey                      *string               `json:"api-key"`
+		Prefix                      *string               `json:"prefix"`
+		BaseURL                     *string               `json:"base-url"`
+		ProxyURL                    *string               `json:"proxy-url"`
+		ParticipateInDefaultRouting *bool                 `json:"participate-in-default-routing"`
+		Models                      *[]config.GeminiModel `json:"models"`
+		Headers                     *map[string]string    `json:"headers"`
+		ExcludedModels              *[]string             `json:"excluded-models"`
 	}
 	var body struct {
 		Index *int            `json:"index"`
@@ -435,6 +436,9 @@ func (h *Handler) PatchGeminiKey(c *gin.Context) {
 	}
 	if body.Value.ProxyURL != nil {
 		entry.ProxyURL = strings.TrimSpace(*body.Value.ProxyURL)
+	}
+	if body.Value.ParticipateInDefaultRouting != nil {
+		entry.ParticipateInDefaultRouting = body.Value.ParticipateInDefaultRouting
 	}
 	if body.Value.Models != nil {
 		entry.Models = append([]config.GeminiModel(nil), (*body.Value.Models)...)
@@ -509,14 +513,15 @@ func (h *Handler) PutClaudeKeys(c *gin.Context) {
 }
 func (h *Handler) PatchClaudeKey(c *gin.Context) {
 	type claudeKeyPatch struct {
-		Name           *string               `json:"name"`
-		APIKey         *string               `json:"api-key"`
-		Prefix         *string               `json:"prefix"`
-		BaseURL        *string               `json:"base-url"`
-		ProxyURL       *string               `json:"proxy-url"`
-		Models         *[]config.ClaudeModel `json:"models"`
-		Headers        *map[string]string    `json:"headers"`
-		ExcludedModels *[]string             `json:"excluded-models"`
+		Name                        *string               `json:"name"`
+		APIKey                      *string               `json:"api-key"`
+		Prefix                      *string               `json:"prefix"`
+		BaseURL                     *string               `json:"base-url"`
+		ProxyURL                    *string               `json:"proxy-url"`
+		ParticipateInDefaultRouting *bool                 `json:"participate-in-default-routing"`
+		Models                      *[]config.ClaudeModel `json:"models"`
+		Headers                     *map[string]string    `json:"headers"`
+		ExcludedModels              *[]string             `json:"excluded-models"`
 	}
 	var body struct {
 		Index *int            `json:"index"`
@@ -560,6 +565,9 @@ func (h *Handler) PatchClaudeKey(c *gin.Context) {
 	}
 	if body.Value.ProxyURL != nil {
 		entry.ProxyURL = strings.TrimSpace(*body.Value.ProxyURL)
+	}
+	if body.Value.ParticipateInDefaultRouting != nil {
+		entry.ParticipateInDefaultRouting = body.Value.ParticipateInDefaultRouting
 	}
 	if body.Value.Models != nil {
 		entry.Models = append([]config.ClaudeModel(nil), (*body.Value.Models)...)
@@ -636,13 +644,14 @@ func (h *Handler) PutOpenAICompat(c *gin.Context) {
 }
 func (h *Handler) PatchOpenAICompat(c *gin.Context) {
 	type openAICompatPatch struct {
-		Name           *string                             `json:"name"`
-		Prefix         *string                             `json:"prefix"`
-		BaseURL        *string                             `json:"base-url"`
-		APIKeyEntries  *[]config.OpenAICompatibilityAPIKey `json:"api-key-entries"`
-		Models         *[]config.OpenAICompatibilityModel  `json:"models"`
-		Headers        *map[string]string                  `json:"headers"`
-		ExcludedModels *[]string                           `json:"excluded-models"`
+		Name                        *string                             `json:"name"`
+		Prefix                      *string                             `json:"prefix"`
+		BaseURL                     *string                             `json:"base-url"`
+		ParticipateInDefaultRouting *bool                               `json:"participate-in-default-routing"`
+		APIKeyEntries               *[]config.OpenAICompatibilityAPIKey `json:"api-key-entries"`
+		Models                      *[]config.OpenAICompatibilityModel  `json:"models"`
+		Headers                     *map[string]string                  `json:"headers"`
+		ExcludedModels              *[]string                           `json:"excluded-models"`
 	}
 	var body struct {
 		Name  *string            `json:"name"`
@@ -687,6 +696,9 @@ func (h *Handler) PatchOpenAICompat(c *gin.Context) {
 			return
 		}
 		entry.BaseURL = trimmed
+	}
+	if body.Value.ParticipateInDefaultRouting != nil {
+		entry.ParticipateInDefaultRouting = body.Value.ParticipateInDefaultRouting
 	}
 	if body.Value.APIKeyEntries != nil {
 		entry.APIKeyEntries = append([]config.OpenAICompatibilityAPIKey(nil), (*body.Value.APIKeyEntries)...)
@@ -762,12 +774,13 @@ func (h *Handler) PutVertexCompatKeys(c *gin.Context) {
 }
 func (h *Handler) PatchVertexCompatKey(c *gin.Context) {
 	type vertexCompatPatch struct {
-		APIKey   *string                     `json:"api-key"`
-		Prefix   *string                     `json:"prefix"`
-		BaseURL  *string                     `json:"base-url"`
-		ProxyURL *string                     `json:"proxy-url"`
-		Headers  *map[string]string          `json:"headers"`
-		Models   *[]config.VertexCompatModel `json:"models"`
+		APIKey                      *string                     `json:"api-key"`
+		Prefix                      *string                     `json:"prefix"`
+		BaseURL                     *string                     `json:"base-url"`
+		ProxyURL                    *string                     `json:"proxy-url"`
+		ParticipateInDefaultRouting *bool                       `json:"participate-in-default-routing"`
+		Headers                     *map[string]string          `json:"headers"`
+		Models                      *[]config.VertexCompatModel `json:"models"`
 	}
 	var body struct {
 		Index *int               `json:"index"`
@@ -824,6 +837,9 @@ func (h *Handler) PatchVertexCompatKey(c *gin.Context) {
 	}
 	if body.Value.ProxyURL != nil {
 		entry.ProxyURL = strings.TrimSpace(*body.Value.ProxyURL)
+	}
+	if body.Value.ParticipateInDefaultRouting != nil {
+		entry.ParticipateInDefaultRouting = body.Value.ParticipateInDefaultRouting
 	}
 	if body.Value.Headers != nil {
 		entry.Headers = config.NormalizeHeaders(*body.Value.Headers)
@@ -1082,14 +1098,15 @@ func (h *Handler) PutCodexKeys(c *gin.Context) {
 }
 func (h *Handler) PatchCodexKey(c *gin.Context) {
 	type codexKeyPatch struct {
-		APIKey         *string              `json:"api-key"`
-		Prefix         *string              `json:"prefix"`
-		BaseURL        *string              `json:"base-url"`
-		Websockets     *bool                `json:"websockets"`
-		ProxyURL       *string              `json:"proxy-url"`
-		Models         *[]config.CodexModel `json:"models"`
-		Headers        *map[string]string   `json:"headers"`
-		ExcludedModels *[]string            `json:"excluded-models"`
+		APIKey                      *string              `json:"api-key"`
+		Prefix                      *string              `json:"prefix"`
+		BaseURL                     *string              `json:"base-url"`
+		Websockets                  *bool                `json:"websockets"`
+		ProxyURL                    *string              `json:"proxy-url"`
+		ParticipateInDefaultRouting *bool                `json:"participate-in-default-routing"`
+		Models                      *[]config.CodexModel `json:"models"`
+		Headers                     *map[string]string   `json:"headers"`
+		ExcludedModels              *[]string            `json:"excluded-models"`
 	}
 	var body struct {
 		Index *int           `json:"index"`
@@ -1140,6 +1157,9 @@ func (h *Handler) PatchCodexKey(c *gin.Context) {
 	}
 	if body.Value.ProxyURL != nil {
 		entry.ProxyURL = strings.TrimSpace(*body.Value.ProxyURL)
+	}
+	if body.Value.ParticipateInDefaultRouting != nil {
+		entry.ParticipateInDefaultRouting = body.Value.ParticipateInDefaultRouting
 	}
 	if body.Value.Models != nil {
 		entry.Models = append([]config.CodexModel(nil), (*body.Value.Models)...)
@@ -1220,14 +1240,15 @@ func (h *Handler) PutCodexCompatKeys(c *gin.Context) {
 
 func (h *Handler) PatchCodexCompatKey(c *gin.Context) {
 	type codexKeyPatch struct {
-		APIKey         *string              `json:"api-key"`
-		Prefix         *string              `json:"prefix"`
-		BaseURL        *string              `json:"base-url"`
-		Websockets     *bool                `json:"websockets"`
-		ProxyURL       *string              `json:"proxy-url"`
-		Models         *[]config.CodexModel `json:"models"`
-		Headers        *map[string]string   `json:"headers"`
-		ExcludedModels *[]string            `json:"excluded-models"`
+		APIKey                      *string              `json:"api-key"`
+		Prefix                      *string              `json:"prefix"`
+		BaseURL                     *string              `json:"base-url"`
+		Websockets                  *bool                `json:"websockets"`
+		ProxyURL                    *string              `json:"proxy-url"`
+		ParticipateInDefaultRouting *bool                `json:"participate-in-default-routing"`
+		Models                      *[]config.CodexModel `json:"models"`
+		Headers                     *map[string]string   `json:"headers"`
+		ExcludedModels              *[]string            `json:"excluded-models"`
 	}
 	var body struct {
 		Index *int           `json:"index"`
@@ -1278,6 +1299,9 @@ func (h *Handler) PatchCodexCompatKey(c *gin.Context) {
 	}
 	if body.Value.ProxyURL != nil {
 		entry.ProxyURL = strings.TrimSpace(*body.Value.ProxyURL)
+	}
+	if body.Value.ParticipateInDefaultRouting != nil {
+		entry.ParticipateInDefaultRouting = body.Value.ParticipateInDefaultRouting
 	}
 	if body.Value.Models != nil {
 		entry.Models = append([]config.CodexModel(nil), (*body.Value.Models)...)

@@ -211,9 +211,18 @@ const normalizeProviderKeyConfig = (
   const proxyUrl = record
     ? (record["proxy-url"] ?? record.proxyUrl)
     : undefined;
+  const participateInDefaultRouting = normalizeBoolean(
+    record?.["participate-in-default-routing"] ??
+      record?.participateInDefaultRouting ??
+      record?.["participate_in_default_routing"] ??
+      record?.participate_in_default_routing,
+  );
   if (baseUrl) config.baseUrl = String(baseUrl);
   if (websockets !== undefined) config.websockets = websockets;
   if (proxyUrl) config.proxyUrl = String(proxyUrl);
+  if (participateInDefaultRouting !== undefined) {
+    config.participateInDefaultRouting = participateInDefaultRouting;
+  }
   const headers = normalizeHeaders(record?.headers);
   if (headers) config.headers = headers;
   const models = normalizeModelAliases(record?.models);
@@ -248,7 +257,16 @@ const normalizeGeminiKeyConfig = (item: unknown): GeminiKeyConfig | null => {
   const proxyUrl = record
     ? (record["proxy-url"] ?? record.proxyUrl ?? record["proxy_url"])
     : undefined;
+  const participateInDefaultRouting = normalizeBoolean(
+    record?.["participate-in-default-routing"] ??
+      record?.participateInDefaultRouting ??
+      record?.["participate_in_default_routing"] ??
+      record?.participate_in_default_routing,
+  );
   if (proxyUrl) config.proxyUrl = String(proxyUrl);
+  if (participateInDefaultRouting !== undefined) {
+    config.participateInDefaultRouting = participateInDefaultRouting;
+  }
   const headers = normalizeHeaders(record?.headers);
   if (headers) config.headers = headers;
   const models = normalizeModelAliases(record?.models);
@@ -284,6 +302,12 @@ const normalizeOpenAIProvider = (
   const excludedModels = normalizeExcludedModels(
     provider["excluded-models"] ?? provider.excludedModels,
   );
+  const participateInDefaultRouting = normalizeBoolean(
+    provider["participate-in-default-routing"] ??
+      provider.participateInDefaultRouting ??
+      provider["participate_in_default_routing"] ??
+      provider.participate_in_default_routing,
+  );
   const priority = provider.priority ?? provider["priority"];
   const testModel = provider["test-model"] ?? provider.testModel;
 
@@ -295,6 +319,9 @@ const normalizeOpenAIProvider = (
 
   const prefix = normalizePrefix(provider.prefix ?? provider["prefix"]);
   if (prefix) result.prefix = prefix;
+  if (participateInDefaultRouting !== undefined) {
+    result.participateInDefaultRouting = participateInDefaultRouting;
+  }
   if (headers) result.headers = headers;
   if (models.length) result.models = models;
   if (excludedModels.length) result.excludedModels = excludedModels;

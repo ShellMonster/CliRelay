@@ -291,6 +291,64 @@ func TestConfigSynthesizer_CodexKeys_SkipsEmptyAndHeaders(t *testing.T) {
 	}
 }
 
+func TestConfigSynthesizer_ParticipateInDefaultRoutingAttribute(t *testing.T) {
+	synth := NewConfigSynthesizer()
+	disabled := boolPtr(false)
+	ctx := &SynthesisContext{
+		Config: &config.Config{
+			GeminiKey: []config.GeminiKey{{
+				APIKey:                      "gemini-key",
+				ParticipateInDefaultRouting: disabled,
+			}},
+			ClaudeKey: []config.ClaudeKey{{
+				APIKey:                      "claude-key",
+				ParticipateInDefaultRouting: disabled,
+			}},
+			CodexKey: []config.CodexKey{{
+				APIKey:                      "codex-key",
+				BaseURL:                     "https://codex.example.com",
+				ParticipateInDefaultRouting: disabled,
+			}},
+			CodexCompatKey: []config.CodexKey{{
+				APIKey:                      "codex-compat-key",
+				BaseURL:                     "https://compat.example.com",
+				ParticipateInDefaultRouting: disabled,
+			}},
+			OpenAICompatibility: []config.OpenAICompatibility{{
+				Name:                        "CompatProvider",
+				BaseURL:                     "https://openai.example.com",
+				ParticipateInDefaultRouting: disabled,
+				APIKeyEntries: []config.OpenAICompatibilityAPIKey{{
+					APIKey: "openai-key",
+				}},
+			}},
+			VertexCompatAPIKey: []config.VertexCompatKey{{
+				APIKey:                      "vertex-key",
+				BaseURL:                     "https://vertex.example.com",
+				ParticipateInDefaultRouting: disabled,
+			}},
+		},
+		Now:         time.Now(),
+		IDGenerator: NewStableIDGenerator(),
+	}
+
+	auths, err := synth.Synthesize(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(auths) != 6 {
+		t.Fatalf("expected 6 auths, got %d", len(auths))
+	}
+	for _, auth := range auths {
+		if auth == nil {
+			t.Fatalf("expected non-nil auth")
+		}
+		if got := auth.Attributes["participate_in_default_routing"]; got != "false" {
+			t.Fatalf("provider %q participate_in_default_routing = %q, want %q", auth.Provider, got, "false")
+		}
+	}
+}
+
 func TestConfigSynthesizer_OpenAICompat(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -391,6 +449,10 @@ func TestConfigSynthesizer_OpenAICompat(t *testing.T) {
 			}
 		})
 	}
+}
+
+func boolPtr(v bool) *bool {
+	return &v
 }
 
 func TestConfigSynthesizer_VertexCompat(t *testing.T) {

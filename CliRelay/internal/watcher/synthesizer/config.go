@@ -19,6 +19,13 @@ func NewConfigSynthesizer() *ConfigSynthesizer {
 	return &ConfigSynthesizer{}
 }
 
+func addParticipateInDefaultRoutingAttr(enabled *bool, attrs map[string]string) {
+	if enabled == nil || attrs == nil {
+		return
+	}
+	attrs["participate_in_default_routing"] = strconv.FormatBool(*enabled)
+}
+
 // Synthesize generates Auth entries from config API keys.
 func (s *ConfigSynthesizer) Synthesize(ctx *SynthesisContext) ([]*coreauth.Auth, error) {
 	out := make([]*coreauth.Auth, 0, 32)
@@ -69,6 +76,7 @@ func (s *ConfigSynthesizer) synthesizeGeminiKeys(ctx *SynthesisContext) []*corea
 		if base != "" {
 			attrs["base_url"] = base
 		}
+		addParticipateInDefaultRoutingAttr(entry.ParticipateInDefaultRouting, attrs)
 		if hash := diff.ComputeGeminiModelsHash(entry.Models); hash != "" {
 			attrs["models_hash"] = hash
 		}
@@ -120,6 +128,7 @@ func (s *ConfigSynthesizer) synthesizeClaudeKeys(ctx *SynthesisContext) []*corea
 		if base != "" {
 			attrs["base_url"] = base
 		}
+		addParticipateInDefaultRoutingAttr(ck.ParticipateInDefaultRouting, attrs)
 		if hash := diff.ComputeClaudeModelsHash(ck.Models); hash != "" {
 			attrs["models_hash"] = hash
 		}
@@ -171,6 +180,7 @@ func (s *ConfigSynthesizer) synthesizeCodexKeys(ctx *SynthesisContext) []*coreau
 		if ck.BaseURL != "" {
 			attrs["base_url"] = ck.BaseURL
 		}
+		addParticipateInDefaultRoutingAttr(ck.ParticipateInDefaultRouting, attrs)
 		if ck.Websockets {
 			attrs["websockets"] = "true"
 		}
@@ -228,6 +238,7 @@ func (s *ConfigSynthesizer) synthesizeCodexCompatKeys(ctx *SynthesisContext) []*
 		if ck.BaseURL != "" {
 			attrs["base_url"] = ck.BaseURL
 		}
+		addParticipateInDefaultRoutingAttr(ck.ParticipateInDefaultRouting, attrs)
 		if ck.Websockets {
 			attrs["websockets"] = "true"
 		}
@@ -290,6 +301,7 @@ func (s *ConfigSynthesizer) synthesizeOpenAICompat(ctx *SynthesisContext) []*cor
 			if compat.Priority != 0 {
 				attrs["priority"] = strconv.Itoa(compat.Priority)
 			}
+			addParticipateInDefaultRoutingAttr(compat.ParticipateInDefaultRouting, attrs)
 			if key != "" {
 				attrs["api_key"] = key
 			}
@@ -326,6 +338,7 @@ func (s *ConfigSynthesizer) synthesizeOpenAICompat(ctx *SynthesisContext) []*cor
 			if compat.Priority != 0 {
 				attrs["priority"] = strconv.Itoa(compat.Priority)
 			}
+			addParticipateInDefaultRoutingAttr(compat.ParticipateInDefaultRouting, attrs)
 			if hash := diff.ComputeOpenAICompatModelsHash(compat.Models); hash != "" {
 				attrs["models_hash"] = hash
 			}
@@ -372,6 +385,7 @@ func (s *ConfigSynthesizer) synthesizeVertexCompat(ctx *SynthesisContext) []*cor
 		if compat.Priority != 0 {
 			attrs["priority"] = strconv.Itoa(compat.Priority)
 		}
+		addParticipateInDefaultRoutingAttr(compat.ParticipateInDefaultRouting, attrs)
 		if key != "" {
 			attrs["api_key"] = key
 		}

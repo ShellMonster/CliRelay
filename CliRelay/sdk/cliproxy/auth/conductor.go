@@ -66,6 +66,9 @@ const (
 	refreshFailureBackoff = 5 * time.Minute
 	quotaBackoffBase      = time.Second
 	quotaBackoffMax       = 30 * time.Minute
+
+	defaultRoutingBypassMetadataKey      = "cliproxy_bypass_default_routing_filter"
+	participateInDefaultRoutingAttribute = "participate_in_default_routing"
 )
 
 var quotaCooldownDisabled atomic.Bool
@@ -884,6 +887,80 @@ func publishSelectedAuthMetadata(meta map[string]any, authID string) {
 	}
 }
 
+func bypassDefaultRoutingFilter(meta map[string]any) bool {
+	if pinnedAuthIDFromMetadata(meta) != "" {
+		return true
+	}
+	if len(allowedAuthIDsFromMetadata(meta)) > 0 {
+		return true
+	}
+	if len(preferredAuthIDOrderFromMetadata(meta)) > 0 {
+		return true
+	}
+	if len(meta) == 0 {
+		return false
+	}
+	raw, ok := meta[defaultRoutingBypassMetadataKey]
+	if !ok || raw == nil {
+		return false
+	}
+	parsed, ok := parseBoolAny(raw)
+	return ok && parsed
+}
+
+func authParticipatesInDefaultRouting(auth *Auth) bool {
+	if auth == nil || len(auth.Attributes) == 0 {
+		return true
+	}
+	raw, ok := auth.Attributes[participateInDefaultRoutingAttribute]
+	if !ok || strings.TrimSpace(raw) == "" {
+		return true
+	}
+	parsed, ok := parseBoolAny(raw)
+	if !ok {
+		return true
+	}
+	return parsed
+}
+
+func authExplicitlyTargetsRequestedModel(auth *Auth, requestedModel string) bool {
+	if auth == nil {
+		return false
+	}
+	prefix := strings.TrimSpace(auth.Prefix)
+	if prefix == "" {
+		return false
+	}
+	modelKey := canonicalModelKey(requestedModel)
+	if modelKey == "" {
+		return false
+	}
+	return strings.HasPrefix(modelKey, prefix+"/")
+}
+
+func filterDefaultRoutingCandidates(candidates []*Auth, requestedModel string, meta map[string]any) []*Auth {
+	if len(candidates) == 0 || bypassDefaultRoutingFilter(meta) {
+		return candidates
+	}
+
+	filtered := make([]*Auth, 0, len(candidates))
+	optedOutFound := false
+	for _, candidate := range candidates {
+		if candidate == nil {
+			continue
+		}
+		if authParticipatesInDefaultRouting(candidate) || authExplicitlyTargetsRequestedModel(candidate, requestedModel) {
+			filtered = append(filtered, candidate)
+			continue
+		}
+		optedOutFound = true
+	}
+	if !optedOutFound {
+		return candidates
+	}
+	return filtered
+}
+
 func rewriteModelForAuth(model string, auth *Auth) string {
 	if auth == nil || model == "" {
 		return model
@@ -1149,10 +1226,11 @@ func (m *Manager) normalizeProviders(providers []string) []string {
 }
 
 type userAgentRoutingDecision struct {
-	providers         []string
-	orderedByProvider bool
-	allowedAuthIDs    []string
-	preferredAuthIDs  []string
+	providers                  []string
+	orderedByProvider          bool
+	allowedAuthIDs             []string
+	preferredAuthIDs           []string
+	bypassDefaultRoutingFilter bool
 }
 
 func newUserAgentRoutingDecision(providers []string) userAgentRoutingDecision {
@@ -1195,7 +1273,8 @@ func (m *Manager) userAgentRoutedProviders(providers []string, meta map[string]a
 func applyUserAgentRoutingDecision(opts cliproxyexecutor.Options, decision userAgentRoutingDecision) cliproxyexecutor.Options {
 	allowed := normalizeExactUserAgentRoutingValues(decision.allowedAuthIDs)
 	preferred := normalizeExactUserAgentRoutingValues(decision.preferredAuthIDs)
-	if len(allowed) == 0 && len(preferred) == 0 {
+	bypass := decision.bypassDefaultRoutingFilter
+	if len(allowed) == 0 && len(preferred) == 0 && !bypass {
 		return opts
 	}
 
@@ -1209,7 +1288,7 @@ func applyUserAgentRoutingDecision(opts cliproxyexecutor.Options, decision userA
 	if len(allowed) > 0 {
 		preferred = filterExactValuesByLookup(preferred, exactLookupFromValues(allowed))
 	}
-	if len(allowed) == 0 && len(preferred) == 0 {
+	if len(allowed) == 0 && len(preferred) == 0 && !bypass {
 		return opts
 	}
 
@@ -1219,6 +1298,9 @@ func applyUserAgentRoutingDecision(opts cliproxyexecutor.Options, decision userA
 	}
 	if len(preferred) > 0 {
 		meta[cliproxyexecutor.PreferredAuthIDsMetadataKey] = append([]string(nil), preferred...)
+	}
+	if bypass {
+		meta[defaultRoutingBypassMetadataKey] = true
 	}
 	opts.Metadata = meta
 	return opts
@@ -1398,6 +1480,7 @@ func (m *Manager) applyUserAgentRoutingRule(providers []string, meta map[string]
 	}
 
 	if providerRuleApplied || channelRuleApplied {
+		decision.bypassDefaultRoutingFilter = true
 		return decision, true
 	}
 	return decision, false
@@ -2345,6 +2428,7 @@ func (m *Manager) pickNext(ctx context.Context, provider, model string, opts cli
 		}
 		candidates = append(candidates, candidate)
 	}
+	candidates = filterDefaultRoutingCandidates(candidates, model, opts.Metadata)
 	if len(candidates) == 0 {
 		m.mu.RUnlock()
 		return nil, nil, &Error{Code: "auth_not_found", Message: "no auth available"}
@@ -2430,6 +2514,7 @@ func (m *Manager) pickNextMixed(ctx context.Context, providers []string, model s
 		}
 		candidates = append(candidates, candidate)
 	}
+	candidates = filterDefaultRoutingCandidates(candidates, model, opts.Metadata)
 	if len(candidates) == 0 {
 		m.mu.RUnlock()
 		return nil, nil, "", &Error{Code: "auth_not_found", Message: "no auth available"}

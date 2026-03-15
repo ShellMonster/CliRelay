@@ -61,6 +61,7 @@ export function ProviderKeyListCard({
             const models = item.models || [];
             const stats = getStats(item);
             const statusData = getStatusBar(item);
+            const participateInDefaultRouting = item.participateInDefaultRouting !== false;
 
             return (
               <div
@@ -72,6 +73,16 @@ export function ProviderKeyListCard({
                       <p className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-white">
                         <Icon size={16} className="text-slate-900 dark:text-white" />
                         <span className="truncate">{item.name || maskApiKey(item.apiKey)}</span>
+                        <span
+                          className={[
+                            "rounded-full px-2 py-0.5 text-[11px] font-medium",
+                            participateInDefaultRouting
+                              ? "bg-emerald-600/10 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200"
+                              : "bg-amber-500/10 text-amber-700 dark:bg-amber-500/15 dark:text-amber-200",
+                          ].join(" ")}
+                        >
+                          {participateInDefaultRouting ? "参与默认路由" : "仅显式路由"}
+                        </span>
                       </p>
 
                       <div className="mt-1 space-y-1 text-xs text-slate-600 dark:text-white/65">

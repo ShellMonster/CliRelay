@@ -40,6 +40,9 @@ const serializeProviderKey = (config: ProviderKeyConfig) => {
   if (config.baseUrl) payload["base-url"] = config.baseUrl;
   if (config.websockets !== undefined) payload.websockets = config.websockets;
   if (config.proxyUrl) payload["proxy-url"] = config.proxyUrl;
+  if (config.participateInDefaultRouting !== undefined) {
+    payload["participate-in-default-routing"] = config.participateInDefaultRouting;
+  }
   const headers = serializeHeaders(config.headers);
   if (headers) payload.headers = headers;
   const models = serializeModelAliases(config.models);
@@ -54,6 +57,9 @@ const serializeVertexKey = (config: ProviderKeyConfig) => {
   if (config.prefix?.trim()) payload.prefix = config.prefix.trim();
   if (config.baseUrl) payload["base-url"] = config.baseUrl;
   if (config.proxyUrl) payload["proxy-url"] = config.proxyUrl;
+  if (config.participateInDefaultRouting !== undefined) {
+    payload["participate-in-default-routing"] = config.participateInDefaultRouting;
+  }
   const headers = serializeHeaders(config.headers);
   if (headers) payload.headers = headers;
   if (config.models?.length) {
@@ -76,6 +82,9 @@ const serializeGeminiKey = (config: GeminiKeyConfig) => {
   if (config.prefix?.trim()) payload.prefix = config.prefix.trim();
   if (config.baseUrl) payload["base-url"] = config.baseUrl;
   if (config.proxyUrl) payload["proxy-url"] = config.proxyUrl;
+  if (config.participateInDefaultRouting !== undefined) {
+    payload["participate-in-default-routing"] = config.participateInDefaultRouting;
+  }
   const headers = serializeHeaders(config.headers);
   if (headers) payload.headers = headers;
   const models = serializeModelAliases(config.models);
@@ -99,6 +108,9 @@ const serializeOpenAIProvider = (provider: OpenAIProviderConfig) => {
       : [],
   };
   if (provider.prefix?.trim()) payload.prefix = provider.prefix.trim();
+  if (provider.participateInDefaultRouting !== undefined) {
+    payload["participate-in-default-routing"] = provider.participateInDefaultRouting;
+  }
   const headers = serializeHeaders(provider.headers);
   if (headers) payload.headers = headers;
   const models = serializeModelAliases(provider.models);
