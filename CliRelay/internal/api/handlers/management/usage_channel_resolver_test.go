@@ -10,63 +10,94 @@ import (
 
 func TestUsageChannelResolverResolveDisplayNameDoesNotLeakSource(t *testing.T) {
 	resolver := usageChannelResolver{
-		displayByAuthIndex: map[string]string{},
-		displayBySource:    map[string]string{},
-		ambiguousAuthIndex: map[string]struct{}{},
-		ambiguousSource:    map[string]struct{}{},
+		displayByAuthID:         map[string]string{},
+		displayByProviderSource: map[string]string{},
+		displayByAuthIndex:      map[string]string{},
+		displayBySource:         map[string]string{},
+		ambiguousProviderSource: map[string]struct{}{},
+		ambiguousAuthIndex:      map[string]struct{}{},
+		ambiguousSource:         map[string]struct{}{},
 	}
 
-	if got := resolver.ResolveDisplayName("", "", "user@example.com"); got != "" {
+	if got := resolver.ResolveDisplayName("", "", "", "user@example.com", ""); got != "" {
 		t.Fatalf("expected empty display name when only source exists, got %q", got)
 	}
 
-	if got := resolver.ResolveDisplayName("", "legacy-channel", "user@example.com"); got != "legacy-channel" {
+	if got := resolver.ResolveDisplayName("", "", "legacy-channel", "user@example.com", ""); got != "legacy-channel" {
 		t.Fatalf("expected channel name fallback, got %q", got)
 	}
 }
 
 func TestUsageChannelResolverResolveDisplayNameFallsBackToLoggedNameWhenSourceIsAmbiguous(t *testing.T) {
 	resolver := usageChannelResolver{
-		displayByAuthIndex: map[string]string{},
-		displayBySource:    map[string]string{},
-		ambiguousAuthIndex: map[string]struct{}{},
-		ambiguousSource:    map[string]struct{}{},
+		displayByAuthID:         map[string]string{},
+		displayByProviderSource: map[string]string{},
+		displayByAuthIndex:      map[string]string{},
+		displayBySource:         map[string]string{},
+		ambiguousProviderSource: map[string]struct{}{},
+		ambiguousAuthIndex:      map[string]struct{}{},
+		ambiguousSource:         map[string]struct{}{},
 	}
 
 	resolver.assignSourceDisplay("shared-key", "Channel A")
 	resolver.assignSourceDisplay("shared-key", "Channel B")
 
-	if got := resolver.ResolveDisplayName("", "logged-channel", "shared-key"); got != "logged-channel" {
+	if got := resolver.ResolveDisplayName("", "", "logged-channel", "shared-key", ""); got != "logged-channel" {
 		t.Fatalf("expected logged channel name fallback for ambiguous source, got %q", got)
 	}
 }
 
 func TestUsageChannelResolverResolveDisplayNameFallsBackToLoggedNameWhenAuthIndexIsAmbiguous(t *testing.T) {
 	resolver := usageChannelResolver{
-		displayByAuthIndex: map[string]string{},
-		displayBySource:    map[string]string{},
-		ambiguousAuthIndex: map[string]struct{}{},
-		ambiguousSource:    map[string]struct{}{},
+		displayByAuthID:         map[string]string{},
+		displayByProviderSource: map[string]string{},
+		displayByAuthIndex:      map[string]string{},
+		displayBySource:         map[string]string{},
+		ambiguousProviderSource: map[string]struct{}{},
+		ambiguousAuthIndex:      map[string]struct{}{},
+		ambiguousSource:         map[string]struct{}{},
 	}
 
 	resolver.assignAuthDisplay("idx-1", "Channel A")
 	resolver.assignAuthDisplay("idx-1", "Channel B")
 
-	if got := resolver.ResolveDisplayName("idx-1", "logged-channel", ""); got != "logged-channel" {
+	if got := resolver.ResolveDisplayName("", "idx-1", "logged-channel", "", ""); got != "logged-channel" {
 		t.Fatalf("expected logged channel name fallback for ambiguous auth index, got %q", got)
+	}
+}
+
+func TestUsageChannelResolverResolveDisplayNameUsesProviderSourceFallback(t *testing.T) {
+	resolver := usageChannelResolver{
+		displayByAuthID:         map[string]string{},
+		displayByProviderSource: map[string]string{},
+		displayByAuthIndex:      map[string]string{},
+		displayBySource:         map[string]string{},
+		ambiguousProviderSource: map[string]struct{}{},
+		ambiguousAuthIndex:      map[string]struct{}{},
+		ambiguousSource:         map[string]struct{}{},
+	}
+
+	resolver.assignProviderSourceDisplay("codex-compat", "shared-key", "Github_Compat")
+
+	if got := resolver.ResolveDisplayName("", "", "legacy-channel", "shared-key", "codex-compat"); got != "Github_Compat" {
+		t.Fatalf("expected provider/source fallback to resolve latest label, got %q", got)
 	}
 }
 
 func TestUsageChannelResolverResolveChannelFilterSupportsTokensAndLabels(t *testing.T) {
 	resolver := usageChannelResolver{
-		sourcesByAuthIndex: map[string][]string{
-			"idx-1": []string{"src-1"},
+		authIndexesByAuthID: map[string][]string{
+			"auth-1": []string{"idx-1"},
 		},
-		channelNamesByAuthIndex: map[string][]string{
-			"idx-1": []string{"current-channel", "old-channel"},
+		sourcesByAuthID: map[string][]string{
+			"auth-1": []string{"src-1"},
+		},
+		channelNamesByAuthID: map[string][]string{
+			"auth-1": []string{"current-channel", "old-channel"},
 		},
 		filterByLabel: map[string]usage.ChannelFilter{
 			"Current Channel": {
+				AuthIDs:      []string{"auth-1"},
 				AuthIndexes:  []string{"idx-1"},
 				Sources:      []string{"src-1"},
 				ChannelNames: []string{"current-channel", "old-channel"},
@@ -78,14 +109,18 @@ func TestUsageChannelResolverResolveChannelFilterSupportsTokensAndLabels(t *test
 	}
 
 	filter := resolver.ResolveChannelFilter([]string{
-		makeUsageAuthChannelToken("idx-1"),
+		makeUsageAuthChannelToken("auth-1"),
+		usageChannelLegacyAuthTokenPrefix + "idx-legacy",
 		"Current Channel",
 		makeUsageLegacyNameToken("legacy-only"),
 		"Deleted Channel [legacy]",
 	})
 
-	if len(filter.AuthIndexes) != 1 || filter.AuthIndexes[0] != "idx-1" {
-		t.Fatalf("expected auth index filter to contain idx-1 once, got %+v", filter.AuthIndexes)
+	if len(filter.AuthIDs) != 1 || filter.AuthIDs[0] != "auth-1" {
+		t.Fatalf("expected auth id filter to contain auth-1 once, got %+v", filter.AuthIDs)
+	}
+	if len(filter.AuthIndexes) != 2 || filter.AuthIndexes[0] != "idx-1" || filter.AuthIndexes[1] != "idx-legacy" {
+		t.Fatalf("expected auth index filter to contain legacy and mapped indexes, got %+v", filter.AuthIndexes)
 	}
 	if len(filter.Sources) != 1 || filter.Sources[0] != "src-1" {
 		t.Fatalf("expected source filter to contain src-1 once, got %+v", filter.Sources)
@@ -100,7 +135,7 @@ func TestUsageChannelResolverResolveChannelFilterSupportsTokensAndLabels(t *test
 
 func TestUsageChannelResolverKeepsLegacyOptionWhenLabelCollides(t *testing.T) {
 	resolver := (&Handler{}).newUsageChannelResolver([]usage.ChannelRef{
-		{AuthIndex: "idx-1", ChannelName: "same-name"},
+		{AuthID: "auth-1", AuthIndex: "idx-1", ChannelName: "same-name"},
 		{ChannelName: "same-name"},
 	})
 
@@ -174,5 +209,11 @@ func TestUsageChannelResolverIncludesConfiguredChannelsWithoutRefs(t *testing.T)
 func TestUsageChannelSelectionNeedsRefsSupportsSourceToken(t *testing.T) {
 	if usageChannelSelectionNeedsRefs([]string{makeUsageSourceChannelToken("sk-compat")}) {
 		t.Fatal("expected source token selection to skip ref query")
+	}
+	if usageChannelSelectionNeedsRefs([]string{makeUsageAuthChannelToken("auth-1")}) {
+		t.Fatal("expected auth id token selection to skip ref query")
+	}
+	if usageChannelSelectionNeedsRefs([]string{usageChannelLegacyAuthTokenPrefix + "idx-1"}) {
+		t.Fatal("expected legacy auth index token selection to skip ref query")
 	}
 }

@@ -76,7 +76,7 @@ func (h *Handler) GetUsageLogs(c *gin.Context) {
 		if name := channelResolver.ResolveAPIKeyName(item.APIKey); name != "" {
 			item.APIKeyName = name
 		}
-		item.ChannelName = channelResolver.ResolveDisplayName(item.AuthIndex, item.ChannelName, item.Source)
+		item.ChannelName = channelResolver.ResolveDisplayName(item.AuthID, item.AuthIndex, item.ChannelName, item.Source, item.Provider)
 	}
 
 	// Enrich filter options with key names
@@ -223,6 +223,7 @@ func (h *Handler) GetPublicUsageLogs(c *gin.Context) {
 	// SECURITY: Strip sensitive fields from public response
 	for i := range result.Items {
 		result.Items[i].Source = ""
+		result.Items[i].AuthID = ""
 		result.Items[i].AuthIndex = ""
 		result.Items[i].ChannelName = ""
 		result.Items[i].APIKey = ""

@@ -65,7 +65,7 @@ func TestGetLogContent_ExposesContentDisabledFlag(t *testing.T) {
 	usage.SetLogContentEnabled(false)
 	t.Cleanup(func() { usage.SetLogContentEnabled(true) })
 
-	usage.InsertLog("k", "m", "s", "c", "a", false, time.Now(), 12, usage.TokenStats{}, "", "", nil)
+	usage.InsertLog("k", "m", "s", "c", "", "a", false, time.Now(), 12, usage.TokenStats{}, "", "", nil)
 
 	handler := NewHandler(&config.Config{}, "", nil)
 	recorder := httptest.NewRecorder()

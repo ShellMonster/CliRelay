@@ -11,17 +11,24 @@ import (
 )
 
 const (
-	usageChannelAuthTokenPrefix       = "auth:"
+	usageChannelAuthTokenPrefix       = "auth-id:"
+	usageChannelLegacyAuthTokenPrefix = "auth:"
 	usageChannelLegacyNameTokenPrefix = "legacy-name:"
 	usageChannelSourceTokenPrefix     = "source:"
 )
 
 type usageChannelResolver struct {
 	keyNames                map[string]string
+	displayByAuthID         map[string]string
+	displayByProviderSource map[string]string
 	displayByAuthIndex      map[string]string
 	displayBySource         map[string]string
+	ambiguousProviderSource map[string]struct{}
 	ambiguousAuthIndex      map[string]struct{}
 	ambiguousSource         map[string]struct{}
+	authIndexesByAuthID     map[string][]string
+	sourcesByAuthID         map[string][]string
+	channelNamesByAuthID    map[string][]string
 	sourcesByAuthIndex      map[string][]string
 	channelNamesByAuthIndex map[string][]string
 	filterByLabel           map[string]usage.ChannelFilter
@@ -42,10 +49,16 @@ func (h *Handler) newUsageChannelResolver(refs []usage.ChannelRef) usageChannelR
 	keyNameMap, sourceNameMap := h.buildNameMaps()
 	resolver := usageChannelResolver{
 		keyNames:                keyNameMap,
+		displayByAuthID:         make(map[string]string),
+		displayByProviderSource: make(map[string]string),
 		displayByAuthIndex:      make(map[string]string),
 		displayBySource:         make(map[string]string, len(sourceNameMap)),
+		ambiguousProviderSource: make(map[string]struct{}),
 		ambiguousAuthIndex:      make(map[string]struct{}),
 		ambiguousSource:         make(map[string]struct{}),
+		authIndexesByAuthID:     make(map[string][]string),
+		sourcesByAuthID:         make(map[string][]string),
+		channelNamesByAuthID:    make(map[string][]string),
 		sourcesByAuthIndex:      make(map[string][]string),
 		channelNamesByAuthIndex: make(map[string][]string),
 		filterByLabel:           make(map[string]usage.ChannelFilter),
@@ -68,24 +81,27 @@ func (h *Handler) newUsageChannelResolver(refs []usage.ChannelRef) usageChannelR
 		sort.SliceStable(auths, func(i, j int) bool {
 			left := auths[i]
 			right := auths[j]
+			leftAuthID, rightAuthID := "", ""
 			leftIndex, rightIndex := "", ""
 			leftSource, rightSource := "", ""
 			leftLabel, rightLabel := "", ""
 			leftProvider, rightProvider := "", ""
-			leftID, rightID := "", ""
 			if left != nil {
+				leftAuthID = strings.TrimSpace(left.ID)
 				leftIndex = strings.TrimSpace(left.EnsureIndex())
 				leftSource = resolveUsageChannelStableSource(left)
 				leftLabel = strings.TrimSpace(left.Label)
 				leftProvider = strings.TrimSpace(left.Provider)
-				leftID = strings.TrimSpace(left.ID)
 			}
 			if right != nil {
+				rightAuthID = strings.TrimSpace(right.ID)
 				rightIndex = strings.TrimSpace(right.EnsureIndex())
 				rightSource = resolveUsageChannelStableSource(right)
 				rightLabel = strings.TrimSpace(right.Label)
 				rightProvider = strings.TrimSpace(right.Provider)
-				rightID = strings.TrimSpace(right.ID)
+			}
+			if leftAuthID != rightAuthID {
+				return leftAuthID < rightAuthID
 			}
 			if leftIndex != rightIndex {
 				return leftIndex < rightIndex
@@ -99,7 +115,7 @@ func (h *Handler) newUsageChannelResolver(refs []usage.ChannelRef) usageChannelR
 			if leftProvider != rightProvider {
 				return leftProvider < rightProvider
 			}
-			return leftID < rightID
+			return false
 		})
 
 		for _, auth := range auths {
@@ -107,8 +123,10 @@ func (h *Handler) newUsageChannelResolver(refs []usage.ChannelRef) usageChannelR
 				continue
 			}
 
+			authID := strings.TrimSpace(auth.ID)
 			authIndex := strings.TrimSpace(auth.EnsureIndex())
 			source := resolveUsageChannelStableSource(auth)
+			provider := strings.TrimSpace(auth.Provider)
 			label := strings.TrimSpace(auth.Label)
 			if label == "" && source != "" {
 				label = strings.TrimSpace(sourceNameMap[source])
@@ -117,8 +135,30 @@ func (h *Handler) newUsageChannelResolver(refs []usage.ChannelRef) usageChannelR
 				continue
 			}
 
+			if authID != "" {
+				resolver.assignAuthIDDisplay(authID, label)
+				resolver.channelNamesByAuthID[authID] = appendUniqueString(
+					resolver.channelNamesByAuthID[authID],
+					label,
+				)
+				if authIndex != "" {
+					resolver.authIndexesByAuthID[authID] = appendUniqueString(
+						resolver.authIndexesByAuthID[authID],
+						authIndex,
+					)
+				}
+				if source != "" {
+					resolver.sourcesByAuthID[authID] = appendUniqueString(
+						resolver.sourcesByAuthID[authID],
+						source,
+					)
+				}
+			}
 			if authIndex != "" {
 				resolver.assignAuthDisplay(authIndex, label)
+			}
+			if provider != "" && source != "" {
+				resolver.assignProviderSourceDisplay(provider, source, label)
 			}
 			if source != "" {
 				resolver.assignSourceDisplay(source, label)
@@ -132,25 +172,52 @@ func (h *Handler) newUsageChannelResolver(refs []usage.ChannelRef) usageChannelR
 		}
 	}
 
+	authLabelByID := make(map[string]string)
 	authLabelByIndex := make(map[string]string)
 	for _, ref := range refs {
+		authID := strings.TrimSpace(ref.AuthID)
 		authIndex := strings.TrimSpace(ref.AuthIndex)
 		channelName := strings.TrimSpace(ref.ChannelName)
 		source := strings.TrimSpace(ref.Source)
-		if authIndex == "" {
-			continue
+		if authID != "" {
+			if authIndex != "" {
+				resolver.authIndexesByAuthID[authID] = appendUniqueString(
+					resolver.authIndexesByAuthID[authID],
+					authIndex,
+				)
+			}
+			if channelName != "" {
+				resolver.channelNamesByAuthID[authID] = appendUniqueString(
+					resolver.channelNamesByAuthID[authID],
+					channelName,
+				)
+			}
+			if source != "" {
+				resolver.sourcesByAuthID[authID] = appendUniqueString(
+					resolver.sourcesByAuthID[authID],
+					source,
+				)
+			}
+			if _, exists := authLabelByID[authID]; !exists {
+				if label := resolver.resolveOptionLabel(ref); label != "" {
+					authLabelByID[authID] = label
+				}
+			}
 		}
-		if channelName != "" {
+		if authIndex != "" && channelName != "" {
 			resolver.channelNamesByAuthIndex[authIndex] = appendUniqueString(
 				resolver.channelNamesByAuthIndex[authIndex],
 				channelName,
 			)
 		}
-		if source != "" {
+		if authIndex != "" && source != "" {
 			resolver.sourcesByAuthIndex[authIndex] = appendUniqueString(
 				resolver.sourcesByAuthIndex[authIndex],
 				source,
 			)
+		}
+		if authIndex == "" {
+			continue
 		}
 		if _, exists := authLabelByIndex[authIndex]; exists {
 			continue
@@ -165,14 +232,14 @@ func (h *Handler) newUsageChannelResolver(refs []usage.ChannelRef) usageChannelR
 	usedLabels := make(map[string]struct{})
 	authOptionValues := make(map[string]struct{})
 	sourceOptionValues := make(map[string]struct{})
-	addAuthOption := func(authIndex, label string) {
-		authIndex = strings.TrimSpace(authIndex)
+	addAuthOption := func(authID, label string) {
+		authID = strings.TrimSpace(authID)
 		label = strings.TrimSpace(label)
-		if authIndex == "" || label == "" {
+		if authID == "" || label == "" {
 			return
 		}
 
-		value := makeUsageAuthChannelToken(authIndex)
+		value := makeUsageAuthChannelToken(authID)
 		if value == "" {
 			return
 		}
@@ -182,12 +249,15 @@ func (h *Handler) newUsageChannelResolver(refs []usage.ChannelRef) usageChannelR
 		authOptionValues[value] = struct{}{}
 
 		filter := usage.ChannelFilter{
-			AuthIndexes: []string{authIndex},
+			AuthIDs: []string{authID},
 		}
-		for _, channelName := range resolver.channelNamesByAuthIndex[authIndex] {
+		for _, channelName := range resolver.channelNamesByAuthID[authID] {
 			filter.ChannelNames = appendUniqueString(filter.ChannelNames, channelName)
 		}
-		for _, source := range resolver.sourcesByAuthIndex[authIndex] {
+		for _, authIndex := range resolver.authIndexesByAuthID[authID] {
+			filter.AuthIndexes = appendUniqueString(filter.AuthIndexes, authIndex)
+		}
+		for _, source := range resolver.sourcesByAuthID[authID] {
 			filter.Sources = appendUniqueString(filter.Sources, source)
 			if sourceValue := makeUsageSourceChannelToken(source); sourceValue != "" {
 				sourceOptionValues[sourceValue] = struct{}{}
@@ -230,17 +300,17 @@ func (h *Handler) newUsageChannelResolver(refs []usage.ChannelRef) usageChannelR
 		resolver.addChannelOption(value, optionLabel, filter)
 	}
 	for _, ref := range refs {
-		authIndex := strings.TrimSpace(ref.AuthIndex)
-		if authIndex == "" {
+		authID := strings.TrimSpace(ref.AuthID)
+		if authID == "" {
 			continue
 		}
-		label := strings.TrimSpace(authLabelByIndex[authIndex])
-		addAuthOption(authIndex, label)
+		label := strings.TrimSpace(authLabelByID[authID])
+		addAuthOption(authID, label)
 	}
 
 	legacyOptionValues := make(map[string]struct{})
 	for _, ref := range refs {
-		if strings.TrimSpace(ref.AuthIndex) != "" {
+		if strings.TrimSpace(ref.AuthID) != "" {
 			continue
 		}
 		channelName := strings.TrimSpace(ref.ChannelName)
@@ -258,7 +328,7 @@ func (h *Handler) newUsageChannelResolver(refs []usage.ChannelRef) usageChannelR
 		})
 	}
 	for _, ref := range refs {
-		if strings.TrimSpace(ref.AuthIndex) != "" || strings.TrimSpace(ref.ChannelName) != "" {
+		if strings.TrimSpace(ref.AuthID) != "" || strings.TrimSpace(ref.ChannelName) != "" {
 			continue
 		}
 		source := strings.TrimSpace(ref.Source)
@@ -268,8 +338,8 @@ func (h *Handler) newUsageChannelResolver(refs []usage.ChannelRef) usageChannelR
 		}
 		addSourceOption(source, label)
 	}
-	for authIndex, label := range resolver.displayByAuthIndex {
-		addAuthOption(authIndex, label)
+	for authID, label := range resolver.displayByAuthID {
+		addAuthOption(authID, label)
 	}
 	for source, label := range resolver.displayBySource {
 		addSourceOption(source, label)
@@ -296,10 +366,23 @@ func (r usageChannelResolver) ResolveAPIKeyName(apiKey string) string {
 	return strings.TrimSpace(r.keyNames[strings.TrimSpace(apiKey)])
 }
 
-func (r usageChannelResolver) ResolveDisplayName(authIndex, channelName, source string) string {
+func (r usageChannelResolver) ResolveDisplayName(authID, authIndex, channelName, source, provider string) string {
+	authID = strings.TrimSpace(authID)
 	authIndex = strings.TrimSpace(authIndex)
 	channelName = strings.TrimSpace(channelName)
 	source = strings.TrimSpace(source)
+	provider = strings.TrimSpace(provider)
+
+	if authID != "" {
+		if label := strings.TrimSpace(r.displayByAuthID[authID]); label != "" {
+			return label
+		}
+	}
+	if provider != "" && source != "" {
+		if label := r.resolveProviderSourceDisplay(provider, source); label != "" {
+			return label
+		}
+	}
 
 	if authIndex != "" {
 		if _, ambiguous := r.ambiguousAuthIndex[authIndex]; !ambiguous {
@@ -321,6 +404,18 @@ func (r usageChannelResolver) ResolveDisplayName(authIndex, channelName, source 
 	return ""
 }
 
+func (r *usageChannelResolver) assignAuthIDDisplay(authID, label string) {
+	authID = strings.TrimSpace(authID)
+	label = strings.TrimSpace(label)
+	if r == nil || authID == "" || label == "" {
+		return
+	}
+	if existing := strings.TrimSpace(r.displayByAuthID[authID]); existing != "" {
+		return
+	}
+	r.displayByAuthID[authID] = label
+}
+
 func (r *usageChannelResolver) assignAuthDisplay(authIndex, label string) {
 	authIndex = strings.TrimSpace(authIndex)
 	label = strings.TrimSpace(label)
@@ -336,6 +431,43 @@ func (r *usageChannelResolver) assignAuthDisplay(authIndex, label string) {
 		return
 	}
 	r.displayByAuthIndex[authIndex] = label
+}
+
+func usageProviderSourceKey(provider, source string) string {
+	provider = strings.ToLower(strings.TrimSpace(provider))
+	source = strings.TrimSpace(source)
+	if provider == "" || source == "" {
+		return ""
+	}
+	return provider + "\x00" + source
+}
+
+func (r *usageChannelResolver) assignProviderSourceDisplay(provider, source, label string) {
+	key := usageProviderSourceKey(provider, source)
+	label = strings.TrimSpace(label)
+	if r == nil || key == "" || label == "" {
+		return
+	}
+	if _, ambiguous := r.ambiguousProviderSource[key]; ambiguous {
+		return
+	}
+	if existing := strings.TrimSpace(r.displayByProviderSource[key]); existing != "" && existing != label {
+		delete(r.displayByProviderSource, key)
+		r.ambiguousProviderSource[key] = struct{}{}
+		return
+	}
+	r.displayByProviderSource[key] = label
+}
+
+func (r usageChannelResolver) resolveProviderSourceDisplay(provider, source string) string {
+	key := usageProviderSourceKey(provider, source)
+	if key == "" {
+		return ""
+	}
+	if _, ambiguous := r.ambiguousProviderSource[key]; ambiguous {
+		return ""
+	}
+	return strings.TrimSpace(r.displayByProviderSource[key])
 }
 
 func (r *usageChannelResolver) assignSourceDisplay(source, label string) {
@@ -363,8 +495,12 @@ func (r usageChannelResolver) ResolveChannelFilter(selected []string) usage.Chan
 			continue
 		}
 
-		if authIndex, ok := parseUsageAuthChannelToken(value); ok {
-			r.appendAuthChannelSelection(&filter, authIndex)
+		if authID, ok := parseUsageAuthChannelToken(value); ok {
+			r.appendAuthIDChannelSelection(&filter, authID)
+			continue
+		}
+		if authIndex, ok := parseUsageLegacyAuthChannelToken(value); ok {
+			r.appendAuthIndexChannelSelection(&filter, authIndex)
 			continue
 		}
 		if channelName, ok := parseUsageLegacyNameToken(value); ok {
@@ -395,7 +531,24 @@ func (r usageChannelResolver) ResolveChannelFilter(selected []string) usage.Chan
 	return filter
 }
 
-func (r usageChannelResolver) appendAuthChannelSelection(filter *usage.ChannelFilter, authIndex string) {
+func (r usageChannelResolver) appendAuthIDChannelSelection(filter *usage.ChannelFilter, authID string) {
+	authID = strings.TrimSpace(authID)
+	if authID == "" || filter == nil {
+		return
+	}
+	filter.AuthIDs = appendUniqueString(filter.AuthIDs, authID)
+	for _, authIndex := range r.authIndexesByAuthID[authID] {
+		filter.AuthIndexes = appendUniqueString(filter.AuthIndexes, authIndex)
+	}
+	for _, channelName := range r.channelNamesByAuthID[authID] {
+		filter.ChannelNames = appendUniqueString(filter.ChannelNames, channelName)
+	}
+	for _, source := range r.sourcesByAuthID[authID] {
+		filter.Sources = appendUniqueString(filter.Sources, source)
+	}
+}
+
+func (r usageChannelResolver) appendAuthIndexChannelSelection(filter *usage.ChannelFilter, authIndex string) {
 	authIndex = strings.TrimSpace(authIndex)
 	if authIndex == "" || filter == nil {
 		return
@@ -424,6 +577,12 @@ func (r *usageChannelResolver) addChannelOption(value, label string, filter usag
 }
 
 func (r usageChannelResolver) resolveOptionLabel(ref usage.ChannelRef) string {
+	authID := strings.TrimSpace(ref.AuthID)
+	if authID != "" {
+		if label := strings.TrimSpace(r.displayByAuthID[authID]); label != "" {
+			return label
+		}
+	}
 	authIndex := strings.TrimSpace(ref.AuthIndex)
 	if authIndex != "" {
 		if label := strings.TrimSpace(r.displayByAuthIndex[authIndex]); label != "" {
@@ -472,11 +631,11 @@ func resolveUsageChannelStableSource(auth *coreauth.Auth) string {
 }
 
 func makeUsageAuthChannelToken(authIndex string) string {
-	authIndex = strings.TrimSpace(authIndex)
-	if authIndex == "" {
+	authID := strings.TrimSpace(authIndex)
+	if authID == "" {
 		return ""
 	}
-	return usageChannelAuthTokenPrefix + authIndex
+	return usageChannelAuthTokenPrefix + authID
 }
 
 func parseUsageAuthChannelToken(value string) (string, bool) {
@@ -484,6 +643,17 @@ func parseUsageAuthChannelToken(value string) (string, bool) {
 		return "", false
 	}
 	authIndex := strings.TrimSpace(strings.TrimPrefix(value, usageChannelAuthTokenPrefix))
+	if authIndex == "" {
+		return "", false
+	}
+	return authIndex, true
+}
+
+func parseUsageLegacyAuthChannelToken(value string) (string, bool) {
+	if !strings.HasPrefix(value, usageChannelLegacyAuthTokenPrefix) {
+		return "", false
+	}
+	authIndex := strings.TrimSpace(strings.TrimPrefix(value, usageChannelLegacyAuthTokenPrefix))
 	if authIndex == "" {
 		return "", false
 	}
@@ -561,6 +731,9 @@ func appendUsageChannelFilter(target *usage.ChannelFilter, addition usage.Channe
 	if target == nil {
 		return
 	}
+	for _, authID := range addition.AuthIDs {
+		target.AuthIDs = appendUniqueString(target.AuthIDs, authID)
+	}
 	for _, authIndex := range addition.AuthIndexes {
 		target.AuthIndexes = appendUniqueString(target.AuthIndexes, authIndex)
 	}
@@ -574,6 +747,9 @@ func appendUsageChannelFilter(target *usage.ChannelFilter, addition usage.Channe
 
 func cloneUsageChannelFilter(filter usage.ChannelFilter) usage.ChannelFilter {
 	cloned := usage.ChannelFilter{}
+	if len(filter.AuthIDs) > 0 {
+		cloned.AuthIDs = append([]string{}, filter.AuthIDs...)
+	}
 	if len(filter.AuthIndexes) > 0 {
 		cloned.AuthIndexes = append([]string{}, filter.AuthIndexes...)
 	}

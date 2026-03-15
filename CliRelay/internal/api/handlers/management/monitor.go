@@ -220,6 +220,9 @@ func usageChannelSelectionNeedsRefs(selected []string) bool {
 		if _, ok := parseUsageAuthChannelToken(value); ok {
 			continue
 		}
+		if _, ok := parseUsageLegacyAuthChannelToken(value); ok {
+			continue
+		}
 		if _, ok := parseUsageLegacyNameToken(value); ok {
 			continue
 		}

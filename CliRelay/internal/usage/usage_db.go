@@ -20,9 +20,11 @@ type LogRow struct {
 	APIKey          string    `json:"api_key"`
 	APIKeyName      string    `json:"api_key_name"`
 	Model           string    `json:"model"`
+	Provider        string    `json:"provider,omitempty"`
 	ReasoningEffort string    `json:"reasoning_effort,omitempty"`
 	Source          string    `json:"source"`
 	ChannelName     string    `json:"channel_name"`
+	AuthID          string    `json:"auth_id"`
 	AuthIndex       string    `json:"auth_index"`
 	Failed          bool      `json:"failed"`
 	LatencyMs       int64     `json:"latency_ms"`
@@ -36,6 +38,7 @@ type LogRow struct {
 
 // ChannelFilter holds the resolved channel identifiers used to filter logs.
 type ChannelFilter struct {
+	AuthIDs      []string `json:"auth_ids,omitempty"`
 	AuthIndexes  []string `json:"auth_indexes,omitempty"`
 	ChannelNames []string `json:"channel_names,omitempty"`
 	Sources      []string `json:"sources,omitempty"`
@@ -78,6 +81,7 @@ type FilterOptions struct {
 // ChannelRef captures the logged channel identifiers used to resolve
 // historical channel names to their latest display labels.
 type ChannelRef struct {
+	AuthID      string `json:"auth_id"`
 	AuthIndex   string `json:"auth_index"`
 	ChannelName string `json:"channel_name"`
 	Source      string `json:"source"`
@@ -113,6 +117,7 @@ CREATE TABLE IF NOT EXISTS request_logs (
   model            TEXT NOT NULL DEFAULT '',
   source           TEXT NOT NULL DEFAULT '',
   channel_name     TEXT NOT NULL DEFAULT '',
+  auth_id          TEXT NOT NULL DEFAULT '',
   auth_index       TEXT NOT NULL DEFAULT '',
   failed           INTEGER NOT NULL DEFAULT 0,
   latency_ms       INTEGER NOT NULL DEFAULT 0,
@@ -132,10 +137,9 @@ CREATE INDEX IF NOT EXISTS idx_logs_model ON request_logs(model);
 CREATE INDEX IF NOT EXISTS idx_logs_failed ON request_logs(failed);
 `
 
-// migrateContentColumns adds input_content/output_content columns to an
-// existing request_logs table that was created before this feature.
-func migrateContentColumns(db *sql.DB) {
-	for _, col := range []string{"input_content", "output_content", "request_meta"} {
+// migrateRequestLogColumns adds newer request_logs columns to an existing table.
+func migrateRequestLogColumns(db *sql.DB) {
+	for _, col := range []string{"auth_id", "input_content", "output_content", "request_meta"} {
 		_, err := db.Exec(fmt.Sprintf("ALTER TABLE request_logs ADD COLUMN %s TEXT NOT NULL DEFAULT ''", col))
 		if err != nil {
 			// "duplicate column name" is expected when already migrated
@@ -143,6 +147,10 @@ func migrateContentColumns(db *sql.DB) {
 				log.Warnf("usage: migrate column %s: %v", col, err)
 			}
 		}
+	}
+
+	if _, err := db.Exec("CREATE INDEX IF NOT EXISTS idx_logs_auth_id ON request_logs(auth_id)"); err != nil {
+		log.Warnf("usage: create auth_id index: %v", err)
 	}
 }
 
@@ -173,7 +181,7 @@ func InitDB(dbPath string) error {
 
 	usageDB = db
 	usageDBPath = dbPath
-	migrateContentColumns(db)
+	migrateRequestLogColumns(db)
 	log.Infof("usage: SQLite database initialised at %s", dbPath)
 	return nil
 }
@@ -192,7 +200,7 @@ func CloseDB() {
 
 // InsertLog writes a single request log entry into the SQLite database.
 // It is safe to call concurrently.
-func InsertLog(apiKey, model, source, channelName, authIndex string,
+func InsertLog(apiKey, model, source, channelName, authID, authIndex string,
 	failed bool, timestamp time.Time, latencyMs int64, tokens TokenStats,
 	inputContent, outputContent string, requestMeta map[string]any) {
 
@@ -225,12 +233,12 @@ func InsertLog(apiKey, model, source, channelName, authIndex string,
 
 	_, err := db.Exec(
 		`INSERT INTO request_logs
-			(timestamp, api_key, model, source, channel_name, auth_index,
+			(timestamp, api_key, model, source, channel_name, auth_id, auth_index,
 			 failed, latency_ms, input_tokens, output_tokens, reasoning_tokens, cached_tokens, total_tokens,
 			 input_content, output_content, request_meta)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		timestamp.UTC().Format(time.RFC3339Nano),
-		apiKey, model, source, channelName, authIndex,
+		apiKey, model, source, channelName, authID, authIndex,
 		failedInt, latencyMs,
 		tokens.InputTokens, tokens.OutputTokens, tokens.ReasoningTokens,
 		tokens.CachedTokens, tokens.TotalTokens,
@@ -273,7 +281,7 @@ func QueryLogs(params LogQueryParams) (LogQueryResult, error) {
 
 	// Fetch page
 	offset := (params.Page - 1) * params.Size
-	querySQL := "SELECT id, timestamp, api_key, model, source, channel_name, auth_index, " +
+	querySQL := "SELECT id, timestamp, api_key, model, source, channel_name, auth_id, auth_index, " +
 		"failed, latency_ms, input_tokens, output_tokens, reasoning_tokens, cached_tokens, total_tokens, " +
 		"(CASE WHEN length(input_content) > 0 OR length(output_content) > 0 THEN 1 ELSE 0 END) as has_content, request_meta " +
 		"FROM request_logs" + where +
@@ -293,7 +301,7 @@ func QueryLogs(params LogQueryParams) (LogQueryResult, error) {
 		var failedInt, hasContentInt int
 		if err := rows.Scan(
 			&row.ID, &ts, &row.APIKey, &row.Model, &row.Source, &row.ChannelName,
-			&row.AuthIndex, &failedInt, &row.LatencyMs,
+			&row.AuthID, &row.AuthIndex, &failedInt, &row.LatencyMs,
 			&row.InputTokens, &row.OutputTokens, &row.ReasoningTokens,
 			&row.CachedTokens, &row.TotalTokens, &hasContentInt, &requestMetaJSON,
 		); err != nil {
@@ -306,8 +314,13 @@ func QueryLogs(params LogQueryParams) (LogQueryResult, error) {
 			var requestMeta map[string]any
 			if err := json.Unmarshal([]byte(requestMetaJSON), &requestMeta); err != nil {
 				log.Warnf("usage: unmarshal request_meta for log %d: %v", row.ID, err)
-			} else if value, ok := requestMeta["reasoning_effort"].(string); ok {
-				row.ReasoningEffort = strings.TrimSpace(value)
+			} else {
+				if value, ok := requestMeta["reasoning_effort"].(string); ok {
+					row.ReasoningEffort = strings.TrimSpace(value)
+				}
+				if value, ok := requestMeta["provider"].(string); ok {
+					row.Provider = strings.TrimSpace(value)
+				}
 			}
 		}
 		items = append(items, row)
@@ -361,9 +374,9 @@ func QueryChannelRefs(params LogQueryParams) ([]ChannelRef, error) {
 
 	where, args := buildWhereClause(params)
 	rows, err := db.Query(
-		"SELECT auth_index, channel_name, source, MAX(timestamp) AS last_seen FROM request_logs"+where+
-			" GROUP BY auth_index, channel_name, source"+
-			" ORDER BY last_seen DESC, auth_index ASC, channel_name ASC, source ASC",
+		"SELECT auth_id, auth_index, channel_name, source, MAX(timestamp) AS last_seen FROM request_logs"+where+
+			" GROUP BY auth_id, auth_index, channel_name, source"+
+			" ORDER BY last_seen DESC, auth_id ASC, auth_index ASC, channel_name ASC, source ASC",
 		args...,
 	)
 	if err != nil {
@@ -374,14 +387,15 @@ func QueryChannelRefs(params LogQueryParams) ([]ChannelRef, error) {
 	refs := make([]ChannelRef, 0, 16)
 	for rows.Next() {
 		var ref ChannelRef
-		if err := rows.Scan(&ref.AuthIndex, &ref.ChannelName, &ref.Source, &ref.LastSeen); err != nil {
+		if err := rows.Scan(&ref.AuthID, &ref.AuthIndex, &ref.ChannelName, &ref.Source, &ref.LastSeen); err != nil {
 			return nil, fmt.Errorf("usage: scan channel ref: %w", err)
 		}
+		ref.AuthID = strings.TrimSpace(ref.AuthID)
 		ref.AuthIndex = strings.TrimSpace(ref.AuthIndex)
 		ref.ChannelName = strings.TrimSpace(ref.ChannelName)
 		ref.Source = strings.TrimSpace(ref.Source)
 		ref.LastSeen = strings.TrimSpace(ref.LastSeen)
-		if ref.AuthIndex == "" && ref.ChannelName == "" && ref.Source == "" {
+		if ref.AuthID == "" && ref.AuthIndex == "" && ref.ChannelName == "" && ref.Source == "" {
 			continue
 		}
 		refs = append(refs, ref)
@@ -1632,9 +1646,9 @@ func MigrateFromSnapshot(snapshot StatisticsSnapshot) (int64, error) {
 	}
 
 	stmt, err := tx.Prepare(`INSERT INTO request_logs
-		(timestamp, api_key, model, source, channel_name, auth_index,
+		(timestamp, api_key, model, source, channel_name, auth_id, auth_index,
 		 failed, latency_ms, input_tokens, output_tokens, reasoning_tokens, cached_tokens, total_tokens)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		_ = tx.Rollback()
 		return 0, fmt.Errorf("usage: prepare migration stmt: %w", err)
@@ -1651,7 +1665,7 @@ func MigrateFromSnapshot(snapshot StatisticsSnapshot) (int64, error) {
 				}
 				_, err := stmt.Exec(
 					detail.Timestamp.UTC().Format(time.RFC3339Nano),
-					apiKey, model, detail.Source, detail.ChannelName, detail.AuthIndex,
+					apiKey, model, detail.Source, detail.ChannelName, "", detail.AuthIndex,
 					failedInt, detail.LatencyMs,
 					detail.Tokens.InputTokens, detail.Tokens.OutputTokens,
 					detail.Tokens.ReasoningTokens, detail.Tokens.CachedTokens,
@@ -1724,11 +1738,20 @@ func buildWhereClause(params LogQueryParams) (string, []any) {
 }
 
 func appendChannelFilterClause(clauses []string, args []any, filter ChannelFilter) ([]string, []any) {
+	authIDs := uniqueTrimmedValues(filter.AuthIDs)
 	authIndexes := uniqueTrimmedValues(filter.AuthIndexes)
 	channelNames := uniqueTrimmedValues(filter.ChannelNames)
 	sources := uniqueTrimmedValues(filter.Sources)
 
-	channelClauses := make([]string, 0, 3)
+	channelClauses := make([]string, 0, 4)
+	if len(authIDs) > 0 {
+		placeholders := make([]string, 0, len(authIDs))
+		for _, authID := range authIDs {
+			placeholders = append(placeholders, "?")
+			args = append(args, authID)
+		}
+		channelClauses = append(channelClauses, "auth_id IN ("+strings.Join(placeholders, ",")+")")
+	}
 	if len(authIndexes) > 0 {
 		placeholders := make([]string, 0, len(authIndexes))
 		for _, authIndex := range authIndexes {
