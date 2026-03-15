@@ -34,6 +34,7 @@ func TestGetUsageLogs_EmptyDatabaseReturnsStableShape(t *testing.T) {
 			APIKeys     []string          `json:"api_keys"`
 			APIKeyNames map[string]string `json:"api_key_names"`
 			Models      []string          `json:"models"`
+			Channels    []string          `json:"channels"`
 		} `json:"filters"`
 		Stats struct {
 			Total       int64   `json:"total"`
@@ -53,6 +54,9 @@ func TestGetUsageLogs_EmptyDatabaseReturnsStableShape(t *testing.T) {
 	}
 	if payload.Filters.Models == nil {
 		t.Fatal("expected filters.models to be an empty array, got null")
+	}
+	if payload.Filters.Channels == nil {
+		t.Fatal("expected filters.channels to be an empty array, got null")
 	}
 	if payload.Filters.APIKeyNames == nil {
 		t.Fatal("expected filters.api_key_names to be an empty object, got null")

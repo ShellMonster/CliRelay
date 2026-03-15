@@ -94,7 +94,9 @@ export function MonitorPage() {
   });
   const [pendingApiFilter, setPendingApiFilter] = useState("");
   const [pendingModelFilter, setPendingModelFilter] = useState("");
-  const [pendingChannelFilter, setPendingChannelFilter] = useState<string[]>([]);
+  const [pendingChannelFilter, setPendingChannelFilter] = useState<string[]>(
+    [],
+  );
   const [apiFilter, setApiFilter] = useState("");
   const [modelFilter, setModelFilter] = useState("");
   const [channelFilter, setChannelFilter] = useState<string[]>([]);
@@ -373,9 +375,8 @@ export function MonitorPage() {
       if (!modelExists(pendingModelFilter)) {
         setPendingModelFilter("");
       }
-      const nextPendingChannelFilter = normalizeChannelSelection(
-        pendingChannelFilter,
-      );
+      const nextPendingChannelFilter =
+        normalizeChannelSelection(pendingChannelFilter);
       if (nextPendingChannelFilter.length !== pendingChannelFilter.length) {
         setPendingChannelFilter(nextPendingChannelFilter);
       }
@@ -693,6 +694,7 @@ export function MonitorPage() {
               searchPlaceholder="搜索渠道…"
               emptyResultLabel="无匹配渠道"
               className="min-w-[240px]"
+              maxVisibleTags={1}
             />
             <button
               type="button"

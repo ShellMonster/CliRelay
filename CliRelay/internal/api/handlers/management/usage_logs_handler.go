@@ -21,6 +21,19 @@ func (h *Handler) GetUsageLogs(c *gin.Context) {
 		Model:  strings.TrimSpace(c.Query("model")),
 		Status: strings.TrimSpace(c.Query("status")),
 	}
+	selectedChannels := multiQueryValues(c, "channel_name")
+
+	channelResolver, err := h.buildUsageChannelResolver(usage.LogQueryParams{
+		Days:   params.Days,
+		APIKey: params.APIKey,
+		Model:  params.Model,
+		Status: params.Status,
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	params.ChannelNames = channelResolver.ResolveRawChannelNames(selectedChannels)
 
 	result, err := usage.QueryLogs(params)
 	if err != nil {
@@ -45,6 +58,7 @@ func (h *Handler) GetUsageLogs(c *gin.Context) {
 	if filters.APIKeyNames == nil {
 		filters.APIKeyNames = map[string]string{}
 	}
+	filters.Channels = channelResolver.displayChannelNames
 
 	stats, err := usage.QueryStats(params)
 	if err != nil {
@@ -52,27 +66,19 @@ func (h *Handler) GetUsageLogs(c *gin.Context) {
 		return
 	}
 
-	// Build name maps from config
-	keyNameMap, channelNameMap := h.buildNameMaps()
-
 	// Enrich log items with resolved names
 	for i := range result.Items {
 		item := &result.Items[i]
-		if name, ok := keyNameMap[item.APIKey]; ok {
+		if name := channelResolver.ResolveAPIKeyName(item.APIKey); name != "" {
 			item.APIKeyName = name
 		}
-		// Fill in channel_name from config if not already set in the log
-		if item.ChannelName == "" {
-			if name, ok := channelNameMap[item.Source]; ok {
-				item.ChannelName = name
-			}
-		}
+		item.ChannelName = channelResolver.ResolveDisplayName(item.AuthIndex, item.ChannelName, item.Source)
 	}
 
 	// Enrich filter options with key names
 	filters.APIKeyNames = make(map[string]string, len(filters.APIKeys))
 	for _, key := range filters.APIKeys {
-		if name, ok := keyNameMap[key]; ok {
+		if name := channelResolver.ResolveAPIKeyName(key); name != "" {
 			filters.APIKeyNames[key] = name
 		}
 	}

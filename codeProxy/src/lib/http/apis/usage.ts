@@ -143,6 +143,7 @@ export const usageApi = {
     api_key?: string;
     model?: string;
     status?: string;
+    channel_name?: string[];
   }): Promise<UsageLogsResponse> {
     const qs = new URLSearchParams();
     if (params.page) qs.set("page", String(params.page));
@@ -151,6 +152,7 @@ export const usageApi = {
     if (params.api_key) qs.set("api_key", params.api_key);
     if (params.model) qs.set("model", params.model);
     if (params.status) qs.set("status", params.status);
+    appendMultiValueQuery(qs, "channel_name", params.channel_name);
     const query = qs.toString();
     const response = await apiClient.get<
       Partial<UsageLogsResponse> | undefined
@@ -179,6 +181,9 @@ export const usageApi = {
             ? rawFilters.api_key_names
             : {},
         models: Array.isArray(rawFilters?.models) ? rawFilters.models : [],
+        channels: Array.isArray(rawFilters?.channels)
+          ? rawFilters.channels
+          : [],
       },
       stats: {
         total: typeof rawStats?.total === "number" ? rawStats.total : 0,
@@ -524,6 +529,7 @@ export interface UsageLogsResponse {
     api_keys: string[];
     api_key_names: Record<string, string>;
     models: string[];
+    channels: string[];
   };
   stats: {
     total: number;

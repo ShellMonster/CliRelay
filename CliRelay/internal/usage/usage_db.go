@@ -36,12 +36,13 @@ type LogRow struct {
 
 // LogQueryParams holds filter/pagination parameters for QueryLogs.
 type LogQueryParams struct {
-	Page   int    // 1-based
-	Size   int    // rows per page
-	Days   int    // time range in days
-	APIKey string // exact match filter
-	Model  string // exact match filter
-	Status string // "success", "failed", or "" (all)
+	Page         int      // 1-based
+	Size         int      // rows per page
+	Days         int      // time range in days
+	APIKey       string   // exact match filter
+	Model        string   // exact match filter
+	Status       string   // "success", "failed", or "" (all)
+	ChannelNames []string // raw logged channel_name values
 }
 
 // LogQueryResult holds the paginated query result.
@@ -58,6 +59,14 @@ type FilterOptions struct {
 	APIKeyNames map[string]string `json:"api_key_names"`
 	Models      []string          `json:"models"`
 	Channels    []string          `json:"channels"`
+}
+
+// ChannelRef captures the logged channel identifiers used to resolve
+// historical channel names to their latest display labels.
+type ChannelRef struct {
+	AuthIndex   string `json:"auth_index"`
+	ChannelName string `json:"channel_name"`
+	Source      string `json:"source"`
 }
 
 // LogStats holds aggregated stats over the filtered result set.
@@ -316,12 +325,49 @@ func QueryFilters(days int) (FilterOptions, error) {
 	if err != nil {
 		return FilterOptions{}, err
 	}
-	channels, err := queryDistinct(db, "channel_name", cutoff)
-	if err != nil {
-		return FilterOptions{}, err
+
+	return FilterOptions{APIKeys: keys, Models: models, Channels: []string{}}, nil
+}
+
+// QueryChannelRefs returns distinct logged channel identifiers for the selected filters.
+func QueryChannelRefs(params LogQueryParams) ([]ChannelRef, error) {
+	db := getDB()
+	if db == nil {
+		return []ChannelRef{}, nil
+	}
+	if params.Days < 1 {
+		params.Days = 7
 	}
 
-	return FilterOptions{APIKeys: keys, Models: models, Channels: channels}, nil
+	where, args := buildWhereClause(params)
+	rows, err := db.Query(
+		"SELECT DISTINCT auth_index, channel_name, source FROM request_logs"+where+
+			" ORDER BY auth_index ASC, channel_name ASC, source ASC",
+		args...,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("usage: query channel refs: %w", err)
+	}
+	defer rows.Close()
+
+	refs := make([]ChannelRef, 0, 16)
+	for rows.Next() {
+		var ref ChannelRef
+		if err := rows.Scan(&ref.AuthIndex, &ref.ChannelName, &ref.Source); err != nil {
+			return nil, fmt.Errorf("usage: scan channel ref: %w", err)
+		}
+		ref.AuthIndex = strings.TrimSpace(ref.AuthIndex)
+		ref.ChannelName = strings.TrimSpace(ref.ChannelName)
+		ref.Source = strings.TrimSpace(ref.Source)
+		if ref.AuthIndex == "" && ref.ChannelName == "" && ref.Source == "" {
+			continue
+		}
+		refs = append(refs, ref)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("usage: iterate channel refs: %w", err)
+	}
+	return refs, nil
 }
 
 func QueryMonitorFilters(days int, apiKey string, channelNames []string) (FilterOptions, error) {
@@ -338,10 +384,6 @@ func QueryMonitorFilters(days int, apiKey string, channelNames []string) (Filter
 	if err != nil {
 		return FilterOptions{}, err
 	}
-	channels, err := queryDistinctFiltered(db, "channel_name", cutoff, apiKey, "", nil)
-	if err != nil {
-		return FilterOptions{}, err
-	}
 	models, err := queryDistinctFiltered(db, "model", cutoff, apiKey, "", channelNames)
 	if err != nil {
 		return FilterOptions{}, err
@@ -350,7 +392,7 @@ func QueryMonitorFilters(days int, apiKey string, channelNames []string) (Filter
 	return FilterOptions{
 		APIKeys:  keys,
 		Models:   models,
-		Channels: channels,
+		Channels: []string{},
 	}, nil
 }
 
@@ -1655,8 +1697,8 @@ func localDayCutoff(days int) time.Time {
 }
 
 func buildWhereClause(params LogQueryParams) (string, []interface{}) {
-	conditions := make([]string, 0, 4)
-	args := make([]interface{}, 0, 4)
+	conditions := make([]string, 0, 5)
+	args := make([]interface{}, 0, 8)
 
 	// Time range: days=1 means "today", days=7 means "last 7 days", etc.
 	cutoff := localDayCutoff(params.Days)
@@ -1675,6 +1717,25 @@ func buildWhereClause(params LogQueryParams) (string, []interface{}) {
 		conditions = append(conditions, "failed = 0")
 	} else if params.Status == "failed" {
 		conditions = append(conditions, "failed = 1")
+	}
+	if len(params.ChannelNames) > 0 {
+		placeholders := make([]string, 0, len(params.ChannelNames))
+		seen := make(map[string]struct{}, len(params.ChannelNames))
+		for _, channelName := range params.ChannelNames {
+			trimmed := strings.TrimSpace(channelName)
+			if trimmed == "" {
+				continue
+			}
+			if _, ok := seen[trimmed]; ok {
+				continue
+			}
+			seen[trimmed] = struct{}{}
+			placeholders = append(placeholders, "?")
+			args = append(args, trimmed)
+		}
+		if len(placeholders) > 0 {
+			conditions = append(conditions, "channel_name IN ("+strings.Join(placeholders, ",")+")")
+		}
 	}
 
 	if len(conditions) == 0 {

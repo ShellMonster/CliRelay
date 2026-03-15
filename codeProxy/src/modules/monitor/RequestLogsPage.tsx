@@ -1,10 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Filter, RefreshCw, ScrollText } from "lucide-react";
 import { usageApi } from "@/lib/http/apis";
 import type { UsageLogItem, UsageLogsResponse } from "@/lib/http/apis/usage";
@@ -13,6 +7,7 @@ import { useToast } from "@/modules/ui/ToastProvider";
 import { OverflowTooltip } from "@/modules/ui/Tooltip";
 import { Select } from "@/modules/ui/Select";
 import { SearchableSelect } from "@/modules/ui/SearchableSelect";
+import { MultiSelect } from "@/modules/ui/MultiSelect";
 import { LogContentModal } from "@/modules/monitor/LogContentModal";
 import { ErrorDetailModal } from "@/modules/monitor/ErrorDetailModal";
 
@@ -45,7 +40,8 @@ const TIME_RANGES: readonly TimeRange[] = [1, 7, 14, 30] as const;
 const maskApiKey = (value: string): string => {
   const trimmed = value.trim();
   if (!trimmed) return "--";
-  if (trimmed.length <= 10) return `${trimmed.slice(0, 2)}***${trimmed.slice(-2)}`;
+  if (trimmed.length <= 10)
+    return `${trimmed.slice(0, 2)}***${trimmed.slice(-2)}`;
   return `${trimmed.slice(0, 6)}***${trimmed.slice(-4)}`;
 };
 
@@ -73,7 +69,10 @@ const TimeRangeSelector = ({
   onChange: (next: TimeRange) => void;
 }) => {
   return (
-    <Tabs value={String(value)} onValueChange={(next) => onChange(Number(next) as TimeRange)}>
+    <Tabs
+      value={String(value)}
+      onValueChange={(next) => onChange(Number(next) as TimeRange)}
+    >
       <TabsList>
         {TIME_RANGES.map((range) => {
           const label = range === 1 ? "今天" : `${range} 天`;
@@ -88,7 +87,10 @@ const TimeRangeSelector = ({
   );
 };
 
-import { VirtualTable, type VirtualTableColumn } from "@/modules/ui/VirtualTable";
+import {
+  VirtualTable,
+  type VirtualTableColumn,
+} from "@/modules/ui/VirtualTable";
 
 function buildLogColumns(
   onContentClick?: (logId: number, tab: "input" | "output") => void,
@@ -102,8 +104,13 @@ function buildLogColumns(
       cellClassName:
         "font-mono text-xs tabular-nums text-slate-700 dark:text-slate-200",
       render: (row) => (
-        <OverflowTooltip content={formatTimestamp(row.timestamp)} className="block min-w-0">
-          <span className="block min-w-0 truncate">{formatTimestamp(row.timestamp)}</span>
+        <OverflowTooltip
+          content={formatTimestamp(row.timestamp)}
+          className="block min-w-0"
+        >
+          <span className="block min-w-0 truncate">
+            {formatTimestamp(row.timestamp)}
+          </span>
         </OverflowTooltip>
       ),
     },
@@ -112,7 +119,10 @@ function buildLogColumns(
       label: "Key 名称",
       width: "w-28",
       render: (row) => (
-        <OverflowTooltip content={row.apiKeyName || "--"} className="block min-w-0">
+        <OverflowTooltip
+          content={row.apiKeyName || "--"}
+          className="block min-w-0"
+        >
           <span
             className={`block min-w-0 truncate text-xs font-medium ${row.apiKeyName ? "text-indigo-600 dark:text-indigo-400" : "text-slate-400 dark:text-white/30"}`}
           >
@@ -136,7 +146,10 @@ function buildLogColumns(
       label: "推理强度",
       width: "w-20",
       render: (row) => (
-        <OverflowTooltip content={row.reasoningEffort || "--"} className="block min-w-0">
+        <OverflowTooltip
+          content={row.reasoningEffort || "--"}
+          className="block min-w-0"
+        >
           <span
             className={`block min-w-0 truncate text-xs font-medium ${
               row.reasoningEffort
@@ -154,7 +167,10 @@ function buildLogColumns(
       label: "渠道名",
       width: "w-28",
       render: (row) => (
-        <OverflowTooltip content={row.channelName || "--"} className="block min-w-0">
+        <OverflowTooltip
+          content={row.channelName || "--"}
+          className="block min-w-0"
+        >
           <span
             className={`block min-w-0 truncate text-xs font-medium ${row.channelName ? "text-violet-600 dark:text-violet-400" : "text-slate-400 dark:text-white/30"}`}
           >
@@ -216,8 +232,13 @@ function buildLogColumns(
             </span>
           </button>
         ) : (
-          <OverflowTooltip content={row.inputTokens.toLocaleString()} className="block min-w-0">
-            <span className="block min-w-0 truncate">{row.inputTokens.toLocaleString()}</span>
+          <OverflowTooltip
+            content={row.inputTokens.toLocaleString()}
+            className="block min-w-0"
+          >
+            <span className="block min-w-0 truncate">
+              {row.inputTokens.toLocaleString()}
+            </span>
           </OverflowTooltip>
         ),
     },
@@ -228,7 +249,10 @@ function buildLogColumns(
       headerClassName: "text-right",
       cellClassName: "text-right font-mono text-xs tabular-nums",
       render: (row) => (
-        <OverflowTooltip content={row.cachedTokens.toLocaleString()} className="block min-w-0">
+        <OverflowTooltip
+          content={row.cachedTokens.toLocaleString()}
+          className="block min-w-0"
+        >
           <span
             className={`block min-w-0 truncate ${row.cachedTokens > 0 ? "font-semibold text-amber-600 dark:text-amber-400" : "text-slate-400 dark:text-white/30"}`}
           >
@@ -257,8 +281,13 @@ function buildLogColumns(
             </span>
           </button>
         ) : (
-          <OverflowTooltip content={row.outputTokens.toLocaleString()} className="block min-w-0">
-            <span className="block min-w-0 truncate">{row.outputTokens.toLocaleString()}</span>
+          <OverflowTooltip
+            content={row.outputTokens.toLocaleString()}
+            className="block min-w-0"
+          >
+            <span className="block min-w-0 truncate">
+              {row.outputTokens.toLocaleString()}
+            </span>
           </OverflowTooltip>
         ),
     },
@@ -270,14 +299,18 @@ function buildLogColumns(
       cellClassName:
         "text-right font-mono text-xs tabular-nums text-slate-900 dark:text-white",
       render: (row) => (
-        <OverflowTooltip content={row.totalTokens.toLocaleString()} className="block min-w-0">
-          <span className="block min-w-0 truncate">{row.totalTokens.toLocaleString()}</span>
+        <OverflowTooltip
+          content={row.totalTokens.toLocaleString()}
+          className="block min-w-0"
+        >
+          <span className="block min-w-0 truncate">
+            {row.totalTokens.toLocaleString()}
+          </span>
         </OverflowTooltip>
       ),
     },
   ];
 }
-
 
 /** Convert a backend log item to a UI-friendly LogRow */
 function toLogRow(item: UsageLogItem): LogRow {
@@ -306,14 +339,21 @@ export function RequestLogsPage() {
 
   // Content modal state
   const [contentModalOpen, setContentModalOpen] = useState(false);
-  const [contentModalLogId, setContentModalLogId] = useState<number | null>(null);
-  const [contentModalTab, setContentModalTab] = useState<"input" | "output">("input");
+  const [contentModalLogId, setContentModalLogId] = useState<number | null>(
+    null,
+  );
+  const [contentModalTab, setContentModalTab] = useState<"input" | "output">(
+    "input",
+  );
 
-  const handleContentClick = useCallback((logId: number, tab: "input" | "output") => {
-    setContentModalLogId(logId);
-    setContentModalTab(tab);
-    setContentModalOpen(true);
-  }, []);
+  const handleContentClick = useCallback(
+    (logId: number, tab: "input" | "output") => {
+      setContentModalLogId(logId);
+      setContentModalTab(tab);
+      setContentModalOpen(true);
+    },
+    [],
+  );
 
   // Error modal state
   const [errorModalOpen, setErrorModalOpen] = useState(false);
@@ -327,7 +367,10 @@ export function RequestLogsPage() {
   }, []);
 
   // Build columns with content click handler
-  const logColumns = useMemo(() => buildLogColumns(handleContentClick, handleErrorClick), [handleContentClick, handleErrorClick]);
+  const logColumns = useMemo(
+    () => buildLogColumns(handleContentClick, handleErrorClick),
+    [handleContentClick, handleErrorClick],
+  );
 
   // Accumulated raw items from all loaded pages (name resolution done by backend)
   const [rawItems, setRawItems] = useState<UsageLogItem[]>([]);
@@ -342,19 +385,24 @@ export function RequestLogsPage() {
     api_keys: string[];
     api_key_names: Record<string, string>;
     models: string[];
+    channels: string[];
   }>({
     api_keys: [],
     api_key_names: {},
     models: [],
+    channels: [],
   });
-  const [stats, setStats] = useState<{ total: number; success_rate: number; total_tokens: number }>(
-    { total: 0, success_rate: 0, total_tokens: 0 },
-  );
+  const [stats, setStats] = useState<{
+    total: number;
+    success_rate: number;
+    total_tokens: number;
+  }>({ total: 0, success_rate: 0, total_tokens: 0 });
 
   // Filters
   const [timeRange, setTimeRange] = useState<TimeRange>(7);
   const [apiQuery, setApiQuery] = useState("");
   const [modelQuery, setModelQuery] = useState("");
+  const [channelQuery, setChannelQuery] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("");
 
   const fetchInFlightRef = useRef(false);
@@ -379,6 +427,7 @@ export function RequestLogsPage() {
           api_key: apiQuery || undefined,
           model: modelQuery || undefined,
           status: statusFilter || undefined,
+          channel_name: channelQuery,
         });
 
         const newItems = resp.items ?? [];
@@ -391,7 +440,14 @@ export function RequestLogsPage() {
 
         setTotalCount(resp.total ?? 0);
         setCurrentPage(page);
-        setFilterOptions(resp.filters ?? { api_keys: [], api_key_names: {}, models: [] });
+        setFilterOptions(
+          resp.filters ?? {
+            api_keys: [],
+            api_key_names: {},
+            models: [],
+            channels: [],
+          },
+        );
         setStats(resp.stats ?? { total: 0, success_rate: 0, total_tokens: 0 });
         setLastUpdatedAt(Date.now());
       } catch (err) {
@@ -403,7 +459,7 @@ export function RequestLogsPage() {
         setLoadingMore(false);
       }
     },
-    [timeRange, apiQuery, modelQuery, statusFilter, notify],
+    [timeRange, apiQuery, modelQuery, channelQuery, statusFilter, notify],
   );
 
   // Derive display rows from raw items (names already resolved by backend)
@@ -423,7 +479,7 @@ export function RequestLogsPage() {
   // Fetch page 1 when filters change (single API call, no other fetches needed)
   useEffect(() => {
     fetchLogs(1);
-  }, [timeRange, apiQuery, modelQuery, statusFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [timeRange, apiQuery, modelQuery, channelQuery, statusFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Build options from backend filter data (names provided by backend)
   const keyOptions = useMemo(() => {
@@ -445,6 +501,26 @@ export function RequestLogsPage() {
     ];
   }, [filterOptions.models]);
 
+  const channelOptions = useMemo(() => {
+    return filterOptions.channels.map((channel) => ({
+      value: channel,
+      label: channel,
+    }));
+  }, [filterOptions.channels]);
+
+  useEffect(() => {
+    setChannelQuery((prev) => {
+      const next = prev.filter((item) => filterOptions.channels.includes(item));
+      if (
+        next.length === prev.length &&
+        next.every((item, index) => item === prev[index])
+      ) {
+        return prev;
+      }
+      return next;
+    });
+  }, [filterOptions.channels]);
+
   const lastUpdatedText = useMemo(() => {
     if (loading) return "刷新中…";
     if (!lastUpdatedAt) return "尚未刷新";
@@ -460,7 +536,11 @@ export function RequestLogsPage() {
         {/* 标题栏 */}
         <div className="flex flex-wrap items-center justify-between gap-3 px-5 pt-5 pb-3">
           <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900 dark:text-white">
-            <ScrollText size={18} className="text-slate-900 dark:text-white" aria-hidden="true" />
+            <ScrollText
+              size={18}
+              className="text-slate-900 dark:text-white"
+              aria-hidden="true"
+            />
             请求日志
           </h2>
           <div className="flex flex-wrap items-center gap-2">
@@ -476,7 +556,11 @@ export function RequestLogsPage() {
             >
               <RefreshCw
                 size={14}
-                className={loading ? "motion-reduce:animate-none motion-safe:animate-spin" : ""}
+                className={
+                  loading
+                    ? "motion-reduce:animate-none motion-safe:animate-spin"
+                    : ""
+                }
                 aria-hidden="true"
               />
             </button>
@@ -501,6 +585,18 @@ export function RequestLogsPage() {
             searchPlaceholder="搜索模型…"
             aria-label="按模型过滤"
           />
+          <MultiSelect
+            value={channelQuery}
+            onChange={setChannelQuery}
+            options={channelOptions}
+            placeholder="全部渠道"
+            emptyLabel="全部渠道"
+            selectAllLabel="全部渠道"
+            searchPlaceholder="搜索渠道…"
+            emptyResultLabel="无匹配渠道"
+            className="min-w-[220px]"
+            maxVisibleTags={1}
+          />
           <Select
             value={statusFilter}
             onChange={(v) => setStatusFilter(v as StatusFilter)}
@@ -519,13 +615,39 @@ export function RequestLogsPage() {
           {/* 统计摘要 */}
           <span className="inline-flex items-center gap-1.5 text-xs text-slate-600 dark:text-white/55">
             <Filter size={12} aria-hidden="true" />
-            <span className="font-mono tabular-nums">{stats.total.toLocaleString()}</span> 条
-            <span className="text-slate-300 dark:text-white/10" aria-hidden="true">·</span>
-            成功率 <span className="font-mono tabular-nums">{stats.success_rate.toFixed(1)}%</span>
-            <span className="text-slate-300 dark:text-white/10" aria-hidden="true">·</span>
-            Token <span className="font-mono tabular-nums">{stats.total_tokens.toLocaleString()}</span>
-            <span className="text-slate-300 dark:text-white/10" aria-hidden="true">·</span>
-            <span className="text-slate-400 dark:text-white/40">{lastUpdatedText}</span>
+            <span className="font-mono tabular-nums">
+              {stats.total.toLocaleString()}
+            </span>{" "}
+            条
+            <span
+              className="text-slate-300 dark:text-white/10"
+              aria-hidden="true"
+            >
+              ·
+            </span>
+            成功率{" "}
+            <span className="font-mono tabular-nums">
+              {stats.success_rate.toFixed(1)}%
+            </span>
+            <span
+              className="text-slate-300 dark:text-white/10"
+              aria-hidden="true"
+            >
+              ·
+            </span>
+            Token{" "}
+            <span className="font-mono tabular-nums">
+              {stats.total_tokens.toLocaleString()}
+            </span>
+            <span
+              className="text-slate-300 dark:text-white/10"
+              aria-hidden="true"
+            >
+              ·
+            </span>
+            <span className="text-slate-400 dark:text-white/40">
+              {lastUpdatedText}
+            </span>
           </span>
         </div>
 
