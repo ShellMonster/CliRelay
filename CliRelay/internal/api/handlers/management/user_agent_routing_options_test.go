@@ -109,9 +109,14 @@ func TestBuildUserAgentRoutingOptions_UsesConfiguredFallbackModels(t *testing.T)
 	for _, model := range options.Models {
 		gotModels[model.ID] = struct{}{}
 	}
-	for _, want := range []string{"gpt-5.4", "gpt-5.4-mini", "compat/gpt-5.4", "compat/gpt-5.4-mini"} {
+	for _, want := range []string{"gpt-5.4", "gpt-5.4-mini"} {
 		if _, exists := gotModels[want]; !exists {
 			t.Fatalf("expected model %q in %#v", want, options.Models)
+		}
+	}
+	for _, unwanted := range []string{"compat/gpt-5.4", "compat/gpt-5.4-mini"} {
+		if _, exists := gotModels[unwanted]; exists {
+			t.Fatalf("expected prefixed model %q to be deduplicated from %#v", unwanted, options.Models)
 		}
 	}
 }

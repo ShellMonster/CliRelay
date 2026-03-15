@@ -1302,12 +1302,46 @@ func userAgentRoutingModelLookupKeys(model string) []string {
 	if trimmed == "" {
 		return nil
 	}
-	keys := []string{strings.ToLower(trimmed)}
+
+	keys := make([]string, 0, 4)
+	seen := make(map[string]struct{}, 4)
+	addKey := func(value string) {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return
+		}
+		key := strings.ToLower(value)
+		if _, exists := seen[key]; exists {
+			return
+		}
+		seen[key] = struct{}{}
+		keys = append(keys, key)
+	}
+
+	addKey(trimmed)
 	baseModel := strings.TrimSpace(thinking.ParseSuffix(trimmed).ModelName)
-	if baseModel != "" && !strings.EqualFold(baseModel, trimmed) {
-		keys = append(keys, strings.ToLower(baseModel))
+	if baseModel != "" {
+		addKey(baseModel)
+	}
+	if stripped := userAgentRoutingStripNamespace(trimmed); stripped != "" {
+		addKey(stripped)
+	}
+	if stripped := userAgentRoutingStripNamespace(baseModel); stripped != "" {
+		addKey(stripped)
 	}
 	return keys
+}
+
+func userAgentRoutingStripNamespace(model string) string {
+	model = strings.TrimSpace(model)
+	if model == "" {
+		return ""
+	}
+	lastSlash := strings.LastIndex(model, "/")
+	if lastSlash <= 0 || lastSlash >= len(model)-1 {
+		return ""
+	}
+	return strings.TrimSpace(model[lastSlash+1:])
 }
 
 func applyUserAgentRoutingRule(providers []string, rule internalconfig.UserAgentRoutingRule) ([]string, bool) {

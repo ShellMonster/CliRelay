@@ -142,6 +142,19 @@ func TestManagerExecute_UserAgentModelMismatchKeepsDefaultSelection(t *testing.T
 	}
 }
 
+func TestUserAgentRoutingRuleMatchesModel_StripsNamespacePrefix(t *testing.T) {
+	rule := internalconfig.UserAgentRoutingRule{
+		Models: []string{"gpt-5.4"},
+	}
+
+	if !userAgentRoutingRuleMatchesModel(rule, "codex-compat/gpt-5.4(high)") {
+		t.Fatalf("expected namespaced model to match base model rule")
+	}
+	if userAgentRoutingRuleMatchesModel(rule, "codex-compat/gpt-4.1") {
+		t.Fatalf("expected different namespaced model to not match")
+	}
+}
+
 func newUserAgentRoutingTestManager(t *testing.T, rules []internalconfig.UserAgentRoutingRule) *Manager {
 	t.Helper()
 

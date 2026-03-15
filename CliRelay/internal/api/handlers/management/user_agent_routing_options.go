@@ -61,7 +61,7 @@ func buildUserAgentRoutingOptions(cfg *config.Config, manager *coreauth.Manager)
 			if model == nil {
 				continue
 			}
-			modelID := strings.TrimSpace(model.ID)
+			modelID := normalizeUserAgentRoutingOptionModelID(auth, model.ID)
 			if modelID == "" {
 				continue
 			}
@@ -115,4 +115,23 @@ func buildUserAgentRoutingOptions(cfg *config.Config, manager *coreauth.Manager)
 		Providers: providers,
 		Models:    models,
 	}
+}
+
+func normalizeUserAgentRoutingOptionModelID(auth *coreauth.Auth, modelID string) string {
+	trimmed := strings.TrimSpace(modelID)
+	if trimmed == "" {
+		return ""
+	}
+
+	prefix := strings.TrimSpace(effectiveAPIKeyAccessModelPrefix(auth))
+	if prefix == "" {
+		return trimmed
+	}
+
+	needle := prefix + "/"
+	if len(trimmed) <= len(needle) || !strings.EqualFold(trimmed[:len(needle)], needle) {
+		return trimmed
+	}
+
+	return strings.TrimSpace(trimmed[len(needle):])
 }
