@@ -35,6 +35,14 @@ interface LogRow {
 
 const PAGE_SIZE = 50;
 
+const EMPTY_FILTER_OPTIONS: UsageLogsResponse["filters"] = {
+  api_keys: [],
+  api_key_names: {},
+  models: [],
+  channels: [],
+  channel_options: [],
+};
+
 const TIME_RANGES: readonly TimeRange[] = [1, 7, 14, 30] as const;
 
 const maskApiKey = (value: string): string => {
@@ -381,17 +389,8 @@ export function RequestLogsPage() {
   // Backend-provided metadata
   const [totalCount, setTotalCount] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
-  const [filterOptions, setFilterOptions] = useState<{
-    api_keys: string[];
-    api_key_names: Record<string, string>;
-    models: string[];
-    channels: string[];
-  }>({
-    api_keys: [],
-    api_key_names: {},
-    models: [],
-    channels: [],
-  });
+  const [filterOptions, setFilterOptions] =
+    useState<UsageLogsResponse["filters"]>(EMPTY_FILTER_OPTIONS);
   const [stats, setStats] = useState<{
     total: number;
     success_rate: number;
@@ -405,13 +404,13 @@ export function RequestLogsPage() {
   const [channelQuery, setChannelQuery] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("");
 
-  const fetchInFlightRef = useRef(false);
+  const fetchRequestIdRef = useRef(0);
 
   // Fetch logs from backend (page 1 = reset, page > 1 = append)
   const fetchLogs = useCallback(
     async (page: number) => {
-      if (fetchInFlightRef.current) return;
-      fetchInFlightRef.current = true;
+      const requestId = fetchRequestIdRef.current + 1;
+      fetchRequestIdRef.current = requestId;
 
       if (page === 1) {
         setLoading(true);
@@ -431,6 +430,9 @@ export function RequestLogsPage() {
         });
 
         const newItems = resp.items ?? [];
+        if (requestId !== fetchRequestIdRef.current) {
+          return;
+        }
 
         if (page === 1) {
           setRawItems(newItems);
@@ -440,23 +442,20 @@ export function RequestLogsPage() {
 
         setTotalCount(resp.total ?? 0);
         setCurrentPage(page);
-        setFilterOptions(
-          resp.filters ?? {
-            api_keys: [],
-            api_key_names: {},
-            models: [],
-            channels: [],
-          },
-        );
+        setFilterOptions(resp.filters ?? EMPTY_FILTER_OPTIONS);
         setStats(resp.stats ?? { total: 0, success_rate: 0, total_tokens: 0 });
         setLastUpdatedAt(Date.now());
       } catch (err) {
+        if (requestId !== fetchRequestIdRef.current) {
+          return;
+        }
         const message = err instanceof Error ? err.message : "请求日志刷新失败";
         notify({ type: "error", message });
       } finally {
-        fetchInFlightRef.current = false;
-        setLoading(false);
-        setLoadingMore(false);
+        if (requestId === fetchRequestIdRef.current) {
+          setLoading(false);
+          setLoadingMore(false);
+        }
       }
     },
     [timeRange, apiQuery, modelQuery, channelQuery, statusFilter, notify],
@@ -502,15 +501,13 @@ export function RequestLogsPage() {
   }, [filterOptions.models]);
 
   const channelOptions = useMemo(() => {
-    return filterOptions.channels.map((channel) => ({
-      value: channel,
-      label: channel,
-    }));
-  }, [filterOptions.channels]);
+    return filterOptions.channel_options;
+  }, [filterOptions.channel_options]);
 
   useEffect(() => {
+    const validValues = new Set(channelOptions.map((item) => item.value));
     setChannelQuery((prev) => {
-      const next = prev.filter((item) => filterOptions.channels.includes(item));
+      const next = prev.filter((item) => validValues.has(item));
       if (
         next.length === prev.length &&
         next.every((item, index) => item === prev[index])
@@ -519,7 +516,7 @@ export function RequestLogsPage() {
       }
       return next;
     });
-  }, [filterOptions.channels]);
+  }, [channelOptions]);
 
   const lastUpdatedText = useMemo(() => {
     if (loading) return "刷新中…";

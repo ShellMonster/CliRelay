@@ -11,6 +11,99 @@ function appendMultiValueQuery(
     .forEach((value) => query.append(key, value));
 }
 
+export interface ChannelOption {
+  value: string;
+  label: string;
+}
+
+export interface UsageFilterOptions {
+  api_keys: string[];
+  api_key_names: Record<string, string>;
+  models: string[];
+  channels: string[];
+  channel_options: ChannelOption[];
+}
+
+function uniqueTrimmedStrings(values: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  values.forEach((value) => {
+    const trimmed = value.trim();
+    if (!trimmed || seen.has(trimmed)) return;
+    seen.add(trimmed);
+    result.push(trimmed);
+  });
+  return result;
+}
+
+function normalizeChannelOptions(
+  rawOptions: unknown,
+  fallbackChannels: string[],
+): ChannelOption[] {
+  const options: ChannelOption[] = [];
+  const seen = new Set<string>();
+
+  if (Array.isArray(rawOptions)) {
+    rawOptions.forEach((item) => {
+      if (!item || typeof item !== "object") return;
+      const value =
+        typeof (item as { value?: unknown }).value === "string"
+          ? (item as { value: string }).value.trim()
+          : "";
+      const label =
+        typeof (item as { label?: unknown }).label === "string"
+          ? (item as { label: string }).label.trim()
+          : "";
+      if (!value || !label || seen.has(value)) return;
+      seen.add(value);
+      options.push({ value, label });
+    });
+  }
+
+  if (options.length > 0) {
+    return options;
+  }
+
+  return uniqueTrimmedStrings(fallbackChannels).map((channel) => ({
+    value: channel,
+    label: channel,
+  }));
+}
+
+function normalizeFilterOptions(rawFilters: unknown): UsageFilterOptions {
+  const source =
+    rawFilters && typeof rawFilters === "object"
+      ? (rawFilters as Partial<UsageFilterOptions>)
+      : undefined;
+  const apiKeys = Array.isArray(source?.api_keys)
+    ? source.api_keys.filter((item): item is string => typeof item === "string")
+    : [];
+  const models = Array.isArray(source?.models)
+    ? source.models.filter((item): item is string => typeof item === "string")
+    : [];
+  const channels = Array.isArray(source?.channels)
+    ? source.channels.filter((item): item is string => typeof item === "string")
+    : [];
+  const channelOptions = normalizeChannelOptions(
+    source?.channel_options,
+    channels,
+  );
+
+  return {
+    api_keys: apiKeys,
+    api_key_names:
+      source?.api_key_names && typeof source.api_key_names === "object"
+        ? source.api_key_names
+        : {},
+    models,
+    channels:
+      channels.length > 0
+        ? uniqueTrimmedStrings(channels)
+        : uniqueTrimmedStrings(channelOptions.map((item) => item.label)),
+    channel_options: channelOptions,
+  };
+}
+
 export interface UsageExportPayload {
   version?: number;
   exported_at?: string;
@@ -159,7 +252,6 @@ export const usageApi = {
     >(`/usage/logs${query ? `?${query}` : ""}`);
 
     const rawItems = Array.isArray(response?.items) ? response.items : [];
-    const rawFilters = response?.filters;
     const rawStats = response?.stats;
 
     return {
@@ -171,20 +263,7 @@ export const usageApi = {
         typeof response?.size === "number"
           ? response.size
           : (params.size ?? 50),
-      filters: {
-        api_keys: Array.isArray(rawFilters?.api_keys)
-          ? rawFilters.api_keys
-          : [],
-        api_key_names:
-          rawFilters?.api_key_names &&
-          typeof rawFilters.api_key_names === "object"
-            ? rawFilters.api_key_names
-            : {},
-        models: Array.isArray(rawFilters?.models) ? rawFilters.models : [],
-        channels: Array.isArray(rawFilters?.channels)
-          ? rawFilters.channels
-          : [],
-      },
+      filters: normalizeFilterOptions(response?.filters),
       stats: {
         total: typeof rawStats?.total === "number" ? rawStats.total : 0,
         success_rate:
@@ -263,9 +342,14 @@ export const usageApi = {
     const query = new URLSearchParams({ days: String(days) });
     if (apiKey?.trim()) query.set("api_key", apiKey.trim());
     appendMultiValueQuery(query, "channel_name", channelNames);
-    return apiClient.get<MonitorFiltersResponse>(
-      `/monitor/filters?${query.toString()}`,
-    );
+    return apiClient
+      .get<Partial<MonitorFiltersResponse> | undefined>(
+        `/monitor/filters?${query.toString()}`,
+      )
+      .then((response) => ({
+        days: typeof response?.days === "number" ? response.days : days,
+        filters: normalizeFilterOptions(response?.filters),
+      }));
   },
 
   getMonitorSummary(
@@ -417,12 +501,7 @@ export interface MonitorSummaryResponse {
 
 export interface MonitorFiltersResponse {
   days: number;
-  filters: {
-    api_keys: string[];
-    api_key_names: Record<string, string>;
-    models: string[];
-    channels: string[];
-  };
+  filters: UsageFilterOptions;
 }
 
 export interface MonitorModelDistributionResponse {
@@ -525,12 +604,7 @@ export interface UsageLogsResponse {
   total: number;
   page: number;
   size: number;
-  filters: {
-    api_keys: string[];
-    api_key_names: Record<string, string>;
-    models: string[];
-    channels: string[];
-  };
+  filters: UsageFilterOptions;
   stats: {
     total: number;
     success_rate: number;

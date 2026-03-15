@@ -33,7 +33,7 @@ func (h *Handler) GetUsageLogs(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	params.ChannelNames = channelResolver.ResolveRawChannelNames(selectedChannels)
+	params.ChannelFilter = channelResolver.ResolveChannelFilter(selectedChannels)
 
 	result, err := usage.QueryLogs(params)
 	if err != nil {
@@ -58,7 +58,11 @@ func (h *Handler) GetUsageLogs(c *gin.Context) {
 	if filters.APIKeyNames == nil {
 		filters.APIKeyNames = map[string]string{}
 	}
+	if filters.ChannelOptions == nil {
+		filters.ChannelOptions = []usage.ChannelOption{}
+	}
 	filters.Channels = channelResolver.displayChannelNames
+	filters.ChannelOptions = channelResolver.channelOptions
 
 	stats, err := usage.QueryStats(params)
 	if err != nil {

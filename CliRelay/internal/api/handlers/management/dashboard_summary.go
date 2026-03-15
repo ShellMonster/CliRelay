@@ -53,7 +53,7 @@ func (h *Handler) GetDashboardSummary(c *gin.Context) {
 		days = v
 	}
 
-	usageSummary, err := usage.QueryDashboardSummary(days, "", "", nil)
+	usageSummary, err := usage.QueryDashboardSummary(days, "", "", usage.ChannelFilter{})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -72,15 +72,15 @@ func (h *Handler) GetDashboardSummary(c *gin.Context) {
 			"total_tokens":     usageSummary.TotalTokens,
 		},
 		"counts": gin.H{
-			"api_keys":         apiKeyCount,
-			"providers_total":  providerTotal,
-			"gemini_keys":      geminiCount,
-			"claude_keys":      claudeCount,
-			"codex_keys":       codexCount,
+			"api_keys":          apiKeyCount,
+			"providers_total":   providerTotal,
+			"gemini_keys":       geminiCount,
+			"claude_keys":       claudeCount,
+			"codex_keys":        codexCount,
 			"codex_compat_keys": codexCompatCount,
-			"vertex_keys":      vertexCount,
-			"openai_providers": openaiCount,
-			"auth_files":       authFileCount,
+			"vertex_keys":       vertexCount,
+			"openai_providers":  openaiCount,
+			"auth_files":        authFileCount,
 		},
 		"days": days,
 	})

@@ -37,12 +37,12 @@ func (h *Handler) GetMonitorSummary(c *gin.Context) {
 	days := intQueryDefault(c, "days", 7)
 	apiKey := strings.TrimSpace(c.Query("api_key"))
 	model := strings.TrimSpace(c.Query("model"))
-	channelNames, err := h.resolveMonitorRawChannelNames(days, apiKey, multiQueryValues(c, "channel_name"))
+	channelFilter, err := h.resolveMonitorChannelFilter(days, apiKey, multiQueryValues(c, "channel_name"))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	summary, err := usage.QueryDashboardSummary(days, apiKey, model, channelNames)
+	summary, err := usage.QueryDashboardSummary(days, apiKey, model, channelFilter)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -55,12 +55,12 @@ func (h *Handler) GetMonitorModelDistribution(c *gin.Context) {
 	limit := intQueryDefault(c, "limit", 10)
 	apiKey := strings.TrimSpace(c.Query("api_key"))
 	model := strings.TrimSpace(c.Query("model"))
-	channelNames, err := h.resolveMonitorRawChannelNames(days, apiKey, multiQueryValues(c, "channel_name"))
+	channelFilter, err := h.resolveMonitorChannelFilter(days, apiKey, multiQueryValues(c, "channel_name"))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	points, err := usage.QueryModelDistribution(days, limit, apiKey, model, channelNames)
+	points, err := usage.QueryModelDistribution(days, limit, apiKey, model, channelFilter)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -72,12 +72,12 @@ func (h *Handler) GetMonitorDailyTrend(c *gin.Context) {
 	days := intQueryDefault(c, "days", 7)
 	apiKey := strings.TrimSpace(c.Query("api_key"))
 	model := strings.TrimSpace(c.Query("model"))
-	channelNames, err := h.resolveMonitorRawChannelNames(days, apiKey, multiQueryValues(c, "channel_name"))
+	channelFilter, err := h.resolveMonitorChannelFilter(days, apiKey, multiQueryValues(c, "channel_name"))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	points, err := usage.QueryDailyTrend(days, apiKey, model, channelNames)
+	points, err := usage.QueryDailyTrend(days, apiKey, model, channelFilter)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -87,14 +87,15 @@ func (h *Handler) GetMonitorDailyTrend(c *gin.Context) {
 
 func (h *Handler) GetMonitorHourlySeries(c *gin.Context) {
 	hours := intQueryDefault(c, "hours", 24)
+	days := (hours + 23) / 24
 	apiKey := strings.TrimSpace(c.Query("api_key"))
 	model := strings.TrimSpace(c.Query("model"))
-	channelNames, err := h.resolveMonitorRawChannelNames((hours+23)/24, apiKey, multiQueryValues(c, "channel_name"))
+	channelFilter, err := h.resolveMonitorChannelFilter(days, apiKey, multiQueryValues(c, "channel_name"))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	points, err := usage.QueryHourlySeries(hours, apiKey, model, channelNames)
+	points, err := usage.QueryHourlySeries(hours, apiKey, model, channelFilter)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -107,12 +108,12 @@ func (h *Handler) GetMonitorChannelStats(c *gin.Context) {
 	limit := intQueryDefault(c, "limit", 10)
 	apiKey := strings.TrimSpace(c.Query("api_key"))
 	model := strings.TrimSpace(c.Query("model"))
-	channelNames, err := h.resolveMonitorRawChannelNames(days, apiKey, multiQueryValues(c, "channel_name"))
+	channelFilter, err := h.resolveMonitorChannelFilter(days, apiKey, multiQueryValues(c, "channel_name"))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	channels, models, err := usage.QueryChannelStats(days, apiKey, model, channelNames, limit)
+	channels, models, err := usage.QueryChannelStats(days, apiKey, model, channelFilter, limit)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -129,12 +130,12 @@ func (h *Handler) GetMonitorFailureStats(c *gin.Context) {
 	limit := intQueryDefault(c, "limit", 10)
 	apiKey := strings.TrimSpace(c.Query("api_key"))
 	model := strings.TrimSpace(c.Query("model"))
-	channelNames, err := h.resolveMonitorRawChannelNames(days, apiKey, multiQueryValues(c, "channel_name"))
+	channelFilter, err := h.resolveMonitorChannelFilter(days, apiKey, multiQueryValues(c, "channel_name"))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	channels, models, err := usage.QueryFailureStats(days, apiKey, model, channelNames, limit)
+	channels, models, err := usage.QueryFailureStats(days, apiKey, model, channelFilter, limit)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -149,6 +150,7 @@ func (h *Handler) GetMonitorFailureStats(c *gin.Context) {
 func (h *Handler) GetMonitorFilters(c *gin.Context) {
 	days := intQueryDefault(c, "days", 7)
 	apiKey := strings.TrimSpace(c.Query("api_key"))
+	selectedChannels := multiQueryValues(c, "channel_name")
 	channelResolver, err := h.buildUsageChannelResolver(usage.LogQueryParams{
 		Days:   days,
 		APIKey: apiKey,
@@ -157,9 +159,9 @@ func (h *Handler) GetMonitorFilters(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	channelNames := channelResolver.ResolveRawChannelNames(multiQueryValues(c, "channel_name"))
+	channelFilter := channelResolver.ResolveChannelFilter(selectedChannels)
 
-	filters, err := usage.QueryMonitorFilters(days, apiKey, channelNames)
+	filters, err := usage.QueryMonitorFilters(days, apiKey, channelFilter)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -173,10 +175,14 @@ func (h *Handler) GetMonitorFilters(c *gin.Context) {
 	if filters.Channels == nil {
 		filters.Channels = []string{}
 	}
+	if filters.ChannelOptions == nil {
+		filters.ChannelOptions = []usage.ChannelOption{}
+	}
 	if filters.APIKeyNames == nil {
 		filters.APIKeyNames = map[string]string{}
 	}
 	filters.Channels = channelResolver.displayChannelNames
+	filters.ChannelOptions = channelResolver.channelOptions
 
 	filters.APIKeyNames = make(map[string]string, len(filters.APIKeys))
 	for _, key := range filters.APIKeys {
@@ -191,13 +197,36 @@ func (h *Handler) GetMonitorFilters(c *gin.Context) {
 	})
 }
 
-func (h *Handler) resolveMonitorRawChannelNames(days int, apiKey string, selected []string) ([]string, error) {
+func (h *Handler) resolveMonitorChannelFilter(days int, apiKey string, selected []string) (usage.ChannelFilter, error) {
+	if !usageChannelSelectionNeedsRefs(selected) {
+		return h.newUsageChannelResolver(nil).ResolveChannelFilter(selected), nil
+	}
 	channelResolver, err := h.buildUsageChannelResolver(usage.LogQueryParams{
 		Days:   days,
 		APIKey: apiKey,
 	})
 	if err != nil {
-		return nil, err
+		return usage.ChannelFilter{}, err
 	}
-	return channelResolver.ResolveRawChannelNames(selected), nil
+	return channelResolver.ResolveChannelFilter(selected), nil
+}
+
+func usageChannelSelectionNeedsRefs(selected []string) bool {
+	for _, item := range selected {
+		value := strings.TrimSpace(item)
+		if value == "" {
+			continue
+		}
+		if _, ok := parseUsageAuthChannelToken(value); ok {
+			continue
+		}
+		if _, ok := parseUsageLegacyNameToken(value); ok {
+			continue
+		}
+		if _, ok := parseUsageSourceChannelToken(value); ok {
+			continue
+		}
+		return true
+	}
+	return false
 }

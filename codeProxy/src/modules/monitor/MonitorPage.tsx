@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   useTransition,
 } from "react";
@@ -14,7 +15,10 @@ import {
   ShieldCheck,
   Sigma,
 } from "lucide-react";
-import { usageApi } from "@/lib/http/apis/usage";
+import {
+  usageApi,
+  type MonitorFiltersResponse,
+} from "@/lib/http/apis/usage";
 import { formatNumber, formatRate } from "@/modules/monitor/monitor-utils";
 import { AnimatedNumber } from "@/modules/ui/AnimatedNumber";
 import { MultiSelect } from "@/modules/ui/MultiSelect";
@@ -50,6 +54,14 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/modules/ui/Tabs";
 import { useToast } from "@/modules/ui/ToastProvider";
 
+const EMPTY_FILTER_OPTIONS: MonitorFiltersResponse["filters"] = {
+  api_keys: [],
+  api_key_names: {},
+  models: [],
+  channels: [],
+  channel_options: [],
+};
+
 export function MonitorPage() {
   const { notify } = useToast();
   const {
@@ -81,17 +93,8 @@ export function MonitorPage() {
   });
 
   const [timeRange, setTimeRange] = useState<TimeRange>(7);
-  const [filterOptions, setFilterOptions] = useState<{
-    api_keys: string[];
-    api_key_names: Record<string, string>;
-    models: string[];
-    channels: string[];
-  }>({
-    api_keys: [],
-    api_key_names: {},
-    models: [],
-    channels: [],
-  });
+  const [filterOptions, setFilterOptions] =
+    useState<MonitorFiltersResponse["filters"]>(EMPTY_FILTER_OPTIONS);
   const [pendingApiFilter, setPendingApiFilter] = useState("");
   const [pendingModelFilter, setPendingModelFilter] = useState("");
   const [pendingChannelFilter, setPendingChannelFilter] = useState<string[]>(
@@ -108,6 +111,8 @@ export function MonitorPage() {
   const [error, setError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(true);
   const [isPending, startTransition] = useTransition();
+  const refreshRequestIdRef = useRef(0);
+  const filterRequestIdRef = useRef(0);
   const [summary, setSummary] = useState({
     requestCount: 0,
     successCount: 0,
@@ -149,6 +154,8 @@ export function MonitorPage() {
   });
 
   const refreshData = useCallback(async () => {
+    const requestId = refreshRequestIdRef.current + 1;
+    refreshRequestIdRef.current = requestId;
     setIsRefreshing(true);
     setError(null);
     try {
@@ -175,6 +182,9 @@ export function MonitorPage() {
           ),
           usageApi.getMonitorHourly(24, apiFilter, modelFilter, channelFilter),
         ]);
+      if (requestId !== refreshRequestIdRef.current) {
+        return;
+      }
       startTransition(() => {
         setSummary({
           requestCount: summaryRes.summary.TotalRequests,
@@ -322,11 +332,16 @@ export function MonitorPage() {
         });
       });
     } catch (requestError) {
+      if (requestId !== refreshRequestIdRef.current) {
+        return;
+      }
       const message =
         requestError instanceof Error ? requestError.message : "数据获取失败";
       setError(message);
     } finally {
-      setIsRefreshing(false);
+      if (requestId === refreshRequestIdRef.current) {
+        setIsRefreshing(false);
+      }
     }
   }, [apiFilter, channelFilter, modelFilter, modelMetric, timeRange]);
 
@@ -339,39 +354,27 @@ export function MonitorPage() {
   }, [pendingApiFilter, pendingChannelFilter, pendingModelFilter]);
 
   const fetchFilterOptions = useCallback(async () => {
+    const requestId = filterRequestIdRef.current + 1;
+    filterRequestIdRef.current = requestId;
     try {
       const response = await usageApi.getMonitorFilters(
         timeRange,
         pendingApiFilter || undefined,
         pendingChannelFilter,
       );
-      const nextFilters = response.filters ?? {
-        api_keys: [],
-        api_key_names: {},
-        models: [],
-        channels: [],
-      };
-
-      const normalized = {
-        api_keys: Array.isArray(nextFilters.api_keys)
-          ? nextFilters.api_keys
-          : [],
-        api_key_names:
-          nextFilters.api_key_names &&
-          typeof nextFilters.api_key_names === "object"
-            ? nextFilters.api_key_names
-            : {},
-        models: Array.isArray(nextFilters.models) ? nextFilters.models : [],
-        channels: Array.isArray(nextFilters.channels)
-          ? nextFilters.channels
-          : [],
-      };
+      if (requestId !== filterRequestIdRef.current) {
+        return;
+      }
+      const normalized = response.filters ?? EMPTY_FILTER_OPTIONS;
       setFilterOptions(normalized);
 
       const modelExists = (value: string) =>
         !value || normalized.models.includes(value);
+      const validChannelValues = new Set(
+        normalized.channel_options.map((item) => item.value),
+      );
       const normalizeChannelSelection = (value: string[]) =>
-        value.filter((item) => normalized.channels.includes(item));
+        value.filter((item) => validChannelValues.has(item));
       if (!modelExists(pendingModelFilter)) {
         setPendingModelFilter("");
       }
@@ -393,6 +396,9 @@ export function MonitorPage() {
         }
       }
     } catch (requestError) {
+      if (requestId !== filterRequestIdRef.current) {
+        return;
+      }
       const message =
         requestError instanceof Error ? requestError.message : "筛选项获取失败";
       notify({ type: "error", message });
@@ -476,11 +482,8 @@ export function MonitorPage() {
   }, [filterOptions.models]);
 
   const channelOptions = useMemo(() => {
-    return filterOptions.channels.map((item) => ({
-      value: item,
-      label: item,
-    }));
-  }, [filterOptions.channels]);
+    return filterOptions.channel_options;
+  }, [filterOptions.channel_options]);
 
   const hourlyModelPalette = useMemo(() => {
     const palette = [
