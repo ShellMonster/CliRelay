@@ -15,13 +15,11 @@ import {
 } from "lucide-react";
 import {
   ampcodeApi,
-  apiCallApi,
-  getApiCallErrorMessage,
   modelsApi,
   providersApi,
   usageApi,
 } from "@/lib/http/apis";
-import type { ApiCallResult, OpenAIProvider, ProviderSimpleConfig } from "@/lib/http/types";
+import type { OpenAIProvider, ProviderSimpleConfig } from "@/lib/http/types";
 import { Button } from "@/modules/ui/Button";
 import { Card } from "@/modules/ui/Card";
 import { EmptyState } from "@/modules/ui/EmptyState";
@@ -47,13 +45,11 @@ import {
   type StatusBarData,
 } from "@/modules/providers/provider-usage";
 import {
-  buildModelsEndpoint,
   buildOpenAIDraft,
   buildProviderKeyDraft,
   commitModelEntries,
   hasDisableAllModelsRule,
   maskApiKey,
-  normalizeDiscoveredModels,
   excludedModelsFromText,
   readBool,
   readString,
@@ -65,6 +61,14 @@ import {
   type OpenAIDraft,
   type ProviderKeyDraft,
 } from "@/modules/providers/providers-helpers";
+
+const formatDiscoveryEndpoints = (
+  provider: "openai" | "claude" | "codex" | "codex-compat" | "gemini",
+  baseUrl: string,
+) => {
+  const endpoints = modelsApi.buildModelDiscoveryEndpoints(provider, baseUrl);
+  return endpoints.length ? endpoints.join(" -> ") : "--";
+};
 
 export function ProvidersPage() {
   const { notify } = useToast();
@@ -410,22 +414,16 @@ export function ProvidersPage() {
           notify({ type: "info", message: "请先填写 baseUrl" });
           return;
         }
-        const hasAuthHeader = Boolean(headers.Authorization || headers.authorization);
-        if (!hasAuthHeader && apiKey) {
-          headers.Authorization = `Bearer ${apiKey}`;
-        }
-
-        const result: ApiCallResult = await apiCallApi.request({
-          method: "GET",
-          url: buildModelsEndpoint(baseUrl),
-          header: Object.keys(headers).length ? headers : undefined,
-        });
-        if (result.statusCode < 200 || result.statusCode >= 300) {
-          throw new Error(getApiCallErrorMessage(result));
-        }
-        list = normalizeDiscoveredModels(result.body ?? result.bodyText);
+        const models = await modelsApi.fetchProviderModelsViaApiCall(
+          editKeyType,
+          baseUrl,
+          apiKey,
+          headers,
+        );
+        list = models.map((model) => ({ id: model.name }));
       } else if (editKeyType === "claude") {
-        const models = await modelsApi.fetchClaudeModelsViaApiCall(
+        const models = await modelsApi.fetchProviderModelsViaApiCall(
+          "claude",
           keyDraft.baseUrl.trim(),
           apiKey,
           headers,
@@ -434,7 +432,8 @@ export function ProvidersPage() {
       } else if (editKeyType === "gemini") {
         if (keyDraft.baseUrl.trim()) {
           try {
-            const models = await modelsApi.fetchModelsViaApiCall(
+            const models = await modelsApi.fetchProviderModelsViaApiCall(
+              "gemini",
               keyDraft.baseUrl.trim(),
               apiKey,
               headers,
@@ -774,8 +773,6 @@ export function ProvidersPage() {
     setDiscoveredModels([]);
     setDiscoverSelected(new Set());
     try {
-      const endpoint = buildModelsEndpoint(baseUrl);
-
       const providerHeaders = keyValueEntriesToRecord(openaiDraft.headersEntries) ?? {};
       const firstEntry = openaiDraft.apiKeyEntries.find((entry) => entry.apiKey.trim());
       const keyHeaders = firstEntry
@@ -783,24 +780,16 @@ export function ProvidersPage() {
         : {};
 
       const headers: Record<string, string> = { ...providerHeaders, ...keyHeaders };
-
-      const hasAuthHeader = Boolean(headers.Authorization || (headers as any).authorization);
       const firstKey = firstEntry?.apiKey.trim();
-      if (!hasAuthHeader && firstKey) {
-        headers.Authorization = `Bearer ${firstKey}`;
-      }
-
-      const result: ApiCallResult = await apiCallApi.request({
-        method: "GET",
-        url: endpoint,
-        header: Object.keys(headers).length ? headers : undefined,
-      });
-      if (result.statusCode < 200 || result.statusCode >= 300) {
-        throw new Error(getApiCallErrorMessage(result));
-      }
-      const list = normalizeDiscoveredModels(result.body ?? result.bodyText);
+      const models = await modelsApi.fetchProviderModelsViaApiCall(
+        "openai",
+        baseUrl,
+        firstKey,
+        headers,
+      );
+      const list = models.map((model) => ({ id: model.name }));
       setDiscoveredModels(list);
-      setDiscoverSelected(new Set(list.map((m) => m.id)));
+      setDiscoverSelected(new Set(list.map((model) => model.id)));
     } catch (err: unknown) {
       notify({ type: "error", message: err instanceof Error ? err.message : "拉取模型失败" });
     } finally {
@@ -1419,14 +1408,14 @@ export function ProvidersPage() {
         description={
           editKeyType === "vertex"
             ? "Vertex 的 models 必须填写 alias（name => alias）。Excluded Models 中使用 * 可一键禁用该配置。"
-            : editKeyType === "codex" || editKeyType === "codex-compat"
-              ? editKeyType === "codex-compat"
-                ? "支持 Excluded Models、自定义 headers / models，以及通过 /models 拉取并合并模型；默认 prefix 为 codex-compat，并对 OpenAI Responses 事件 ID 做稳定化。"
-                : "支持 Excluded Models、自定义 headers / models，以及通过 /models 拉取并合并 Codex 模型。"
-              : editKeyType === "claude"
-                ? "支持 Excluded Models、自定义 headers / models，以及通过 Claude /v1/models 拉取并合并模型。"
+              : editKeyType === "codex" || editKeyType === "codex-compat"
+                ? editKeyType === "codex-compat"
+                  ? "支持 Excluded Models、自定义 headers / models，以及自动兼容尝试 /models 与 /v1/models 拉取并合并模型；默认 prefix 为 codex-compat，并对 OpenAI Responses 事件 ID 做稳定化。"
+                  : "支持 Excluded Models、自定义 headers / models，以及自动兼容尝试 /models 与 /v1/models 拉取并合并 Codex 模型。"
+                : editKeyType === "claude"
+                  ? "支持 Excluded Models、自定义 headers / models，以及自动兼容尝试 Claude /v1/models 与 /models 拉取并合并模型。"
                 : editKeyType === "gemini"
-                  ? "支持 Excluded Models、自定义 headers / models，以及获取 Gemini 模型并合并到当前配置。"
+                  ? "支持 Excluded Models、自定义 headers / models，以及自动兼容尝试 /models 与 /v1/models 获取 Gemini 模型并合并到当前配置。"
               : "支持 Excluded Models（每行一个；用 * 一键禁用）、自定义 headers 与 models。"
         }
         onClose={closeKeyEditor}
@@ -1630,12 +1619,12 @@ export function ProvidersPage() {
                 </div>
                 <p className="text-xs text-slate-500 dark:text-white/55">
                   {editKeyType === "claude"
-                    ? `/v1/models 拉取地址：${modelsApi.buildClaudeModelsEndpoint(keyDraft.baseUrl)}`
+                    ? `自动尝试拉取地址：${formatDiscoveryEndpoints("claude", keyDraft.baseUrl)}`
                     : editKeyType === "gemini"
                       ? keyDraft.baseUrl.trim()
-                        ? `/models 拉取地址：${buildModelsEndpoint(keyDraft.baseUrl)}（失败时回退静态模型定义）`
+                        ? `自动尝试拉取地址：${formatDiscoveryEndpoints("gemini", keyDraft.baseUrl)}（全部失败时回退静态模型定义）`
                         : "未填写 baseUrl：将回退使用静态模型定义"
-                      : `/models 拉取地址：${keyDraft.baseUrl.trim() ? buildModelsEndpoint(keyDraft.baseUrl) : "--"}${editKeyType === "codex-compat" ? "；建议保留 codex-compat prefix 以避免和原 Codex 冲突" : ""}`}
+                      : `自动尝试拉取地址：${formatDiscoveryEndpoints(editKeyType === "codex-compat" ? "codex-compat" : "codex", keyDraft.baseUrl)}${editKeyType === "codex-compat" ? "；建议保留 codex-compat prefix 以避免和原 Codex 冲突" : ""}`}
                 </p>
                 <ModelInputList
                   title="模型列表（可选）"
@@ -1823,8 +1812,8 @@ export function ProvidersPage() {
                 placeholder="baseUrl"
               />
               <p className="text-xs text-slate-500 dark:text-white/55">
-                /models 拉取地址：
-                {openaiDraft.baseUrl.trim() ? buildModelsEndpoint(openaiDraft.baseUrl) : "--"}
+                自动尝试拉取地址：
+                {formatDiscoveryEndpoints("openai", openaiDraft.baseUrl)}
               </p>
             </div>
           </div>

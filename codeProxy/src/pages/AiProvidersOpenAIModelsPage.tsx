@@ -9,7 +9,6 @@ import { useEdgeSwipeBack } from "@/hooks/useEdgeSwipeBack";
 import { modelsApi } from "@/lib/http/apis";
 import type { ModelInfo } from "@/utils/models";
 import { buildHeaderObject } from "@/utils/headers";
-import { buildOpenAIModelsEndpoint } from "@/components/providers/utils";
 import type { OpenAIEditOutletContext } from "./AiProvidersOpenAIEditLayout";
 import styles from "./AiProvidersPage.module.scss";
 import layoutStyles from "./AiProvidersEditLayout.module.scss";
@@ -108,7 +107,7 @@ export function AiProvidersOpenAIModelsPage() {
 
   useEffect(() => {
     if (initialLoading) return;
-    setEndpoint(buildOpenAIModelsEndpoint(form.baseUrl));
+    setEndpoint(modelsApi.buildModelDiscoveryEndpoints("openai", form.baseUrl).join(" -> "));
     setModels([]);
     setSearch("");
     setSelected(new Set());

@@ -5,36 +5,45 @@ import type { ModelInfo } from "@/utils/models";
 
 const DEFAULT_CLAUDE_BASE_URL = "https://api.anthropic.com";
 const DEFAULT_ANTHROPIC_VERSION = "2023-06-01";
-const CLAUDE_MODELS_IN_FLIGHT = new Map<string, Promise<ModelInfo[]>>();
+const MODELS_IN_FLIGHT = new Map<string, Promise<ModelInfo[]>>();
+
+export type ModelDiscoveryProvider =
+  | "openai"
+  | "claude"
+  | "codex"
+  | "codex-compat"
+  | "gemini";
 
 const normalizeApiBase = (baseUrl: string): string => {
-  const trimmed = baseUrl.trim();
+  let trimmed = baseUrl.trim();
   if (!trimmed) return "";
-  return trimmed.replace(/\/+$/g, "");
+  trimmed = trimmed.replace(/\/?v0\/management\/?$/i, "");
+  trimmed = trimmed.replace(/\/+$/g, "");
+  if (!/^https?:\/\//i.test(trimmed)) {
+    trimmed = `http://${trimmed}`;
+  }
+  return trimmed;
 };
 
-const buildModelsEndpoint = (baseUrl: string): string => {
-  const normalized = normalizeApiBase(baseUrl);
+const buildDiscoveryBase = (baseUrl: string, fallbackBaseUrl = ""): string => {
+  const normalized = normalizeApiBase(baseUrl) || normalizeApiBase(fallbackBaseUrl);
   if (!normalized) return "";
-  if (/\/models$/i.test(normalized)) return normalized;
-  return `${normalized}/models`;
+  return normalized.replace(/\/v1\/models$/i, "").replace(/\/models$/i, "");
 };
 
-const buildV1ModelsEndpoint = (baseUrl: string): string => {
-  const normalized = normalizeApiBase(baseUrl);
+const buildRootModelsEndpoint = (baseUrl: string, fallbackBaseUrl = ""): string => {
+  const normalized = buildDiscoveryBase(baseUrl, fallbackBaseUrl);
   if (!normalized) return "";
-  if (/\/v1\/models$/i.test(normalized)) return normalized;
-  if (/\/v1$/i.test(normalized)) return `${normalized}/models`;
+  return `${normalized.replace(/\/v1$/i, "")}/models`;
+};
+
+const buildV1ModelsEndpoint = (baseUrl: string, fallbackBaseUrl = ""): string => {
+  const normalized = buildDiscoveryBase(baseUrl, fallbackBaseUrl);
+  if (!normalized) return "";
+  if (/\/v1$/i.test(normalized)) {
+    return `${normalized}/models`;
+  }
   return `${normalized}/v1/models`;
-};
-
-const buildClaudeModelsEndpoint = (baseUrl: string): string => {
-  const normalized = normalizeApiBase(baseUrl);
-  const fallback = normalized || DEFAULT_CLAUDE_BASE_URL;
-  let trimmed = fallback.replace(/\/+$/g, "");
-  trimmed = trimmed.replace(/\/v1\/models$/i, "");
-  trimmed = trimmed.replace(/\/v1(?:\/.*)?$/i, "");
-  return `${trimmed}/v1/models`;
 };
 
 const hasHeader = (headers: Record<string, string>, name: string) => {
@@ -42,13 +51,27 @@ const hasHeader = (headers: Record<string, string>, name: string) => {
   return Object.keys(headers).some((key) => key.toLowerCase() === target);
 };
 
+const getHeaderValue = (headers: Record<string, string>, name: string): string => {
+  const target = name.toLowerCase();
+  const entry = Object.entries(headers).find(([key]) => key.toLowerCase() === target);
+  return String(entry?.[1] ?? "").trim();
+};
+
 const resolveBearerTokenFromAuthorization = (headers: Record<string, string>): string => {
-  const entry = Object.entries(headers).find(([key]) => key.toLowerCase() === "authorization");
-  if (!entry) return "";
-  const value = String(entry[1] ?? "").trim();
+  const value = getHeaderValue(headers, "authorization");
   if (!value) return "";
   const match = value.match(/^Bearer\s+(.+)$/i);
   return match?.[1]?.trim() || "";
+};
+
+const resolveApiKeyCandidate = (apiKey: string | undefined, headers: Record<string, string>): string => {
+  const fieldValue = String(apiKey ?? "").trim();
+  if (fieldValue) return fieldValue;
+
+  const bearerValue = resolveBearerTokenFromAuthorization(headers);
+  if (bearerValue) return bearerValue;
+
+  return getHeaderValue(headers, "x-api-key");
 };
 
 const buildRequestSignature = (url: string, headers: Record<string, string>) => {
@@ -59,8 +82,150 @@ const buildRequestSignature = (url: string, headers: Record<string, string>) => 
   return `${url}||${signature}`;
 };
 
+const buildDiscoverySignature = (
+  provider: ModelDiscoveryProvider,
+  attempts: Array<{ url: string; headers: Record<string, string> }>,
+) => `${provider}||${attempts.map((attempt) => buildRequestSignature(attempt.url, attempt.headers)).join(";;")}`;
+
+const buildOpenAIAttemptHeaders = (
+  apiKey: string | undefined,
+  headers: Record<string, string>,
+): Record<string, string> => {
+  const resolvedHeaders: Record<string, string> = { ...headers };
+  const hasAuthHeader = hasHeader(resolvedHeaders, "authorization");
+  const resolvedApiKey = resolveApiKeyCandidate(apiKey, resolvedHeaders);
+  if (resolvedApiKey && !hasAuthHeader) {
+    resolvedHeaders.Authorization = `Bearer ${resolvedApiKey}`;
+  }
+  return resolvedHeaders;
+};
+
+const buildAnthropicAttemptHeaders = (
+  apiKey: string | undefined,
+  headers: Record<string, string>,
+): Record<string, string> => {
+  const resolvedHeaders: Record<string, string> = { ...headers };
+  const resolvedApiKey = resolveApiKeyCandidate(apiKey, resolvedHeaders);
+  if (resolvedApiKey && !hasHeader(resolvedHeaders, "x-api-key")) {
+    resolvedHeaders["x-api-key"] = resolvedApiKey;
+  }
+  if (!hasHeader(resolvedHeaders, "anthropic-version")) {
+    resolvedHeaders["anthropic-version"] = DEFAULT_ANTHROPIC_VERSION;
+  }
+  return resolvedHeaders;
+};
+
+const dedupeEndpoints = (endpoints: string[]) => {
+  const seen = new Set<string>();
+  return endpoints.filter((endpoint) => {
+    if (!endpoint) return false;
+    if (seen.has(endpoint)) return false;
+    seen.add(endpoint);
+    return true;
+  });
+};
+
+const buildModelDiscoveryEndpoints = (
+  provider: ModelDiscoveryProvider,
+  baseUrl: string,
+): string[] => {
+  if (provider === "claude") {
+    return dedupeEndpoints([
+      buildV1ModelsEndpoint(baseUrl, DEFAULT_CLAUDE_BASE_URL),
+      buildRootModelsEndpoint(baseUrl, DEFAULT_CLAUDE_BASE_URL),
+    ]);
+  }
+
+  return dedupeEndpoints([buildRootModelsEndpoint(baseUrl), buildV1ModelsEndpoint(baseUrl)]);
+};
+
+const buildDiscoveryAttempts = (
+  provider: ModelDiscoveryProvider,
+  baseUrl: string,
+  apiKey: string | undefined,
+  headers: Record<string, string>,
+) => {
+  const endpoints = buildModelDiscoveryEndpoints(provider, baseUrl);
+  if (provider === "claude") {
+    return endpoints.map((url, index) => ({
+      url,
+      headers:
+        index === 0
+          ? buildAnthropicAttemptHeaders(apiKey, headers)
+          : buildOpenAIAttemptHeaders(apiKey, headers),
+    }));
+  }
+
+  return endpoints.map((url) => ({
+    url,
+    headers: buildOpenAIAttemptHeaders(apiKey, headers),
+  }));
+};
+
+const getUnknownErrorMessage = (err: unknown) => {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "string") return err;
+  return "请求失败";
+};
+
+const fetchProviderModelsViaApiCall = async (
+  provider: ModelDiscoveryProvider,
+  baseUrl: string,
+  apiKey?: string,
+  headers: Record<string, string> = {},
+) => {
+  const attempts = buildDiscoveryAttempts(provider, baseUrl, apiKey, headers);
+  if (attempts.length === 0) {
+    throw new Error("Invalid base url");
+  }
+
+  const signature = buildDiscoverySignature(provider, attempts);
+  const existing = MODELS_IN_FLIGHT.get(signature);
+  if (existing) return existing;
+
+  const request = (async () => {
+    const errors: string[] = [];
+
+    for (const attempt of attempts) {
+      try {
+        const result = await apiCallApi.request({
+          method: "GET",
+          url: attempt.url,
+          header: Object.keys(attempt.headers).length ? attempt.headers : undefined,
+        });
+
+        if (result.statusCode < 200 || result.statusCode >= 300) {
+          throw new Error(getApiCallErrorMessage(result));
+        }
+
+        return normalizeModelList(result.body ?? result.bodyText, { dedupe: true });
+      } catch (err: unknown) {
+        errors.push(`${attempt.url}: ${getUnknownErrorMessage(err)}`);
+      }
+    }
+
+    if (errors.length === 1) {
+      throw new Error(errors[0]);
+    }
+    throw new Error(errors.join("；"));
+  })();
+
+  MODELS_IN_FLIGHT.set(signature, request);
+  try {
+    return await request;
+  } finally {
+    MODELS_IN_FLIGHT.delete(signature);
+  }
+};
+
 export const modelsApi = {
-  buildClaudeModelsEndpoint,
+  buildClaudeModelsEndpoint(baseUrl: string) {
+    return buildModelDiscoveryEndpoints("claude", baseUrl)[0] ?? "";
+  },
+
+  buildModelDiscoveryEndpoints,
+
+  fetchProviderModelsViaApiCall,
 
   async getStaticModelDefinitions(channel: string) {
     const normalized = String(channel ?? "").trim().toLowerCase();
@@ -99,29 +264,7 @@ export const modelsApi = {
     apiKey?: string,
     headers: Record<string, string> = {},
   ) {
-    const endpoint = buildModelsEndpoint(baseUrl);
-    if (!endpoint) {
-      throw new Error("Invalid base url");
-    }
-
-    const resolvedHeaders: Record<string, string> = { ...headers };
-    const hasAuthHeader =
-      typeof resolvedHeaders.Authorization === "string" || hasHeader(resolvedHeaders, "authorization");
-    if (apiKey && !hasAuthHeader) {
-      resolvedHeaders.Authorization = `Bearer ${apiKey}`;
-    }
-
-    const result = await apiCallApi.request({
-      method: "GET",
-      url: endpoint,
-      header: Object.keys(resolvedHeaders).length ? resolvedHeaders : undefined,
-    });
-
-    if (result.statusCode < 200 || result.statusCode >= 300) {
-      throw new Error(getApiCallErrorMessage(result));
-    }
-
-    return normalizeModelList(result.body ?? result.bodyText, { dedupe: true });
+    return fetchProviderModelsViaApiCall("openai", baseUrl, apiKey, headers);
   },
 
   async fetchClaudeModelsViaApiCall(
@@ -129,47 +272,6 @@ export const modelsApi = {
     apiKey?: string,
     headers: Record<string, string> = {},
   ) {
-    const endpoint = buildClaudeModelsEndpoint(baseUrl);
-    if (!endpoint) {
-      throw new Error("Invalid base url");
-    }
-
-    const resolvedHeaders: Record<string, string> = { ...headers };
-    let resolvedApiKey = String(apiKey ?? "").trim();
-    if (!resolvedApiKey && !hasHeader(resolvedHeaders, "x-api-key")) {
-      resolvedApiKey = resolveBearerTokenFromAuthorization(resolvedHeaders);
-    }
-
-    if (resolvedApiKey && !hasHeader(resolvedHeaders, "x-api-key")) {
-      resolvedHeaders["x-api-key"] = resolvedApiKey;
-    }
-    if (!hasHeader(resolvedHeaders, "anthropic-version")) {
-      resolvedHeaders["anthropic-version"] = DEFAULT_ANTHROPIC_VERSION;
-    }
-
-    const signature = buildRequestSignature(endpoint, resolvedHeaders);
-    const existing = CLAUDE_MODELS_IN_FLIGHT.get(signature);
-    if (existing) return existing;
-
-    const request = (async () => {
-      const result = await apiCallApi.request({
-        method: "GET",
-        url: endpoint,
-        header: Object.keys(resolvedHeaders).length ? resolvedHeaders : undefined,
-      });
-
-      if (result.statusCode < 200 || result.statusCode >= 300) {
-        throw new Error(getApiCallErrorMessage(result));
-      }
-
-      return normalizeModelList(result.body ?? result.bodyText, { dedupe: true });
-    })();
-
-    CLAUDE_MODELS_IN_FLIGHT.set(signature, request);
-    try {
-      return await request;
-    } finally {
-      CLAUDE_MODELS_IN_FLIGHT.delete(signature);
-    }
+    return fetchProviderModelsViaApiCall("claude", baseUrl, apiKey, headers);
   },
 };

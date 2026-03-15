@@ -85,7 +85,9 @@ export function AiProvidersClaudeModelsPage() {
   useEffect(() => {
     if (initialLoading) return;
 
-    const nextEndpoint = modelsApi.buildClaudeModelsEndpoint(form.baseUrl ?? "");
+    const nextEndpoint = modelsApi
+      .buildModelDiscoveryEndpoints("claude", form.baseUrl ?? "")
+      .join(" -> ");
     setEndpoint(nextEndpoint);
     setModels([]);
     setSearch("");

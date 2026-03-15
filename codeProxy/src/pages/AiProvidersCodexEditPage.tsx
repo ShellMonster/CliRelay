@@ -14,11 +14,7 @@ import type { ProviderKeyConfig } from "@/types";
 import { buildHeaderObject, headersToEntries } from "@/utils/headers";
 import type { ModelInfo } from "@/utils/models";
 import { entriesToModels } from "@/components/ui/modelInputListUtils";
-import {
-  buildOpenAIModelsEndpoint,
-  excludedModelsToText,
-  parseExcludedModels,
-} from "@/components/providers/utils";
+import { excludedModelsToText, parseExcludedModels } from "@/components/providers/utils";
 import type { ProviderFormState } from "@/components/providers";
 import layoutStyles from "./AiProvidersEditLayout.module.scss";
 import styles from "./AiProvidersPage.module.scss";
@@ -161,7 +157,7 @@ export function AiProvidersCodexEditPage() {
     !invalidIndexParam &&
     !invalidIndex;
   const modelsEndpoint = useMemo(
-    () => buildOpenAIModelsEndpoint(form.baseUrl ?? ""),
+    () => modelsApi.buildModelDiscoveryEndpoints("codex", form.baseUrl ?? "").join(" -> "),
     [form.baseUrl],
   );
 
@@ -286,7 +282,8 @@ export function AiProvidersCodexEditPage() {
         (key) => key.toLowerCase() === "authorization",
       );
       const apiKey = form.apiKey.trim();
-      const list = await modelsApi.fetchModelsViaApiCall(
+      const list = await modelsApi.fetchProviderModelsViaApiCall(
+        "codex",
         baseUrl,
         hasAuthHeader ? undefined : apiKey || undefined,
         headerObject,
