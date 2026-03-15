@@ -243,7 +243,10 @@ export function AiProvidersAmpcodeEditPage() {
           label={t("ai_providers.ampcode_upstream_url_label")}
           placeholder={t("ai_providers.ampcode_upstream_url_placeholder")}
           value={form.upstreamUrl}
-          onChange={(e) => setForm((prev) => ({ ...prev, upstreamUrl: e.target.value }))}
+          onChange={(e) => {
+            const value = e.target.value;
+            setForm((prev) => ({ ...prev, upstreamUrl: value }));
+          }}
           disabled={loading || saving || disableControls}
           hint={t("ai_providers.ampcode_upstream_url_hint")}
         />
@@ -252,7 +255,10 @@ export function AiProvidersAmpcodeEditPage() {
           placeholder={t("ai_providers.ampcode_upstream_api_key_placeholder")}
           type="password"
           value={form.upstreamApiKey}
-          onChange={(e) => setForm((prev) => ({ ...prev, upstreamApiKey: e.target.value }))}
+          onChange={(e) => {
+            const value = e.target.value;
+            setForm((prev) => ({ ...prev, upstreamApiKey: value }));
+          }}
           disabled={loading || saving || disableControls}
           hint={t("ai_providers.ampcode_upstream_api_key_hint")}
         />

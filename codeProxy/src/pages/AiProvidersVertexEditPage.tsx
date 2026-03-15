@@ -229,14 +229,20 @@ export function AiProvidersVertexEditPage() {
               label={t("ai_providers.vertex_add_modal_key_label")}
               placeholder={t("ai_providers.vertex_add_modal_key_placeholder")}
               value={form.apiKey}
-              onChange={(e) => setForm((prev) => ({ ...prev, apiKey: e.target.value }))}
+              onChange={(e) => {
+                const value = e.target.value;
+                setForm((prev) => ({ ...prev, apiKey: value }));
+              }}
               disabled={disableControls || saving}
             />
             <Input
               label={t("ai_providers.prefix_label")}
               placeholder={t("ai_providers.prefix_placeholder")}
               value={form.prefix ?? ""}
-              onChange={(e) => setForm((prev) => ({ ...prev, prefix: e.target.value }))}
+              onChange={(e) => {
+                const value = e.target.value;
+                setForm((prev) => ({ ...prev, prefix: value }));
+              }}
               hint={t("ai_providers.prefix_hint")}
               disabled={disableControls || saving}
             />
@@ -244,14 +250,20 @@ export function AiProvidersVertexEditPage() {
               label={t("ai_providers.vertex_add_modal_url_label")}
               placeholder={t("ai_providers.vertex_add_modal_url_placeholder")}
               value={form.baseUrl ?? ""}
-              onChange={(e) => setForm((prev) => ({ ...prev, baseUrl: e.target.value }))}
+              onChange={(e) => {
+                const value = e.target.value;
+                setForm((prev) => ({ ...prev, baseUrl: value }));
+              }}
               disabled={disableControls || saving}
             />
             <Input
               label={t("ai_providers.vertex_add_modal_proxy_label")}
               placeholder={t("ai_providers.vertex_add_modal_proxy_placeholder")}
               value={form.proxyUrl ?? ""}
-              onChange={(e) => setForm((prev) => ({ ...prev, proxyUrl: e.target.value }))}
+              onChange={(e) => {
+                const value = e.target.value;
+                setForm((prev) => ({ ...prev, proxyUrl: value }));
+              }}
               disabled={disableControls || saving}
             />
             <HeaderInputList

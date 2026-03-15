@@ -533,21 +533,30 @@ export function AiProvidersOpenAIEditPage() {
             <Input
               label={t("ai_providers.openai_add_modal_name_label")}
               value={form.name}
-              onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+              onChange={(e) => {
+                const value = e.target.value;
+                setForm((prev) => ({ ...prev, name: value }));
+              }}
               disabled={saving || disableControls || isTestingKeys}
             />
             <Input
               label={t("ai_providers.prefix_label")}
               placeholder={t("ai_providers.prefix_placeholder")}
               value={form.prefix ?? ""}
-              onChange={(e) => setForm((prev) => ({ ...prev, prefix: e.target.value }))}
+              onChange={(e) => {
+                const value = e.target.value;
+                setForm((prev) => ({ ...prev, prefix: value }));
+              }}
               hint={t("ai_providers.prefix_hint")}
               disabled={saving || disableControls || isTestingKeys}
             />
             <Input
               label={t("ai_providers.openai_add_modal_url_label")}
               value={form.baseUrl}
-              onChange={(e) => setForm((prev) => ({ ...prev, baseUrl: e.target.value }))}
+              onChange={(e) => {
+                const value = e.target.value;
+                setForm((prev) => ({ ...prev, baseUrl: value }));
+              }}
               disabled={saving || disableControls || isTestingKeys}
             />
 

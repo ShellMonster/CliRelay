@@ -265,33 +265,48 @@ export function AiProvidersClaudeEditPage() {
               label="渠道名称 *"
               placeholder="例如：Claude 主力渠道（必填）"
               value={form.name ?? ""}
-              onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+              onChange={(e) => {
+                const value = e.target.value;
+                setForm((prev) => ({ ...prev, name: value }));
+              }}
               disabled={saving || disableControls || isTesting}
             />
             <Input
               label={t("ai_providers.claude_add_modal_key_label")}
               value={form.apiKey}
-              onChange={(e) => setForm((prev) => ({ ...prev, apiKey: e.target.value }))}
+              onChange={(e) => {
+                const value = e.target.value;
+                setForm((prev) => ({ ...prev, apiKey: value }));
+              }}
               disabled={saving || disableControls || isTesting}
             />
             <Input
               label={t("ai_providers.prefix_label")}
               placeholder={t("ai_providers.prefix_placeholder")}
               value={form.prefix ?? ""}
-              onChange={(e) => setForm((prev) => ({ ...prev, prefix: e.target.value }))}
+              onChange={(e) => {
+                const value = e.target.value;
+                setForm((prev) => ({ ...prev, prefix: value }));
+              }}
               hint={t("ai_providers.prefix_hint")}
               disabled={saving || disableControls || isTesting}
             />
             <Input
               label={t("ai_providers.claude_add_modal_url_label")}
               value={form.baseUrl ?? ""}
-              onChange={(e) => setForm((prev) => ({ ...prev, baseUrl: e.target.value }))}
+              onChange={(e) => {
+                const value = e.target.value;
+                setForm((prev) => ({ ...prev, baseUrl: value }));
+              }}
               disabled={saving || disableControls || isTesting}
             />
             <Input
               label={t("ai_providers.claude_add_modal_proxy_label")}
               value={form.proxyUrl ?? ""}
-              onChange={(e) => setForm((prev) => ({ ...prev, proxyUrl: e.target.value }))}
+              onChange={(e) => {
+                const value = e.target.value;
+                setForm((prev) => ({ ...prev, proxyUrl: value }));
+              }}
               disabled={saving || disableControls || isTesting}
             />
             <HeaderInputList
@@ -422,7 +437,10 @@ export function AiProvidersClaudeEditPage() {
                 className="input"
                 placeholder={t("ai_providers.excluded_models_placeholder")}
                 value={form.excludedText}
-                onChange={(e) => setForm((prev) => ({ ...prev, excludedText: e.target.value }))}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setForm((prev) => ({ ...prev, excludedText: value }));
+                }}
                 rows={4}
                 disabled={saving || disableControls || isTesting}
               />

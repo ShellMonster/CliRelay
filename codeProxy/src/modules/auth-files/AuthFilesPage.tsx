@@ -2074,9 +2074,10 @@ export function AuthFilesPage() {
               <div className="mt-2">
                 <TextInput
                   value={prefixProxyEditor.prefix}
-                  onChange={(e) =>
-                    setPrefixProxyEditor((prev) => ({ ...prev, prefix: e.currentTarget.value }))
-                  }
+                  onChange={(e) => {
+                    const value = e.currentTarget.value;
+                    setPrefixProxyEditor((prev) => ({ ...prev, prefix: value }));
+                  }}
                   placeholder="例如：team-a"
                 />
               </div>
@@ -2092,9 +2093,10 @@ export function AuthFilesPage() {
               <div className="mt-2">
                 <TextInput
                   value={prefixProxyEditor.proxyUrl}
-                  onChange={(e) =>
-                    setPrefixProxyEditor((prev) => ({ ...prev, proxyUrl: e.currentTarget.value }))
-                  }
+                  onChange={(e) => {
+                    const value = e.currentTarget.value;
+                    setPrefixProxyEditor((prev) => ({ ...prev, proxyUrl: value }));
+                  }}
                   placeholder="例如：http://127.0.0.1:7890"
                 />
               </div>

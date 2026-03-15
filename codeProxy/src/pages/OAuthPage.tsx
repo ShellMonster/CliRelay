@@ -602,12 +602,13 @@ export function OAuthPage() {
               label={t("vertex_import.location_label")}
               hint={t("vertex_import.location_hint")}
               value={vertexState.location}
-              onChange={(e) =>
+              onChange={(e) => {
+                const value = e.target.value;
                 setVertexState((prev) => ({
                   ...prev,
-                  location: e.target.value,
-                }))
-              }
+                  location: value,
+                }));
+              }}
               placeholder={t("vertex_import.location_placeholder")}
             />
             <div className={styles.formItem}>
@@ -693,7 +694,10 @@ export function OAuthPage() {
               <label className={styles.formItemLabel}>{t("auth_login.iflow_cookie_label")}</label>
               <Input
                 value={iflowCookie.cookie}
-                onChange={(e) => setIflowCookie((prev) => ({ ...prev, cookie: e.target.value }))}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setIflowCookie((prev) => ({ ...prev, cookie: value }));
+                }}
                 placeholder={t("auth_login.iflow_cookie_placeholder")}
               />
             </div>
@@ -783,13 +787,19 @@ export function OAuthPage() {
             <Input
               label={t("auth_login.kiro_idc_start_url_label")}
               value={kiroOAuth.startUrl}
-              onChange={(e) => setKiroOAuth((prev) => ({ ...prev, startUrl: e.target.value }))}
+              onChange={(e) => {
+                const value = e.target.value;
+                setKiroOAuth((prev) => ({ ...prev, startUrl: value }));
+              }}
               placeholder={t("auth_login.kiro_idc_start_url_placeholder")}
             />
             <Input
               label={t("auth_login.kiro_idc_region_label")}
               value={kiroOAuth.region}
-              onChange={(e) => setKiroOAuth((prev) => ({ ...prev, region: e.target.value }))}
+              onChange={(e) => {
+                const value = e.target.value;
+                setKiroOAuth((prev) => ({ ...prev, region: value }));
+              }}
               placeholder={t("auth_login.kiro_idc_region_placeholder")}
             />
             <Button
@@ -808,14 +818,15 @@ export function OAuthPage() {
             <div className="hint">{t("auth_login.kiro_token_import_hint")}</div>
             <Input
               value={kiroTokenImport.token}
-              onChange={(e) =>
+              onChange={(e) => {
+                const value = e.target.value;
                 setKiroTokenImport((prev) => ({
                   ...prev,
-                  token: e.target.value,
+                  token: value,
                   error: undefined,
                   success: undefined,
-                }))
-              }
+                }));
+              }}
               placeholder={t("auth_login.kiro_token_placeholder")}
             />
             <Button
