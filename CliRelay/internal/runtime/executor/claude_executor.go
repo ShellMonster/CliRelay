@@ -201,11 +201,13 @@ func (e *ClaudeExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth, r
 	appendAPIResponseChunk(ctx, e.cfg, data)
 	if stream {
 		lines := bytes.Split(data, []byte("\n"))
+		var aggregatedUsage claudeUsageFields
 		for _, line := range lines {
-			if detail, ok := parseClaudeStreamUsage(line); ok {
-				reporter.publish(ctx, detail)
+			if usageFields, ok := parseClaudeStreamUsageFields(line); ok {
+				aggregatedUsage = mergeClaudeUsageFields(aggregatedUsage, usageFields)
 			}
 		}
+		reporter.publish(ctx, aggregatedUsage.detail())
 	} else {
 		reporter.publishWithContent(ctx, parseClaudeUsage(data), string(req.Payload), string(data))
 	}
@@ -343,12 +345,13 @@ func (e *ClaudeExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.A
 		if from == to {
 			scanner := bufio.NewScanner(decodedBody)
 			scanner.Buffer(nil, 52_428_800) // 50MB
+			var aggregatedUsage claudeUsageFields
 			for scanner.Scan() {
 				line := scanner.Bytes()
 				appendAPIResponseChunk(ctx, e.cfg, line)
 				reporter.appendOutputChunk(line)
-				if detail, ok := parseClaudeStreamUsage(line); ok {
-					reporter.publish(ctx, detail)
+				if usageFields, ok := parseClaudeStreamUsageFields(line); ok {
+					aggregatedUsage = mergeClaudeUsageFields(aggregatedUsage, usageFields)
 				}
 				if isClaudeOAuthToken(apiKey) && !auth.ToolPrefixDisabled() {
 					line = stripClaudeToolPrefixFromStreamLine(line, claudeToolPrefix)
@@ -361,22 +364,25 @@ func (e *ClaudeExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.A
 			}
 			if errScan := scanner.Err(); errScan != nil {
 				recordAPIResponseError(ctx, e.cfg, errScan)
-				reporter.publishFailure(ctx)
+				reporter.publishWithOutcome(ctx, aggregatedUsage.detail(), true)
 				out <- cliproxyexecutor.StreamChunk{Err: errScan}
+				return
 			}
+			reporter.publish(ctx, aggregatedUsage.detail())
 			return
 		}
 
 		// For other formats, use translation
 		scanner := bufio.NewScanner(decodedBody)
 		scanner.Buffer(nil, 52_428_800) // 50MB
+		var aggregatedUsage claudeUsageFields
 		var param any
 		for scanner.Scan() {
 			line := scanner.Bytes()
 			appendAPIResponseChunk(ctx, e.cfg, line)
 			reporter.appendOutputChunk(line)
-			if detail, ok := parseClaudeStreamUsage(line); ok {
-				reporter.publish(ctx, detail)
+			if usageFields, ok := parseClaudeStreamUsageFields(line); ok {
+				aggregatedUsage = mergeClaudeUsageFields(aggregatedUsage, usageFields)
 			}
 			if isClaudeOAuthToken(apiKey) && !auth.ToolPrefixDisabled() {
 				line = stripClaudeToolPrefixFromStreamLine(line, claudeToolPrefix)
@@ -397,9 +403,11 @@ func (e *ClaudeExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.A
 		}
 		if errScan := scanner.Err(); errScan != nil {
 			recordAPIResponseError(ctx, e.cfg, errScan)
-			reporter.publishFailure(ctx)
+			reporter.publishWithOutcome(ctx, aggregatedUsage.detail(), true)
 			out <- cliproxyexecutor.StreamChunk{Err: errScan}
+			return
 		}
+		reporter.publish(ctx, aggregatedUsage.detail())
 	}()
 	return &cliproxyexecutor.StreamResult{Headers: httpResp.Header.Clone(), Chunks: out}, nil
 }

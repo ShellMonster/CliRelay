@@ -367,38 +367,88 @@ func parseClaudeUsage(data []byte) usage.Detail {
 	if !usageNode.Exists() {
 		return usage.Detail{}
 	}
-	detail := usage.Detail{
-		InputTokens:  usageNode.Get("input_tokens").Int(),
-		OutputTokens: usageNode.Get("output_tokens").Int(),
-		CachedTokens: usageNode.Get("cache_read_input_tokens").Int(),
-	}
-	if detail.CachedTokens == 0 {
-		// fall back to creation tokens when read tokens are absent
-		detail.CachedTokens = usageNode.Get("cache_creation_input_tokens").Int()
-	}
-	detail.TotalTokens = detail.InputTokens + detail.OutputTokens
-	return detail
+	return parseClaudeUsageFields(usageNode).detail()
 }
 
 func parseClaudeStreamUsage(line []byte) (usage.Detail, bool) {
-	payload := jsonPayload(line)
-	if len(payload) == 0 || !gjson.ValidBytes(payload) {
+	fields, ok := parseClaudeStreamUsageFields(line)
+	if !ok {
 		return usage.Detail{}, false
 	}
-	usageNode := gjson.GetBytes(payload, "usage")
-	if !usageNode.Exists() {
-		return usage.Detail{}, false
-	}
+	return fields.detail(), true
+}
+
+type claudeUsageFields struct {
+	InputTokens         int64
+	OutputTokens        int64
+	ReasoningTokens     int64
+	CacheReadTokens     int64
+	CacheCreationTokens int64
+}
+
+func (f claudeUsageFields) detail() usage.Detail {
+	promptInputTokens := f.InputTokens + f.CacheCreationTokens
 	detail := usage.Detail{
-		InputTokens:  usageNode.Get("input_tokens").Int(),
-		OutputTokens: usageNode.Get("output_tokens").Int(),
-		CachedTokens: usageNode.Get("cache_read_input_tokens").Int(),
+		InputTokens:     promptInputTokens,
+		OutputTokens:    f.OutputTokens,
+		ReasoningTokens: f.ReasoningTokens,
+		CachedTokens:    f.CacheReadTokens,
 	}
 	if detail.CachedTokens == 0 {
-		detail.CachedTokens = usageNode.Get("cache_creation_input_tokens").Int()
+		detail.CachedTokens = f.CacheCreationTokens
 	}
-	detail.TotalTokens = detail.InputTokens + detail.OutputTokens
-	return detail, true
+	detail.TotalTokens = promptInputTokens + detail.OutputTokens + detail.ReasoningTokens
+	return detail
+}
+
+func parseClaudeStreamUsageFields(line []byte) (claudeUsageFields, bool) {
+	payload := jsonPayload(line)
+	if len(payload) == 0 || !gjson.ValidBytes(payload) {
+		return claudeUsageFields{}, false
+	}
+	root := gjson.ParseBytes(payload)
+	fields := claudeUsageFields{}
+	found := false
+
+	if usageNode := root.Get("usage"); usageNode.Exists() {
+		fields = mergeClaudeUsageFields(fields, parseClaudeUsageFields(usageNode))
+		found = true
+	}
+	if usageNode := root.Get("message.usage"); usageNode.Exists() {
+		fields = mergeClaudeUsageFields(fields, parseClaudeUsageFields(usageNode))
+		found = true
+	}
+
+	return fields, found
+}
+
+func parseClaudeUsageFields(usageNode gjson.Result) claudeUsageFields {
+	return claudeUsageFields{
+		InputTokens:         usageNode.Get("input_tokens").Int(),
+		OutputTokens:        usageNode.Get("output_tokens").Int(),
+		ReasoningTokens:     usageNode.Get("reasoning_tokens").Int(),
+		CacheReadTokens:     usageNode.Get("cache_read_input_tokens").Int(),
+		CacheCreationTokens: usageNode.Get("cache_creation_input_tokens").Int(),
+	}
+}
+
+func mergeClaudeUsageFields(base, incoming claudeUsageFields) claudeUsageFields {
+	if incoming.InputTokens > base.InputTokens {
+		base.InputTokens = incoming.InputTokens
+	}
+	if incoming.OutputTokens > base.OutputTokens {
+		base.OutputTokens = incoming.OutputTokens
+	}
+	if incoming.ReasoningTokens > base.ReasoningTokens {
+		base.ReasoningTokens = incoming.ReasoningTokens
+	}
+	if incoming.CacheReadTokens > base.CacheReadTokens {
+		base.CacheReadTokens = incoming.CacheReadTokens
+	}
+	if incoming.CacheCreationTokens > base.CacheCreationTokens {
+		base.CacheCreationTokens = incoming.CacheCreationTokens
+	}
+	return base
 }
 
 func parseGeminiFamilyUsageDetail(node gjson.Result) usage.Detail {
