@@ -61,6 +61,7 @@ const createEmptyUsageData = (): MonitorUsageData => ({
     ReasoningTokens: 0,
     CachedTokens: 0,
     TotalTokens: 0,
+    ProcessedTokens: 0,
   },
   monitor: {
     modelDistribution: [],

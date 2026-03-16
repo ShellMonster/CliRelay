@@ -72,6 +72,7 @@ func (h *Handler) GetDashboardSummary(c *gin.Context) {
 			"reasoning_tokens": usageSummary.ReasoningTokens,
 			"cached_tokens":    usageSummary.CachedTokens,
 			"total_tokens":     usageSummary.TotalTokens,
+			"processed_tokens": usageSummary.ProcessedTokens,
 		},
 		"counts": gin.H{
 			"api_keys":            apiKeyCount,

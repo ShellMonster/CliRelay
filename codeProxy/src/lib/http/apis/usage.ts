@@ -208,6 +208,7 @@ export interface UsageModelStatsResponse {
     reasoning_tokens: number;
     cached_tokens: number;
     total_tokens: number;
+    processed_tokens: number;
     last_used_at: string;
   }>;
 }
@@ -470,6 +471,7 @@ export interface DashboardSummary {
     reasoning_tokens: number;
     cached_tokens: number;
     total_tokens: number;
+    processed_tokens: number;
   };
   counts: {
     api_keys: number;
@@ -496,6 +498,7 @@ export interface MonitorSummaryResponse {
     ReasoningTokens: number;
     CachedTokens: number;
     TotalTokens: number;
+    ProcessedTokens: number;
   };
 }
 
@@ -510,6 +513,9 @@ export interface MonitorModelDistributionResponse {
     model: string;
     requests: number;
     tokens: number;
+    total_tokens: number;
+    cached_tokens: number;
+    processed_tokens: number;
   }>;
 }
 
@@ -523,6 +529,7 @@ export interface MonitorDailyTrendResponse {
     reasoning_tokens: number;
     cached_tokens: number;
     total_tokens: number;
+    processed_tokens: number;
   }>;
 }
 
@@ -537,6 +544,7 @@ export interface MonitorHourlyResponse {
     reasoning_tokens: number;
     cached_tokens: number;
     total_tokens: number;
+    processed_tokens: number;
   }>;
 }
 

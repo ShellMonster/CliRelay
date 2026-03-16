@@ -107,7 +107,10 @@ var (
 	usageDB     *sql.DB
 	usageDBMu   sync.Mutex
 	usageDBPath string
+	analyticsTZ = loadAnalyticsLocation()
 )
+
+const analyticsSQLiteHourShift = "+8 hours"
 
 const createTableSQL = `
 CREATE TABLE IF NOT EXISTS request_logs (
@@ -446,7 +449,7 @@ func QueryStats(params LogQueryParams) (LogStats, error) {
 	where, args := buildWhereClause(params)
 
 	var total, successCount, totalTokens int64
-	statsSQL := "SELECT COUNT(*), COALESCE(SUM(CASE WHEN failed=0 THEN 1 ELSE 0 END),0), COALESCE(SUM(total_tokens),0) " +
+	statsSQL := "SELECT COUNT(*), COALESCE(SUM(CASE WHEN failed=0 THEN 1 ELSE 0 END),0), " + sqlTokenSum("total_tokens") + " " +
 		"FROM request_logs" + where
 	if err := db.QueryRow(statsSQL, args...).Scan(&total, &successCount, &totalTokens); err != nil {
 		return LogStats{}, fmt.Errorf("usage: stats query: %w", err)
@@ -472,12 +475,12 @@ func QueryUsageSummary() (UsageSummary, error) {
 	}
 
 	var total, successCount, failureCount, totalTokens int64
-	const sqlText = `
+	sqlText := `
 SELECT
 	COUNT(*),
 	COALESCE(SUM(CASE WHEN failed=0 THEN 1 ELSE 0 END), 0),
 	COALESCE(SUM(CASE WHEN failed=1 THEN 1 ELSE 0 END), 0),
-	COALESCE(SUM(total_tokens), 0)
+		` + sqlTokenSum("total_tokens") + `
 FROM request_logs`
 	if err := db.QueryRow(sqlText).Scan(&total, &successCount, &failureCount, &totalTokens); err != nil {
 		return UsageSummary{}, fmt.Errorf("usage: summary query: %w", err)
@@ -502,12 +505,16 @@ type DashboardSummary struct {
 	ReasoningTokens int64
 	CachedTokens    int64
 	TotalTokens     int64
+	ProcessedTokens int64
 }
 
 type ModelDistributionPoint struct {
-	Model    string `json:"model"`
-	Requests int64  `json:"requests"`
-	Tokens   int64  `json:"tokens"`
+	Model           string `json:"model"`
+	Requests        int64  `json:"requests"`
+	Tokens          int64  `json:"tokens"`
+	TotalTokens     int64  `json:"total_tokens"`
+	CachedTokens    int64  `json:"cached_tokens"`
+	ProcessedTokens int64  `json:"processed_tokens"`
 }
 
 type DailyTrendPoint struct {
@@ -518,6 +525,7 @@ type DailyTrendPoint struct {
 	ReasoningTokens int64  `json:"reasoning_tokens"`
 	CachedTokens    int64  `json:"cached_tokens"`
 	TotalTokens     int64  `json:"total_tokens"`
+	ProcessedTokens int64  `json:"processed_tokens"`
 }
 
 type HourlySeriesPoint struct {
@@ -529,6 +537,7 @@ type HourlySeriesPoint struct {
 	ReasoningTokens int64  `json:"reasoning_tokens"`
 	CachedTokens    int64  `json:"cached_tokens"`
 	TotalTokens     int64  `json:"total_tokens"`
+	ProcessedTokens int64  `json:"processed_tokens"`
 }
 
 type ChannelStatsPoint struct {
@@ -594,11 +603,13 @@ type UsageAPIStats struct {
 }
 
 type UsageModelStats struct {
-	Model        string `json:"model"`
-	Requests     int64  `json:"requests"`
-	SuccessCount int64  `json:"success_count"`
-	FailureCount int64  `json:"failure_count"`
-	TotalTokens  int64  `json:"total_tokens"`
+	Model           string `json:"model"`
+	Requests        int64  `json:"requests"`
+	SuccessCount    int64  `json:"success_count"`
+	FailureCount    int64  `json:"failure_count"`
+	TotalTokens     int64  `json:"total_tokens"`
+	CachedTokens    int64  `json:"cached_tokens"`
+	ProcessedTokens int64  `json:"processed_tokens"`
 }
 
 type UsageCredentialStats struct {
@@ -644,6 +655,7 @@ type UsageModelDetailStats struct {
 	ReasoningTokens int64  `json:"reasoning_tokens"`
 	CachedTokens    int64  `json:"cached_tokens"`
 	TotalTokens     int64  `json:"total_tokens"`
+	ProcessedTokens int64  `json:"processed_tokens"`
 	LastUsedAt      string `json:"last_used_at"`
 }
 
@@ -681,6 +693,64 @@ func buildAggregateWhere(days int, apiKey string, model string, channelFilter Ch
 	return " WHERE " + strings.Join(clauses, " AND "), args
 }
 
+func loadAnalyticsLocation() *time.Location {
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		log.Warnf("usage: failed to load Asia/Shanghai timezone: %v, using fixed UTC+8", err)
+		return time.FixedZone("CST", 8*3600)
+	}
+	return loc
+}
+
+func analyticsLocation() *time.Location {
+	return analyticsTZ
+}
+
+func sqlTokenSum(expr string) string {
+	return fmt.Sprintf("COALESCE(SUM(%s), 0)", expr)
+}
+
+func sqlRequestMetaTextExpr(path string) string {
+	return fmt.Sprintf(
+		"lower(COALESCE(CASE WHEN json_valid(request_meta) THEN json_extract(request_meta, '%s') END, ''))",
+		path,
+	)
+}
+
+func sqlLoggedProviderExpr() string {
+	return sqlRequestMetaTextExpr("$.provider")
+}
+
+func sqlLoggedModelExpr() string {
+	return "lower(trim(COALESCE(NULLIF(model, ''), NULLIF(CASE WHEN json_valid(request_meta) THEN json_extract(request_meta, '$.final_model') END, ''), NULLIF(CASE WHEN json_valid(request_meta) THEN json_extract(request_meta, '$.requested_model') END, ''), '')))"
+}
+
+func sqlClaudeProcessedTokenConditionExpr() string {
+	return fmt.Sprintf("(%s = 'claude' OR instr(%s, 'claude') > 0)", sqlLoggedProviderExpr(), sqlLoggedModelExpr())
+}
+
+func sqlProcessedTokenExpr() string {
+	return fmt.Sprintf(
+		"CASE WHEN %s THEN total_tokens + cached_tokens ELSE total_tokens END",
+		sqlClaudeProcessedTokenConditionExpr(),
+	)
+}
+
+func sqlProcessedTokenSum() string {
+	return sqlTokenSum(sqlProcessedTokenExpr())
+}
+
+func sqlChinaDayBucketExpr() string {
+	return fmt.Sprintf("strftime('%%Y-%%m-%%d', datetime(timestamp, '%s'))", analyticsSQLiteHourShift)
+}
+
+func sqlChinaHourBucketExpr() string {
+	return fmt.Sprintf(
+		"strftime('%%Y-%%m-%%dT%%H:00:00', datetime(timestamp, '%s')) || '+08:00'",
+		analyticsSQLiteHourShift,
+	)
+}
+
 // QueryDashboardSummary returns time-filtered dashboard KPI data from SQLite.
 func QueryDashboardSummary(days int, apiKey string, model string, channelFilter ChannelFilter) (DashboardSummary, error) {
 	db := getDB()
@@ -694,16 +764,17 @@ SELECT
 	COUNT(*),
 	COALESCE(SUM(CASE WHEN failed=0 THEN 1 ELSE 0 END), 0),
 	COALESCE(SUM(CASE WHEN failed=1 THEN 1 ELSE 0 END), 0),
-	COALESCE(SUM(input_tokens), 0),
-	COALESCE(SUM(output_tokens), 0),
-	COALESCE(SUM(reasoning_tokens), 0),
-	COALESCE(SUM(cached_tokens), 0),
-	COALESCE(SUM(total_tokens), 0)
+	` + sqlTokenSum("input_tokens") + `,
+	` + sqlTokenSum("output_tokens") + `,
+	` + sqlTokenSum("reasoning_tokens") + `,
+	` + sqlTokenSum("cached_tokens") + `,
+	` + sqlTokenSum("total_tokens") + `,
+	` + sqlProcessedTokenSum() + `
 FROM request_logs
 ` + where
 
 	var total, successRequests, failedRequests int64
-	var inputTokens, outputTokens, reasoningTokens, cachedTokens, totalTokens int64
+	var inputTokens, outputTokens, reasoningTokens, cachedTokens, totalTokens, processedTokens int64
 	if err := db.QueryRow(sqlText, args...).Scan(
 		&total,
 		&successRequests,
@@ -713,6 +784,7 @@ FROM request_logs
 		&reasoningTokens,
 		&cachedTokens,
 		&totalTokens,
+		&processedTokens,
 	); err != nil {
 		return DashboardSummary{}, fmt.Errorf("usage: dashboard summary query: %w", err)
 	}
@@ -732,6 +804,7 @@ FROM request_logs
 		ReasoningTokens: reasoningTokens,
 		CachedTokens:    cachedTokens,
 		TotalTokens:     totalTokens,
+		ProcessedTokens: processedTokens,
 	}, nil
 }
 
@@ -746,10 +819,15 @@ func QueryModelDistribution(days int, limit int, apiKey string, model string, ch
 	where, args := buildAggregateWhere(days, apiKey, model, channelFilter)
 
 	query := `
-SELECT model, COUNT(*) AS requests, COALESCE(SUM(total_tokens), 0) AS tokens
+SELECT
+	model,
+	COUNT(*) AS requests,
+	` + sqlTokenSum("total_tokens") + ` AS total_tokens,
+	` + sqlTokenSum("cached_tokens") + ` AS cached_tokens,
+	` + sqlProcessedTokenSum() + ` AS processed_tokens
 FROM request_logs` + where + `
 GROUP BY model
-ORDER BY requests DESC, tokens DESC, model ASC
+ORDER BY requests DESC, processed_tokens DESC, model ASC
 LIMIT ?`
 	args = append(args, limit)
 	rows, err := db.Query(query, args...)
@@ -761,9 +839,16 @@ LIMIT ?`
 	points := make([]ModelDistributionPoint, 0, limit)
 	for rows.Next() {
 		var p ModelDistributionPoint
-		if err := rows.Scan(&p.Model, &p.Requests, &p.Tokens); err != nil {
+		if err := rows.Scan(
+			&p.Model,
+			&p.Requests,
+			&p.TotalTokens,
+			&p.CachedTokens,
+			&p.ProcessedTokens,
+		); err != nil {
 			return nil, fmt.Errorf("usage: model distribution scan: %w", err)
 		}
+		p.Tokens = p.ProcessedTokens
 		points = append(points, p)
 	}
 	return points, nil
@@ -778,13 +863,14 @@ func QueryDailyTrend(days int, apiKey string, model string, channelFilter Channe
 
 	query := `
 SELECT
-	strftime('%Y-%m-%d', timestamp) AS day,
+	` + sqlChinaDayBucketExpr() + ` AS day,
 	COUNT(*) AS requests,
-	COALESCE(SUM(input_tokens), 0),
-	COALESCE(SUM(output_tokens), 0),
-	COALESCE(SUM(reasoning_tokens), 0),
-	COALESCE(SUM(cached_tokens), 0),
-	COALESCE(SUM(total_tokens), 0)
+	` + sqlTokenSum("input_tokens") + `,
+	` + sqlTokenSum("output_tokens") + `,
+	` + sqlTokenSum("reasoning_tokens") + `,
+	` + sqlTokenSum("cached_tokens") + `,
+	` + sqlTokenSum("total_tokens") + `,
+	` + sqlProcessedTokenSum() + `
 FROM request_logs` + where + `
 GROUP BY day
 ORDER BY day ASC`
@@ -805,6 +891,7 @@ ORDER BY day ASC`
 			&p.ReasoningTokens,
 			&p.CachedTokens,
 			&p.TotalTokens,
+			&p.ProcessedTokens,
 		); err != nil {
 			return nil, fmt.Errorf("usage: daily trend scan: %w", err)
 		}
@@ -837,14 +924,15 @@ func QueryHourlySeries(hours int, apiKey string, model string, channelFilter Cha
 
 	query := `
 SELECT
-	strftime('%Y-%m-%dT%H:00:00Z', timestamp) AS hour,
+	` + sqlChinaHourBucketExpr() + ` AS hour,
 	model,
 	COUNT(*) AS requests,
-	COALESCE(SUM(input_tokens), 0),
-	COALESCE(SUM(output_tokens), 0),
-	COALESCE(SUM(reasoning_tokens), 0),
-	COALESCE(SUM(cached_tokens), 0),
-	COALESCE(SUM(total_tokens), 0)
+	` + sqlTokenSum("input_tokens") + `,
+	` + sqlTokenSum("output_tokens") + `,
+	` + sqlTokenSum("reasoning_tokens") + `,
+	` + sqlTokenSum("cached_tokens") + `,
+	` + sqlTokenSum("total_tokens") + `,
+	` + sqlProcessedTokenSum() + `
 FROM request_logs
 WHERE ` + strings.Join(clauses, " AND ") + `
 GROUP BY hour, model
@@ -867,6 +955,7 @@ ORDER BY hour ASC, model ASC`
 			&p.ReasoningTokens,
 			&p.CachedTokens,
 			&p.TotalTokens,
+			&p.ProcessedTokens,
 		); err != nil {
 			return nil, fmt.Errorf("usage: hourly series scan: %w", err)
 		}
@@ -1079,13 +1168,13 @@ func QueryUsageRequestTrend(days int, apiKey string) ([]UsageSeriesPoint, error)
 
 	query := `
 SELECT
-	strftime('%Y-%m-%d', timestamp) AS bucket,
-	COUNT(*) AS requests,
-	COALESCE(SUM(input_tokens), 0),
-	COALESCE(SUM(output_tokens), 0),
-	COALESCE(SUM(reasoning_tokens), 0),
-	COALESCE(SUM(cached_tokens), 0),
-	COALESCE(SUM(total_tokens), 0)
+		` + sqlChinaDayBucketExpr() + ` AS bucket,
+		COUNT(*) AS requests,
+		` + sqlTokenSum("input_tokens") + `,
+		` + sqlTokenSum("output_tokens") + `,
+		` + sqlTokenSum("reasoning_tokens") + `,
+		` + sqlTokenSum("cached_tokens") + `,
+		` + sqlTokenSum("total_tokens") + `
 FROM request_logs` + where + `
 GROUP BY bucket
 ORDER BY bucket ASC`
@@ -1236,11 +1325,13 @@ SELECT
 	COUNT(*) AS requests,
 	COALESCE(SUM(CASE WHEN failed=0 THEN 1 ELSE 0 END), 0) AS success_count,
 	COALESCE(SUM(CASE WHEN failed=1 THEN 1 ELSE 0 END), 0) AS failure_count,
-	COALESCE(SUM(total_tokens), 0) AS total_tokens
+	` + sqlTokenSum("total_tokens") + ` AS total_tokens,
+	` + sqlTokenSum("cached_tokens") + ` AS cached_tokens,
+	` + sqlProcessedTokenSum() + ` AS processed_tokens
 FROM request_logs` + where + `
 GROUP BY model
 HAVING model != ''
-ORDER BY requests DESC, total_tokens DESC, model ASC
+ORDER BY requests DESC, processed_tokens DESC, model ASC
 LIMIT ?`
 
 	rows, err := db.Query(query, append(args, limit)...)
@@ -1258,6 +1349,8 @@ LIMIT ?`
 			&item.SuccessCount,
 			&item.FailureCount,
 			&item.TotalTokens,
+			&item.CachedTokens,
+			&item.ProcessedTokens,
 		); err != nil {
 			return nil, fmt.Errorf("usage: model stats scan: %w", err)
 		}
@@ -1282,16 +1375,17 @@ SELECT
 	COUNT(*) AS requests,
 	COALESCE(SUM(CASE WHEN failed=0 THEN 1 ELSE 0 END), 0) AS success_count,
 	COALESCE(SUM(CASE WHEN failed=1 THEN 1 ELSE 0 END), 0) AS failure_count,
-	COALESCE(SUM(input_tokens), 0) AS input_tokens,
-	COALESCE(SUM(output_tokens), 0) AS output_tokens,
-	COALESCE(SUM(reasoning_tokens), 0) AS reasoning_tokens,
-	COALESCE(SUM(cached_tokens), 0) AS cached_tokens,
-	COALESCE(SUM(total_tokens), 0) AS total_tokens,
+	` + sqlTokenSum("input_tokens") + ` AS input_tokens,
+	` + sqlTokenSum("output_tokens") + ` AS output_tokens,
+	` + sqlTokenSum("reasoning_tokens") + ` AS reasoning_tokens,
+	` + sqlTokenSum("cached_tokens") + ` AS cached_tokens,
+	` + sqlTokenSum("total_tokens") + ` AS total_tokens,
+	` + sqlProcessedTokenSum() + ` AS processed_tokens,
 	MAX(timestamp) AS last_used_at
 FROM request_logs` + where + `
 GROUP BY model
 HAVING model != ''
-ORDER BY requests DESC, total_tokens DESC, model ASC
+ORDER BY requests DESC, processed_tokens DESC, model ASC
 LIMIT ?`
 
 	rows, err := db.Query(query, append(args, limit)...)
@@ -1313,6 +1407,7 @@ LIMIT ?`
 			&item.ReasoningTokens,
 			&item.CachedTokens,
 			&item.TotalTokens,
+			&item.ProcessedTokens,
 			&item.LastUsedAt,
 		); err != nil {
 			return nil, fmt.Errorf("usage: model detail stats scan: %w", err)
@@ -1701,8 +1796,8 @@ func localDayCutoff(days int) time.Time {
 		days = 7
 	}
 
-	now := time.Now()
-	loc := now.Location()
+	loc := analyticsLocation()
+	now := time.Now().In(loc)
 	startOfTodayLocal := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
 	return startOfTodayLocal.AddDate(0, 0, -(days - 1)).UTC()
 }

@@ -15,7 +15,7 @@ export const createHourlyTokenOption = (input: {
   const selectedKeys = input.hourlySeries.tokenKeys.filter(
     (key) => input.hourlyTokenSelected[key] ?? true,
   );
-  const showTotalLine = input.hourlyTokenSelected["总 Token"] ?? true;
+  const showTotalLine = input.hourlyTokenSelected["处理量 Token"] ?? true;
 
   const series = selectedKeys.map((key) => {
     const data = points.map((point) => {
@@ -37,7 +37,10 @@ export const createHourlyTokenOption = (input: {
   });
 
   const totals = points.map((point) =>
-    point.stacks.reduce((acc, item) => acc + (Number.isFinite(item.value) ? item.value : 0), 0),
+    Number.isFinite(point.total) ? Number(point.total) : point.stacks.reduce(
+      (acc, item) => acc + (Number.isFinite(item.value) ? item.value : 0),
+      0,
+    ),
   );
   const totalLineColor = "#3b82f6";
   const selectedSums = points.map((point) =>
@@ -111,7 +114,7 @@ export const createHourlyTokenOption = (input: {
       ...(showTotalLine
         ? [
             {
-              name: "总 Token",
+              name: "处理量 Token",
               type: "line",
               smooth: true,
               symbol: "circle",

@@ -89,7 +89,7 @@ export function MonitorPage() {
     输出: true,
     推理: true,
     缓存: true,
-    "总 Token": true,
+    "处理量 Token": true,
   });
 
   const [timeRange, setTimeRange] = useState<TimeRange>(7);
@@ -105,7 +105,7 @@ export function MonitorPage() {
   const [channelFilter, setChannelFilter] = useState<string[]>([]);
   const [modelHourWindow, setModelHourWindow] = useState<HourWindow>(24);
   const [tokenHourWindow, setTokenHourWindow] = useState<HourWindow>(24);
-  const [modelMetric, setModelMetric] = useState<"requests" | "tokens">(
+  const [modelMetric, setModelMetric] = useState<"requests" | "processed">(
     "requests",
   );
   const [error, setError] = useState<string | null>(null);
@@ -118,12 +118,21 @@ export function MonitorPage() {
     successCount: 0,
     failedCount: 0,
     successRate: 0,
+    processedTokens: 0,
     totalTokens: 0,
+    cachedTokens: 0,
     inputTokens: 0,
     outputTokens: 0,
   });
   const [modelDistributionData, setModelDistributionData] = useState<
-    Array<{ name: string; value: number; requests: number; tokens: number }>
+    Array<{
+      name: string;
+      value: number;
+      requests: number;
+      totalTokens: number;
+      cachedTokens: number;
+      processedTokens: number;
+    }>
   >([]);
   const [dailySeries, setDailySeries] = useState<
     Array<{
@@ -144,6 +153,7 @@ export function MonitorPage() {
     tokenKeys: string[];
     tokenPoints: Array<{
       label: string;
+      total?: number;
       stacks: Array<{ key: string; value: number }>;
     }>;
   }>({
@@ -191,16 +201,22 @@ export function MonitorPage() {
           successCount: summaryRes.summary.SuccessRequests,
           failedCount: summaryRes.summary.FailedRequests,
           successRate: summaryRes.summary.SuccessRate,
+          processedTokens: summaryRes.summary.ProcessedTokens,
           totalTokens: summaryRes.summary.TotalTokens,
+          cachedTokens: summaryRes.summary.CachedTokens,
           inputTokens: summaryRes.summary.InputTokens,
           outputTokens: summaryRes.summary.OutputTokens,
         });
 
         const sortedModels = [...distributionRes.items].sort((left, right) => {
           const leftValue =
-            modelMetric === "requests" ? left.requests : left.tokens;
+            modelMetric === "requests"
+              ? left.requests
+              : left.processed_tokens;
           const rightValue =
-            modelMetric === "requests" ? right.requests : right.tokens;
+            modelMetric === "requests"
+              ? right.requests
+              : right.processed_tokens;
           return (
             rightValue - leftValue || left.model.localeCompare(right.model)
           );
@@ -208,21 +224,31 @@ export function MonitorPage() {
         const top = sortedModels.slice(0, 10);
         const otherValue = sortedModels.slice(10).reduce((acc, item) => {
           return (
-            acc + (modelMetric === "requests" ? item.requests : item.tokens)
+            acc +
+            (modelMetric === "requests"
+              ? item.requests
+              : item.processed_tokens)
           );
         }, 0);
         const nextModelDistribution = top.map((item) => ({
           name: item.model,
-          value: modelMetric === "requests" ? item.requests : item.tokens,
+          value:
+            modelMetric === "requests"
+              ? item.requests
+              : item.processed_tokens,
           requests: item.requests,
-          tokens: item.tokens,
+          totalTokens: item.total_tokens,
+          cachedTokens: item.cached_tokens,
+          processedTokens: item.processed_tokens,
         }));
         if (otherValue > 0) {
           nextModelDistribution.push({
             name: "其他",
             value: otherValue,
             requests: 0,
-            tokens: 0,
+            totalTokens: 0,
+            cachedTokens: 0,
+            processedTokens: 0,
           });
         }
         setModelDistributionData(nextModelDistribution);
@@ -253,7 +279,13 @@ export function MonitorPage() {
         const modelBuckets = new Map<number, Map<string, number>>();
         const tokenBuckets = new Map<
           number,
-          { input: number; output: number; reasoning: number; cached: number }
+          {
+            input: number;
+            output: number;
+            reasoning: number;
+            cached: number;
+            processed: number;
+          }
         >();
         hourlyRes.items.forEach((item) => {
           const ts = new Date(item.hour).getTime();
@@ -273,12 +305,14 @@ export function MonitorPage() {
             output: 0,
             reasoning: 0,
             cached: 0,
+            processed: 0,
           };
           tokenBuckets.set(hour, {
             input: tokens.input + item.input_tokens,
             output: tokens.output + item.output_tokens,
             reasoning: tokens.reasoning + item.reasoning_tokens,
             cached: tokens.cached + item.cached_tokens,
+            processed: tokens.processed + item.processed_tokens,
           });
         });
 
@@ -312,9 +346,11 @@ export function MonitorPage() {
             output: 0,
             reasoning: 0,
             cached: 0,
+            processed: 0,
           };
           return {
             label,
+            total: totals.processed,
             stacks: [
               { key: "输入", value: totals.input },
               { key: "输出", value: totals.output },
@@ -519,14 +555,14 @@ export function MonitorPage() {
         输出: "rgba(196,181,253,0.88)",
         推理: "rgba(252,211,77,0.88)",
         缓存: "rgba(94,234,212,0.88)",
-        "总 Token": "#3b82f6",
+        "处理量 Token": "#3b82f6",
       } as Record<string, string>,
       classByKey: {
         输入: "bg-emerald-400",
         输出: "bg-violet-400",
         推理: "bg-amber-400",
         缓存: "bg-teal-400",
-        "总 Token": "bg-blue-500",
+        "处理量 Token": "bg-blue-500",
       } as Record<string, string>,
     };
   }, []);
@@ -548,7 +584,7 @@ export function MonitorPage() {
       for (const key of hourlySeries.tokenKeys) {
         if (!(key in next)) next[key] = true;
       }
-      if (!("总 Token" in next)) next["总 Token"] = true;
+      if (!("处理量 Token" in next)) next["处理量 Token"] = true;
       return next;
     });
   }, [hourlySeries.tokenKeys]);
@@ -645,11 +681,11 @@ export function MonitorPage() {
   const modelActions = (
     <Tabs
       value={modelMetric}
-      onValueChange={(next) => setModelMetric(next as "requests" | "tokens")}
+      onValueChange={(next) => setModelMetric(next as "requests" | "processed")}
     >
       <TabsList>
         <TabsTrigger value="requests">请求</TabsTrigger>
-        <TabsTrigger value="tokens">Token</TabsTrigger>
+        <TabsTrigger value="processed">处理量</TabsTrigger>
       </TabsList>
     </Tabs>
   );
@@ -771,25 +807,25 @@ export function MonitorPage() {
             icon={ShieldCheck}
           />
           <KpiCard
-            title="总 Token"
+            title="处理量 Token"
             value={
               <AnimatedNumber
-                value={summary.totalTokens}
+                value={summary.processedTokens}
                 format={formatNumber}
               />
             }
-            hint="输入 + 输出 + 推理 + 缓存"
+            hint={`账面 ${formatNumber(summary.totalTokens)} · 缓存 ${formatNumber(summary.cachedTokens)}`}
             icon={Sigma}
           />
           <KpiCard
-            title="输出 Token"
+            title="缓存 Token"
             value={
               <AnimatedNumber
-                value={summary.outputTokens}
+                value={summary.cachedTokens}
                 format={formatNumber}
               />
             }
-            hint={`输入 Token：${formatNumber(summary.inputTokens)}`}
+            hint={`输入 ${formatNumber(summary.inputTokens)} · 输出 ${formatNumber(summary.outputTokens)}`}
             icon={Coins}
           />
         </section>
@@ -825,7 +861,7 @@ export function MonitorPage() {
             <section className="grid gap-4 lg:grid-cols-[minmax(0,560px)_minmax(0,1fr)]">
               <Card
                 title="模型用量分布"
-                description={`最近 ${timeRange} 天 · 按${modelMetric === "requests" ? "请求数" : "Token"} · Top10`}
+                description={`最近 ${timeRange} 天 · 按${modelMetric === "requests" ? "请求数" : "处理量 Token"} · Top10`}
                 actions={modelActions}
                 loading={isRefreshing}
               >
@@ -963,7 +999,7 @@ export function MonitorPage() {
           <Reveal>
             <Card
               title="每小时 Token 用量"
-              description="按小时聚合（输入 / 输出 / 推理 / 缓存）"
+              description="按小时聚合（输入 / 输出 / 推理 / 缓存，处理量按 provider 口径归一）"
               actions={
                 <HourWindowSelector
                   value={tokenHourWindow}
@@ -990,12 +1026,12 @@ export function MonitorPage() {
                       onToggle: toggleHourlyTokenLegend,
                     })),
                     {
-                      key: "总 Token",
-                      label: "总 Token",
+                      key: "处理量 Token",
+                      label: "处理量 Token",
                       colorClass:
-                        hourlyTokenPalette.classByKey["总 Token"] ??
+                        hourlyTokenPalette.classByKey["处理量 Token"] ??
                         "bg-blue-500",
-                      enabled: hourlyTokenSelected["总 Token"] ?? true,
+                      enabled: hourlyTokenSelected["处理量 Token"] ?? true,
                       onToggle: toggleHourlyTokenLegend,
                     },
                   ]}

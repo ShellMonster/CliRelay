@@ -10,6 +10,7 @@ export type DailySeriesPoint = {
 export type HourlyStackPoint = {
   label: string;
   stacks: Array<{ key: string; value: number }>;
+  total?: number;
 };
 
 export type HourlySeries = {

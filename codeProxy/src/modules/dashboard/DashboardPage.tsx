@@ -105,9 +105,9 @@ export function DashboardPage() {
           icon={Sigma}
         />
         <KpiCard
-          title="Token 总量"
-          value={<span className="tabular-nums">{formatNumber(kpi?.total_tokens ?? 0)}</span>}
-          hint={`输入 ${formatNumber(kpi?.input_tokens ?? 0)} · 输出 ${formatNumber(kpi?.output_tokens ?? 0)}`}
+          title="处理量 Token"
+          value={<span className="tabular-nums">{formatNumber(kpi?.processed_tokens ?? 0)}</span>}
+          hint={`账面 ${formatNumber(kpi?.total_tokens ?? 0)} · 缓存 ${formatNumber(kpi?.cached_tokens ?? 0)}`}
           icon={Sigma}
         />
         <KpiCard
