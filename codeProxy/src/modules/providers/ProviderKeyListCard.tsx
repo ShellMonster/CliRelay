@@ -58,7 +58,12 @@ export function ProviderKeyListCard({
           {items.map((item, idx) => {
             const disabled = hasDisableAllModelsRule(item.excludedModels);
             const excludedModels = stripDisableAllModelsRule(item.excludedModels);
-            const models = item.models || [];
+            const models = Array.isArray(item.models)
+              ? item.models.filter(
+                (model): model is NonNullable<(typeof item.models)[number]> =>
+                  Boolean(model && typeof model === "object"),
+              )
+              : [];
             const stats = getStats(item);
             const statusData = getStatusBar(item);
             const participateInDefaultRouting = item.participateInDefaultRouting !== false;

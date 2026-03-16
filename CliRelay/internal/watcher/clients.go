@@ -100,7 +100,7 @@ func (w *Watcher) reloadClients(rescanAuth bool, affectedOAuthProviders []string
 		w.clientsMutex.Unlock()
 	}
 
-	totalNewClients := authFileCount + geminiAPIKeyCount + vertexCompatAPIKeyCount + claudeAPIKeyCount + codexAPIKeyCount + codexCompatAPIKeyCount + openAICompatCount
+	totalNewClients := authFileCount + geminiAPIKeyCount + vertexCompatAPIKeyCount + claudeAPIKeyCount + codexAPIKeyCount + codexCompatAPIKeyCount + copilotCompatAPIKeyCount + openAICompatCount
 
 	if w.reloadCallback != nil {
 		log.Debugf("triggering server update callback before auth refresh")
@@ -109,7 +109,7 @@ func (w *Watcher) reloadClients(rescanAuth bool, affectedOAuthProviders []string
 
 	w.refreshAuthState(forceAuthRefresh)
 
-	log.Infof("full client load complete - %d clients (%d auth files + %d Gemini API keys + %d Vertex API keys + %d Claude API keys + %d Codex keys + %d Codex-compat keys + %d OpenAI-compat)",
+	log.Infof("full client load complete - %d clients (%d auth files + %d Gemini API keys + %d Vertex API keys + %d Claude API keys + %d Codex keys + %d Codex-compat keys + %d Copilot-compat keys + %d OpenAI-compat)",
 		totalNewClients,
 		authFileCount,
 		geminiAPIKeyCount,
@@ -117,6 +117,7 @@ func (w *Watcher) reloadClients(rescanAuth bool, affectedOAuthProviders []string
 		claudeAPIKeyCount,
 		codexAPIKeyCount,
 		codexCompatAPIKeyCount,
+		copilotCompatAPIKeyCount,
 		openAICompatCount,
 	)
 }

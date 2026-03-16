@@ -169,7 +169,8 @@ func (e *CopilotCompatExecutor) executeChat(ctx context.Context, auth *cliproxya
 	translated = sanitizeCopilotCompatChatPayload(translated, baseModel)
 
 	url := strings.TrimSuffix(baseURL, "/") + "/chat/completions"
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(translated))
+	translated, cacheID := prepareCodexCompatiblePayload(from, req, translated, false)
+	httpReq, err := buildCodexCompatibleRequest(ctx, url, translated, cacheID)
 	if err != nil {
 		return resp, err
 	}
@@ -239,7 +240,8 @@ func (e *CopilotCompatExecutor) executeChatStream(ctx context.Context, auth *cli
 	translated = sanitizeCopilotCompatChatPayload(translated, baseModel)
 
 	url := strings.TrimSuffix(baseURL, "/") + "/chat/completions"
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(translated))
+	translated, cacheID := prepareCodexCompatiblePayload(from, req, translated, false)
+	httpReq, err := buildCodexCompatibleRequest(ctx, url, translated, cacheID)
 	if err != nil {
 		return nil, err
 	}
@@ -333,7 +335,8 @@ func (e *CopilotCompatExecutor) executeResponses(ctx context.Context, auth *clip
 	translated = sanitizeCopilotCompatResponsesPayload(translated, baseModel, false)
 
 	url := strings.TrimSuffix(baseURL, "/") + "/responses"
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(translated))
+	translated, cacheID := prepareCodexCompatiblePayload(from, req, translated, true)
+	httpReq, err := buildCodexCompatibleRequest(ctx, url, translated, cacheID)
 	if err != nil {
 		return resp, err
 	}
@@ -422,7 +425,8 @@ func (e *CopilotCompatExecutor) executeResponsesCompact(ctx context.Context, aut
 	translated = sanitizeCopilotCompatResponsesPayload(translated, baseModel, true)
 
 	url := strings.TrimSuffix(baseURL, "/") + "/responses/compact"
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(translated))
+	translated, cacheID := prepareCodexCompatiblePayload(from, req, translated, true)
+	httpReq, err := buildCodexCompatibleRequest(ctx, url, translated, cacheID)
 	if err != nil {
 		return resp, err
 	}
@@ -493,7 +497,8 @@ func (e *CopilotCompatExecutor) executeResponsesStream(ctx context.Context, auth
 	translated = sanitizeCopilotCompatResponsesPayload(translated, baseModel, false)
 
 	url := strings.TrimSuffix(baseURL, "/") + "/responses"
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(translated))
+	translated, cacheID := prepareCodexCompatiblePayload(from, req, translated, true)
+	httpReq, err := buildCodexCompatibleRequest(ctx, url, translated, cacheID)
 	if err != nil {
 		return nil, err
 	}

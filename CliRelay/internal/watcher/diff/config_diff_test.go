@@ -515,6 +515,9 @@ func TestBuildConfigChangeDetails_CountBranches(t *testing.T) {
 		CodexCompatKey: []config.CodexKey{
 			{APIKey: "xc"},
 		},
+		CopilotCompatKey: []config.CodexKey{
+			{APIKey: "cp"},
+		},
 		VertexCompatAPIKey: []config.VertexCompatKey{
 			{APIKey: "v", BaseURL: "http://v"},
 		},
@@ -525,6 +528,7 @@ func TestBuildConfigChangeDetails_CountBranches(t *testing.T) {
 	expectContains(t, changes, "claude-api-key count: 0 -> 1")
 	expectContains(t, changes, "codex-api-key count: 0 -> 1")
 	expectContains(t, changes, "codex-compat-api-key count: 0 -> 1")
+	expectContains(t, changes, "copilot-compat-api-key count: 0 -> 1")
 	expectContains(t, changes, "vertex-api-key count: 0 -> 1")
 }
 

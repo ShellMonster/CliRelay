@@ -321,7 +321,7 @@ func extractThinkingConfig(body []byte, provider string) ThinkingConfig {
 		return extractGeminiConfig(body, provider)
 	case "openai":
 		return extractOpenAIConfig(body)
-	case "codex", "codex-compat":
+	case "openai-response", "codex", "codex-compat":
 		return extractCodexConfig(body)
 	case "iflow":
 		config := extractIFlowConfig(body)

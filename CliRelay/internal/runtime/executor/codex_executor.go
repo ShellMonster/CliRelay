@@ -146,7 +146,7 @@ func (e *CodexExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth, re
 	}
 
 	url := strings.TrimSuffix(baseURL, "/") + "/responses"
-	httpReq, err := e.cacheHelper(ctx, from, url, req, body)
+	httpReq, body, err := e.cacheHelper(ctx, from, url, req, body)
 	if err != nil {
 		return resp, err
 	}
@@ -250,7 +250,7 @@ func (e *CodexExecutor) executeCompact(ctx context.Context, auth *cliproxyauth.A
 	body, _ = sjson.DeleteBytes(body, "stream")
 
 	url := strings.TrimSuffix(baseURL, "/") + "/responses/compact"
-	httpReq, err := e.cacheHelper(ctx, from, url, req, body)
+	httpReq, body, err := e.cacheHelper(ctx, from, url, req, body)
 	if err != nil {
 		return resp, err
 	}
@@ -345,7 +345,7 @@ func (e *CodexExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Au
 	}
 
 	url := strings.TrimSuffix(baseURL, "/") + "/responses"
-	httpReq, err := e.cacheHelper(ctx, from, url, req, body)
+	httpReq, body, err := e.cacheHelper(ctx, from, url, req, body)
 	if err != nil {
 		return nil, err
 	}
@@ -626,40 +626,13 @@ func (e *CodexExecutor) Refresh(ctx context.Context, auth *cliproxyauth.Auth) (*
 	return auth, nil
 }
 
-func (e *CodexExecutor) cacheHelper(ctx context.Context, from sdktranslator.Format, url string, req cliproxyexecutor.Request, rawJSON []byte) (*http.Request, error) {
-	var cache codexCache
-	if from == "claude" {
-		userIDResult := gjson.GetBytes(req.Payload, "metadata.user_id")
-		if userIDResult.Exists() {
-			key := fmt.Sprintf("%s-%s", req.Model, userIDResult.String())
-			var ok bool
-			if cache, ok = getCodexCache(key); !ok {
-				cache = codexCache{
-					ID:     uuid.New().String(),
-					Expire: time.Now().Add(1 * time.Hour),
-				}
-				setCodexCache(key, cache)
-			}
-		}
-	} else if from == "openai-response" {
-		promptCacheKey := gjson.GetBytes(req.Payload, "prompt_cache_key")
-		if promptCacheKey.Exists() {
-			cache.ID = promptCacheKey.String()
-		}
-	}
-
-	if cache.ID != "" {
-		rawJSON, _ = sjson.SetBytes(rawJSON, "prompt_cache_key", cache.ID)
-	}
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(rawJSON))
+func (e *CodexExecutor) cacheHelper(ctx context.Context, from sdktranslator.Format, url string, req cliproxyexecutor.Request, rawJSON []byte) (*http.Request, []byte, error) {
+	preparedBody, cacheID := prepareCodexCompatiblePayload(from, req, rawJSON, true)
+	httpReq, err := buildCodexCompatibleRequest(ctx, url, preparedBody, cacheID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	if cache.ID != "" {
-		httpReq.Header.Set("Conversation_id", cache.ID)
-		httpReq.Header.Set("Session_id", cache.ID)
-	}
-	return httpReq, nil
+	return httpReq, preparedBody, nil
 }
 
 func applyCodexHeaders(r *http.Request, auth *cliproxyauth.Auth, token string, stream bool) {

@@ -6,6 +6,14 @@ import type { KeyStatBucket } from "@/modules/providers/provider-usage";
 
 const DISABLE_ALL_MODELS_RULE = "*";
 
+const asEditableString = (value: unknown): string => {
+  if (typeof value === "string") return value;
+  if (value === undefined || value === null) return "";
+  return String(value);
+};
+
+const asTrimmedString = (value: unknown): string => asEditableString(value).trim();
+
 export const hasDisableAllModelsRule = (models?: string[]) =>
   Array.isArray(models) && models.some((m) => String(m ?? "").trim() === DISABLE_ALL_MODELS_RULE);
 
@@ -21,15 +29,17 @@ export const withDisableAllModelsRule = (models?: string[]) => [
 
 export const withoutDisableAllModelsRule = (models?: string[]) => stripDisableAllModelsRule(models);
 
-export const maskApiKey = (value: string): string => {
-  const trimmed = value.trim();
+export const maskApiKey = (value: unknown): string => {
+  const trimmed = asTrimmedString(value);
   if (!trimmed) return "--";
   if (trimmed.length <= 10) return `${trimmed.slice(0, 2)}***${trimmed.slice(-2)}`;
   return `${trimmed.slice(0, 6)}***${trimmed.slice(-4)}`;
 };
 
 export const excludedModelsToText = (models?: string[]) =>
-  Array.isArray(models) ? models.join("\n") : "";
+  Array.isArray(models)
+    ? models.map((model) => asTrimmedString(model)).filter(Boolean).join("\n")
+    : "";
 
 export const excludedModelsFromText = (text: string) =>
   text
@@ -93,13 +103,25 @@ export type ProviderKeyDraft = {
 
 export const buildModelEntries = (models?: ProviderModel[]): ModelEntryDraft[] => {
   if (!Array.isArray(models) || models.length === 0) return [];
-  return models.map((model) => ({
-    id: `model-${Date.now()}-${Math.random().toString(16).slice(2)}-${model.name ?? ""}`,
-    name: model.name ?? "",
-    alias: model.alias ?? "",
-    priorityText: model.priority !== undefined ? String(model.priority) : "",
-    testModel: model.testModel ?? "",
-  }));
+  const entries: ModelEntryDraft[] = [];
+  models.forEach((model, index) => {
+    if (!model || typeof model !== "object") return;
+    const name = asTrimmedString(model.name);
+    const alias = asEditableString(model.alias);
+    const priority =
+      typeof model.priority === "number" && Number.isFinite(model.priority)
+        ? String(model.priority)
+        : "";
+    const testModel = asEditableString(model.testModel);
+    entries.push({
+      id: `model-${Date.now()}-${Math.random().toString(16).slice(2)}-${name || index}`,
+      name,
+      alias,
+      priorityText: priority,
+      testModel,
+    });
+  });
+  return entries;
 };
 
 export const commitModelEntries = (
@@ -136,11 +158,11 @@ export const commitModelEntries = (
 };
 
 export const buildProviderKeyDraft = (input?: ProviderSimpleConfig | null): ProviderKeyDraft => ({
-  name: input?.name ?? "",
-  apiKey: input?.apiKey ?? "",
-  prefix: input?.prefix ?? "",
-  baseUrl: input?.baseUrl ?? "",
-  proxyUrl: input?.proxyUrl ?? "",
+  name: asEditableString(input?.name),
+  apiKey: asEditableString(input?.apiKey),
+  prefix: asEditableString(input?.prefix),
+  baseUrl: asEditableString(input?.baseUrl),
+  proxyUrl: asEditableString(input?.proxyUrl),
   participateInDefaultRouting: input?.participateInDefaultRouting !== false,
   excludedModelsText: excludedModelsToText(input?.excludedModels),
   headersEntries: recordToKeyValueEntries(input?.headers),
@@ -166,22 +188,26 @@ export type OpenAIDraft = {
 };
 
 export const buildOpenAIDraft = (input?: OpenAIProvider | null): OpenAIDraft => ({
-  name: input?.name ?? "",
-  baseUrl: input?.baseUrl ?? "",
-  prefix: input?.prefix ?? "",
+  name: asEditableString(input?.name),
+  baseUrl: asEditableString(input?.baseUrl),
+  prefix: asEditableString(input?.prefix),
   participateInDefaultRouting: input?.participateInDefaultRouting !== false,
   excludedModelsText: excludedModelsToText(input?.excludedModels),
   headersEntries: recordToKeyValueEntries(input?.headers),
   priorityText: input?.priority !== undefined ? String(input.priority) : "",
-  testModel: input?.testModel ?? "",
+  testModel: asEditableString(input?.testModel),
   apiKeyEntries:
     Array.isArray(input?.apiKeyEntries) && input.apiKeyEntries.length
-      ? input.apiKeyEntries.map((entry, idx) => ({
-        id: `key-${idx}-${entry.apiKey}`,
-        apiKey: entry.apiKey ?? "",
-        proxyUrl: entry.proxyUrl ?? "",
-        headersEntries: recordToKeyValueEntries(entry.headers),
-      }))
+      ? input.apiKeyEntries.reduce<OpenAIDraft["apiKeyEntries"]>((acc, entry, idx) => {
+        if (!entry || typeof entry !== "object") return acc;
+        acc.push({
+          id: `key-${idx}-${asTrimmedString(entry.apiKey) || idx}`,
+          apiKey: asEditableString(entry.apiKey),
+          proxyUrl: asEditableString(entry.proxyUrl),
+          headersEntries: recordToKeyValueEntries(entry.headers),
+        });
+        return acc;
+      }, [])
       : [{ id: `key-${Date.now()}`, apiKey: "", proxyUrl: "", headersEntries: [] }],
   modelEntries: buildModelEntries(input?.models),
 });

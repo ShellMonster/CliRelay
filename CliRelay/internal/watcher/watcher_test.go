@@ -69,13 +69,16 @@ func TestBuildAPIKeyClientsCounts(t *testing.T) {
 		ClaudeKey:      []config.ClaudeKey{{APIKey: "c1"}},
 		CodexKey:       []config.CodexKey{{APIKey: "x1"}, {APIKey: "x2"}},
 		CodexCompatKey: []config.CodexKey{{APIKey: "xc1"}},
+		CopilotCompatKey: []config.CodexKey{
+			{APIKey: "cp1"},
+		},
 		OpenAICompatibility: []config.OpenAICompatibility{
 			{APIKeyEntries: []config.OpenAICompatibilityAPIKey{{APIKey: "o1"}, {APIKey: "o2"}}},
 		},
 	}
 
 	gemini, vertex, claude, codex, codexCompat, copilotCompat, compat := BuildAPIKeyClients(cfg)
-	if gemini != 2 || vertex != 1 || claude != 1 || codex != 2 || codexCompat != 1 || copilotCompat != 0 || compat != 2 {
+	if gemini != 2 || vertex != 1 || claude != 1 || codex != 2 || codexCompat != 1 || copilotCompat != 1 || compat != 2 {
 		t.Fatalf("unexpected counts: %d %d %d %d %d %d %d", gemini, vertex, claude, codex, codexCompat, copilotCompat, compat)
 	}
 }
