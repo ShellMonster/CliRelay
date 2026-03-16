@@ -731,6 +731,7 @@ func sanitizeCopilotCompatChatPayload(body []byte, model string) []byte {
 	body, _ = sjson.DeleteBytes(body, "stream_options")
 	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(model)), "gemini-") {
 		body, _ = sjson.DeleteBytes(body, "reasoning_effort")
+		body = sanitizeCopilotCompatGeminiTools(body)
 	}
 	return body
 }
