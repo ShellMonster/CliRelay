@@ -839,7 +839,11 @@ func (s *Service) registerModelsForAuth(a *coreauth.Auth) {
 		models = executor.FetchCodexModels(fetchCtx, a, s.cfg)
 		cancel()
 		if len(models) == 0 {
-			models = registry.GetOpenAIModels()
+			if provider == "copilot-compat" {
+				models = executor.CopilotCompatFallbackModels()
+			} else {
+				models = registry.GetOpenAIModels()
+			}
 		}
 		var entry *config.CodexKey
 		if provider == "codex-compat" {

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -23,6 +24,8 @@ import (
 )
 
 const copilotCompatDefaultUserAgent = "cli-proxy-copilot-compat"
+
+const copilotCompatReasoningOpaqueKey = "reasoning_opaque"
 
 // CopilotCompatExecutor routes GitHub Copilot-compatible requests to either the
 // Responses API or Chat Completions API depending on the downstream request shape.
@@ -734,6 +737,8 @@ func copilotCompatHasVision(body []byte, responses bool) bool {
 
 func sanitizeCopilotCompatChatPayload(body []byte, model string) []byte {
 	body, _ = sjson.DeleteBytes(body, "stream_options")
+	body = restoreCopilotCompatChatReasoning(body)
+	body = normalizeCopilotCompatChatReasoningEffort(body, model)
 	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(model)), "gemini-") {
 		body, _ = sjson.DeleteBytes(body, "reasoning_effort")
 		body = sanitizeCopilotCompatGeminiTools(body)
@@ -741,9 +746,76 @@ func sanitizeCopilotCompatChatPayload(body []byte, model string) []byte {
 	return body
 }
 
+func restoreCopilotCompatChatReasoning(body []byte) []byte {
+	messages := gjson.GetBytes(body, "messages")
+	if !messages.Exists() || !messages.IsArray() {
+		return body
+	}
+	for i, message := range messages.Array() {
+		if !strings.EqualFold(strings.TrimSpace(message.Get("role").String()), "assistant") {
+			continue
+		}
+		reasoningOpaque := copilotCompatReasoningOpaque(message)
+		reasoningText := strings.TrimSpace(message.Get("reasoning_text").String())
+		content := message.Get("content")
+		if reasoningOpaque == "" && content.IsArray() {
+			for _, part := range content.Array() {
+				if opaque := copilotCompatReasoningOpaque(part); opaque != "" && reasoningOpaque == "" {
+					reasoningOpaque = opaque
+				}
+				if reasoningText == "" && strings.EqualFold(strings.TrimSpace(part.Get("type").String()), "reasoning") {
+					reasoningText = copilotCompatReasoningText(part)
+				}
+			}
+		}
+		if reasoningOpaque == "" {
+			body, _ = sjson.DeleteBytes(body, fmt.Sprintf("messages.%d.reasoning_text", i))
+			body, _ = sjson.DeleteBytes(body, fmt.Sprintf("messages.%d.%s", i, copilotCompatReasoningOpaqueKey))
+			body, _ = sjson.DeleteBytes(body, fmt.Sprintf("messages.%d.providerOptions.copilot.reasoningOpaque", i))
+			continue
+		}
+		if reasoningText != "" && !message.Get("reasoning_text").Exists() {
+			body, _ = sjson.SetBytes(body, fmt.Sprintf("messages.%d.reasoning_text", i), reasoningText)
+		}
+		if !message.Get(copilotCompatReasoningOpaqueKey).Exists() {
+			body, _ = sjson.SetBytes(body, fmt.Sprintf("messages.%d.%s", i, copilotCompatReasoningOpaqueKey), reasoningOpaque)
+		}
+		if content.IsArray() {
+			filtered := make([]any, 0, len(content.Array()))
+			for _, part := range content.Array() {
+				if strings.EqualFold(strings.TrimSpace(part.Get("type").String()), "reasoning") {
+					continue
+				}
+				filtered = append(filtered, part.Value())
+			}
+			body, _ = sjson.SetBytes(body, fmt.Sprintf("messages.%d.content", i), filtered)
+		}
+	}
+	return body
+}
+
+func normalizeCopilotCompatChatReasoningEffort(body []byte, model string) []byte {
+	root := gjson.ParseBytes(body)
+	if root.Get("reasoning.effort").Exists() && !root.Get("reasoning_effort").Exists() {
+		body, _ = sjson.SetBytes(body, "reasoning_effort", root.Get("reasoning.effort").String())
+	}
+	if shouldStripCopilotChatReasoningObject(model) {
+		body, _ = sjson.DeleteBytes(body, "reasoning")
+	}
+	return body
+}
+
+func shouldStripCopilotChatReasoningObject(model string) bool {
+	trimmed := strings.ToLower(strings.TrimSpace(model))
+	if strings.HasPrefix(trimmed, "gpt-5") && !strings.HasPrefix(trimmed, "gpt-5-mini") {
+		return false
+	}
+	return true
+}
+
 func sanitizeCopilotCompatResponsesPayload(body []byte, model string, compact bool) []byte {
+	body = restoreCopilotCompatResponsesInput(body)
 	body, _ = sjson.SetBytes(body, "model", strings.TrimSpace(model))
-	body, _ = sjson.DeleteBytes(body, "previous_response_id")
 	body, _ = sjson.DeleteBytes(body, "prompt_cache_retention")
 	body, _ = sjson.DeleteBytes(body, "safety_identifier")
 	if compact {
@@ -751,9 +823,137 @@ func sanitizeCopilotCompatResponsesPayload(body []byte, model string, compact bo
 	} else {
 		body, _ = sjson.SetBytes(body, "stream", true)
 	}
+	if !gjson.GetBytes(body, "store").Exists() {
+		body, _ = sjson.SetBytes(body, "store", false)
+	}
+	if isCopilotResponsesModel(model) && !gjson.GetBytes(body, "reasoning.summary").Exists() {
+		body, _ = sjson.SetBytes(body, "reasoning.summary", "auto")
+	}
+	body = ensureCopilotCompatInclude(body, "reasoning.encrypted_content")
 	if !gjson.GetBytes(body, "instructions").Exists() {
 		body, _ = sjson.SetBytes(body, "instructions", "")
 	}
+	return body
+}
+
+func restoreCopilotCompatResponsesInput(body []byte) []byte {
+	input := gjson.GetBytes(body, "input")
+	if !input.Exists() || !input.IsArray() {
+		return body
+	}
+	for i, item := range input.Array() {
+		itemType := strings.TrimSpace(item.Get("type").String())
+		switch itemType {
+		case "message", "":
+			content := item.Get("content")
+			if !content.Exists() || !content.IsArray() {
+				continue
+			}
+			for j, part := range content.Array() {
+				partType := strings.ToLower(strings.TrimSpace(part.Get("type").String()))
+				if partType == "reasoning" {
+					body = restoreCopilotCompatReasoningPart(body, fmt.Sprintf("input.%d.content.%d", i, j), part)
+					continue
+				}
+				if partType == "output_text" || partType == "input_text" || partType == "text" {
+					if opaque := copilotCompatReasoningOpaque(part); opaque != "" {
+						body, _ = sjson.SetBytes(body, fmt.Sprintf("input.%d.%s", i, copilotCompatReasoningOpaqueKey), opaque)
+					}
+				}
+			}
+		case "reasoning":
+			body = restoreCopilotCompatReasoningItem(body, fmt.Sprintf("input.%d", i), item)
+		}
+	}
+	return body
+}
+
+func restoreCopilotCompatReasoningPart(body []byte, path string, part gjson.Result) []byte {
+	text := copilotCompatReasoningText(part)
+	if text != "" {
+		body, _ = sjson.SetBytes(body, path+".summary", []map[string]string{{"type": "summary_text", "text": text}})
+	}
+	if opaque := copilotCompatReasoningOpaque(part); opaque != "" {
+		body, _ = sjson.SetBytes(body, path+".encrypted_content", opaque)
+	}
+	if itemID := copilotCompatReasoningItemID(part); itemID != "" {
+		body, _ = sjson.SetBytes(body, path+".id", itemID)
+	}
+	body, _ = sjson.SetBytes(body, path+".type", "reasoning")
+	body, _ = sjson.DeleteBytes(body, path+".text")
+	body, _ = sjson.DeleteBytes(body, path+".item_id")
+	body, _ = sjson.DeleteBytes(body, path+"."+copilotCompatReasoningOpaqueKey)
+	body, _ = sjson.DeleteBytes(body, path+".providerOptions")
+	return body
+}
+
+func restoreCopilotCompatReasoningItem(body []byte, path string, item gjson.Result) []byte {
+	if opaque := copilotCompatReasoningOpaque(item); opaque != "" && !item.Get("encrypted_content").Exists() {
+		body, _ = sjson.SetBytes(body, path+".encrypted_content", opaque)
+	}
+	if text := copilotCompatReasoningText(item); text != "" && !item.Get("summary").Exists() {
+		body, _ = sjson.SetBytes(body, path+".summary", []map[string]string{{"type": "summary_text", "text": text}})
+	}
+	if itemID := copilotCompatReasoningItemID(item); itemID != "" && !item.Get("id").Exists() {
+		body, _ = sjson.SetBytes(body, path+".id", itemID)
+	}
+	body, _ = sjson.DeleteBytes(body, path+".text")
+	body, _ = sjson.DeleteBytes(body, path+".item_id")
+	body, _ = sjson.DeleteBytes(body, path+"."+copilotCompatReasoningOpaqueKey)
+	body, _ = sjson.DeleteBytes(body, path+".providerOptions")
+	return body
+}
+
+func copilotCompatReasoningOpaque(node gjson.Result) string {
+	if opaque := strings.TrimSpace(node.Get(copilotCompatReasoningOpaqueKey).String()); opaque != "" {
+		return opaque
+	}
+	return strings.TrimSpace(node.Get("providerOptions.copilot.reasoningOpaque").String())
+}
+
+func copilotCompatReasoningItemID(node gjson.Result) string {
+	if itemID := strings.TrimSpace(node.Get("item_id").String()); itemID != "" {
+		return itemID
+	}
+	if itemID := strings.TrimSpace(node.Get("id").String()); itemID != "" {
+		return itemID
+	}
+	return strings.TrimSpace(node.Get("providerOptions.copilot.itemId").String())
+}
+
+func copilotCompatReasoningText(node gjson.Result) string {
+	if text := strings.TrimSpace(node.Get("text").String()); text != "" {
+		return text
+	}
+	summary := node.Get("summary")
+	if summary.Exists() && summary.IsArray() {
+		for _, part := range summary.Array() {
+			if strings.EqualFold(strings.TrimSpace(part.Get("type").String()), "summary_text") {
+				if text := strings.TrimSpace(part.Get("text").String()); text != "" {
+					return text
+				}
+			}
+		}
+	}
+	return ""
+}
+
+func ensureCopilotCompatInclude(body []byte, value string) []byte {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return body
+	}
+	include := gjson.GetBytes(body, "include")
+	if !include.Exists() || !include.IsArray() {
+		body, _ = sjson.SetBytes(body, "include", []string{value})
+		return body
+	}
+	for _, item := range include.Array() {
+		if strings.EqualFold(strings.TrimSpace(item.String()), value) {
+			return body
+		}
+	}
+	body, _ = sjson.SetRawBytes(body, "include.-1", marshalJSONString(value))
 	return body
 }
 
@@ -761,7 +961,8 @@ func translateResponsesStream(ctx context.Context, upstreamFormat, sourceFormat 
 	if sourceFormat == sdktranslator.FormatOpenAIResponse {
 		return []string{string(line)}
 	}
-	return sdktranslator.TranslateStream(ctx, upstreamFormat, sourceFormat, model, originalRequest, translatedRequest, line, param)
+	chunks := sdktranslator.TranslateStream(ctx, upstreamFormat, sourceFormat, model, originalRequest, translatedRequest, line, param)
+	return annotateCopilotCompatTranslatedChunks(chunks)
 }
 
 func translateResponsesNonStream(ctx context.Context, sourceFormat sdktranslator.Format, model string, originalRequest, translatedRequest, line []byte) string {
@@ -776,7 +977,7 @@ func translateResponsesNonStream(ctx context.Context, sourceFormat sdktranslator
 		return string(payload)
 	}
 	var param any
-	return sdktranslator.TranslateNonStream(ctx, sdktranslator.FormatOpenAIResponse, sourceFormat, model, originalRequest, translatedRequest, line, &param)
+	return annotateCopilotCompatTranslatedJSON(sdktranslator.TranslateNonStream(ctx, sdktranslator.FormatOpenAIResponse, sourceFormat, model, originalRequest, translatedRequest, line, &param))
 }
 
 func translateResponsesCompactNonStream(ctx context.Context, sourceFormat sdktranslator.Format, model string, originalRequest, translatedRequest, body []byte) string {
@@ -784,7 +985,89 @@ func translateResponsesCompactNonStream(ctx context.Context, sourceFormat sdktra
 		return string(body)
 	}
 	var param any
-	return sdktranslator.TranslateNonStream(ctx, sdktranslator.FormatOpenAIResponse, sourceFormat, model, originalRequest, translatedRequest, body, &param)
+	return annotateCopilotCompatTranslatedJSON(sdktranslator.TranslateNonStream(ctx, sdktranslator.FormatOpenAIResponse, sourceFormat, model, originalRequest, translatedRequest, body, &param))
+}
+
+func annotateCopilotCompatTranslatedChunks(chunks []string) []string {
+	if len(chunks) == 0 {
+		return chunks
+	}
+	out := make([]string, 0, len(chunks))
+	for _, chunk := range chunks {
+		out = append(out, annotateCopilotCompatTranslatedJSON(chunk))
+	}
+	return out
+}
+
+func annotateCopilotCompatTranslatedJSON(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return raw
+	}
+	prefix := ""
+	payload := trimmed
+	if strings.HasPrefix(payload, "data:") {
+		prefix = "data: "
+		payload = strings.TrimSpace(strings.TrimPrefix(payload, "data:"))
+	}
+	if !gjson.Valid(payload) {
+		return raw
+	}
+	annotated := annotateCopilotCompatTranslatedPayload([]byte(payload))
+	if prefix == "" {
+		return string(annotated)
+	}
+	return prefix + string(annotated)
+}
+
+func annotateCopilotCompatTranslatedPayload(payload []byte) []byte {
+	root := gjson.ParseBytes(payload)
+	choices := root.Get("choices")
+	if choices.Exists() && choices.IsArray() {
+		for i, choice := range choices.Array() {
+			message := choice.Get("message")
+			if !message.Exists() {
+				continue
+			}
+			if opaque := copilotCompatReasoningOpaque(message); opaque != "" {
+				payload, _ = sjson.SetBytes(payload, fmt.Sprintf("choices.%d.message.providerOptions.copilot.reasoningOpaque", i), opaque)
+			}
+		}
+	}
+	messages := root.Get("messages")
+	if messages.Exists() && messages.IsArray() {
+		for i, message := range messages.Array() {
+			content := message.Get("content")
+			if !content.IsArray() {
+				continue
+			}
+			for j, part := range content.Array() {
+				typeName := strings.ToLower(strings.TrimSpace(part.Get("type").String()))
+				switch typeName {
+				case "reasoning":
+					if itemID := strings.TrimSpace(part.Get("item_id").String()); itemID != "" {
+						payload, _ = sjson.SetBytes(payload, fmt.Sprintf("messages.%d.content.%d.providerOptions.copilot.itemId", i, j), itemID)
+					}
+					if enc := strings.TrimSpace(part.Get("encrypted_content").String()); enc != "" {
+						payload, _ = sjson.SetBytes(payload, fmt.Sprintf("messages.%d.content.%d.providerOptions.copilot.reasoningOpaque", i, j), enc)
+					}
+				case "text":
+					if opaque := strings.TrimSpace(message.Get(copilotCompatReasoningOpaqueKey).String()); opaque != "" {
+						payload, _ = sjson.SetBytes(payload, fmt.Sprintf("messages.%d.content.%d.providerOptions.copilot.reasoningOpaque", i, j), opaque)
+					}
+				}
+			}
+		}
+	}
+	if rawOpaque := strings.TrimSpace(root.Get("providerMetadata.copilot.reasoningOpaque").String()); rawOpaque != "" {
+		payload, _ = sjson.SetBytes(payload, "providerMetadata.openai.reasoningEncryptedContent", rawOpaque)
+	}
+	return payload
+}
+
+func marshalJSONString(v string) []byte {
+	raw, _ := json.Marshal(v)
+	return raw
 }
 
 func parseCopilotCompatResponseUsage(body []byte) usage.Detail {
