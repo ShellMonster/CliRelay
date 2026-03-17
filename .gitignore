@@ -44,6 +44,13 @@ CliRelay/auths/*.yaml
 CliRelay/auths/*.yml
 CliRelay/cli-proxy-api
 CliRelay/*.exe
+CliRelay/server
+CliRelay/usage.db
+
+# Documentation (keep README files)
+*.md
+!CliRelay/README*.md
+!codeProxy/README*.md
 
 # Frontend
 codeProxy/.env
