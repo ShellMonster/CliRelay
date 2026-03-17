@@ -16,12 +16,16 @@
 </p>
 
 <p align="center">
+  <a href="docs/ai-deployment.md">🤖 AI Deployment Guide</a> ·
   <a href="https://help.router-for.me/">📖 Docs</a> ·
   <a href="https://github.com/kittors/codeProxy">🖥️ Management Panel</a> ·
-  <a href="docs/ai-deployment.md">🤖 AI Deployment Guide</a> ·
   <a href="https://github.com/kittors/CliRelay/issues">🐛 Report Bug</a> ·
   <a href="https://github.com/kittors/CliRelay/pulls">✨ Request Feature</a>
 </p>
+
+> [!IMPORTANT]
+> **AI agents / automated deployment should read the [AI Deployment Guide](docs/ai-deployment.md) before running any command.**
+> Hard rules: prepare `data/config.yaml` first, use `http://localhost:8317/` instead of `/v1` for liveness checks, and set `remote-management.secret-key` before using the management panel.
 
 ---
 

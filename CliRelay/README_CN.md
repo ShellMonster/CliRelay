@@ -16,12 +16,16 @@
 </p>
 
 <p align="center">
+  <a href="docs/ai-deployment_CN.md">🤖 AI 部署指南</a> ·
   <a href="https://help.router-for.me/cn/">📖 文档</a> ·
   <a href="https://github.com/kittors/codeProxy">🖥️ 管理面板</a> ·
-  <a href="docs/ai-deployment_CN.md">🤖 AI 部署指南</a> ·
   <a href="https://github.com/kittors/CliRelay/issues">🐛 报告问题</a> ·
   <a href="https://github.com/kittors/CliRelay/pulls">✨ 功能请求</a>
 </p>
+
+> [!IMPORTANT]
+> **AI Agent / 自动化部署请先看 [AI 部署指南](docs/ai-deployment_CN.md)。**
+> 关键硬规则：先准备 `data/config.yaml`，探活检查 `http://localhost:8317/` 而不是 `/v1`，使用管理面板前必须配置 `remote-management.secret-key`。
 
 ---
 
