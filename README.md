@@ -16,9 +16,17 @@
   <a href="#来源与致谢">来源与致谢</a> ·
   <a href="#仓库结构">仓库结构</a> ·
   <a href="#与上游仓库的明确差异">功能差异</a> ·
+  <a href="#快速索引">快速索引</a> ·
   <a href="#快速开始">快速开始</a> ·
   <a href="#文档索引">文档索引</a>
 </p>
+
+## 快速索引
+
+- AI / 自动化部署入口：[CliRelay/docs/ai-deployment_CN.md](./CliRelay/docs/ai-deployment_CN.md)
+- 后端中文文档：[CliRelay/README_CN.md](./CliRelay/README_CN.md)
+- 后端英文文档：[CliRelay/README.md](./CliRelay/README.md)
+- 前端文档：[codeProxy/README.md](./codeProxy/README.md)
 
 ## 项目简介
 
@@ -129,22 +137,57 @@ CliRelay/
 
 ```bash
 cd CliRelay
-cp config.example.yaml config.yaml
+mkdir -p data
+cp config.example.yaml data/config.yaml
+docker compose up -d --build
+```
+
+如果你是基于当前 monorepo 源码启动后端，推荐使用上面这组命令。
+原因：
+
+- `docker-compose.yml` 会以 `./CLIProxyAPI -config /data/config.yaml` 启动服务
+- 因此运行前必须先准备 `CliRelay/data/config.yaml`
+- `--build` 可以确保实际运行的是你当前检出的代码，而不是旧缓存镜像
+
+如需启用管理面板，至少在 `CliRelay/data/config.yaml` 中设置：
+
+```yaml
+remote-management:
+  allow-remote: false
+  secret-key: "your-management-key"
+```
+
+如果你要从其他机器访问管理接口，再把 `allow-remote` 改为 `true`。
+
+如果你只是想直接运行预构建镜像，而不是基于当前源码重新构建，也可以：
+
+```bash
+cd CliRelay
+mkdir -p data
+cp config.example.yaml data/config.yaml
 docker compose up -d
 ```
 
-如在国内网络环境下需要镜像加速：
+如在国内网络环境下需要镜像加速，请显式触发构建：
 
 ```bash
 cd CliRelay
 cp .env.china-mirror .env
-cp config.example.yaml config.yaml
-docker compose up -d
+mkdir -p data
+cp config.example.yaml data/config.yaml
+docker compose up -d --build
 ```
 
-默认管理接口：
+默认接口路径：
 
+- 服务根路径：`http://localhost:8317/`
 - `http://localhost:8317/v0/management`
+
+说明：
+
+- `/` 用于判断服务是否启动
+- `/v1` 不是探活根路径
+- 未配置 management key 时，`/v0/management/*` 会返回 `404`
 
 ### 前端：Bun 本地开发
 
@@ -160,6 +203,8 @@ bun run dev
 
 ## 文档索引
 
+- [AI 部署指南（中文）](./CliRelay/docs/ai-deployment_CN.md)
+- [AI Deployment Guide](./CliRelay/docs/ai-deployment.md)
 - [后端中文文档](./CliRelay/README_CN.md)
 - [后端英文文档](./CliRelay/README.md)
 - [前端文档](./codeProxy/README.md)
