@@ -23,9 +23,9 @@
   <a href="https://github.com/kittors/CliRelay/pulls">✨ 功能请求</a>
 </p>
 
-> [!IMPORTANT]
-> **AI Agent / 自动化部署请先看 [AI 部署指南](docs/ai-deployment_CN.md)。**
-> 关键硬规则：先准备 `data/config.yaml`，探活检查 `http://localhost:8317/` 而不是 `/v1`，使用管理面板前必须配置 `remote-management.secret-key`。
+## 索引
+
+- AI Agent / 自动化部署：[AI 部署指南](docs/ai-deployment_CN.md)
 
 ---
 
