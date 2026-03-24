@@ -343,10 +343,10 @@ func QueryFilters(days int) (FilterOptions, error) {
 	if db == nil {
 		return FilterOptions{}, nil
 	}
-	if days < 1 {
-		days = 7
+	cutoff := ""
+	if days > 0 {
+		cutoff = localDayCutoff(days).Format(time.RFC3339)
 	}
-	cutoff := localDayCutoff(days).Format(time.RFC3339)
 
 	keys, err := queryDistinct(db, "api_key", cutoff)
 	if err != nil {
@@ -414,10 +414,10 @@ func QueryMonitorFilters(days int, apiKey string, channelFilter ChannelFilter) (
 	if db == nil {
 		return FilterOptions{}, nil
 	}
-	if days < 1 {
-		days = 7
+	cutoff := ""
+	if days > 0 {
+		cutoff = localDayCutoff(days).Format(time.RFC3339)
 	}
-	cutoff := localDayCutoff(days).Format(time.RFC3339)
 
 	keys, err := queryDistinct(db, "api_key", cutoff)
 	if err != nil {
@@ -673,13 +673,13 @@ type UsageSourceStats struct {
 }
 
 func buildAggregateWhere(days int, apiKey string, model string, channelFilter ChannelFilter) (string, []any) {
-	if days < 1 {
-		days = 7
+	clauses := make([]string, 0, 4)
+	args := make([]any, 0, 4)
+	if days > 0 {
+		cutoff := localDayCutoff(days).Format(time.RFC3339)
+		clauses = append(clauses, "timestamp >= ?")
+		args = append(args, cutoff)
 	}
-	cutoff := localDayCutoff(days).Format(time.RFC3339)
-
-	clauses := []string{"timestamp >= ?"}
-	args := []any{cutoff}
 	if strings.TrimSpace(apiKey) != "" {
 		clauses = append(clauses, "api_key = ?")
 		args = append(args, strings.TrimSpace(apiKey))
@@ -1806,10 +1806,12 @@ func buildWhereClause(params LogQueryParams) (string, []any) {
 	conditions := make([]string, 0, 5)
 	args := make([]any, 0, 8)
 
-	// Time range: days=1 means "today", days=7 means "last 7 days", etc.
-	cutoff := localDayCutoff(params.Days)
-	conditions = append(conditions, "timestamp >= ?")
-	args = append(args, cutoff.Format(time.RFC3339))
+	// Time range: days=0 means "all time"; days=1 means "today"; days=7 means "last 7 days".
+	if params.Days > 0 {
+		cutoff := localDayCutoff(params.Days)
+		conditions = append(conditions, "timestamp >= ?")
+		args = append(args, cutoff.Format(time.RFC3339))
+	}
 
 	if params.APIKey != "" {
 		conditions = append(conditions, "api_key = ?")
@@ -1898,8 +1900,14 @@ func uniqueTrimmedValues(values []string) []string {
 }
 
 func queryDistinct(db *sql.DB, column, cutoff string) ([]string, error) {
-	q := fmt.Sprintf("SELECT DISTINCT %s FROM request_logs WHERE timestamp >= ? ORDER BY %s", column, column)
-	rows, err := db.Query(q, cutoff)
+	q := fmt.Sprintf("SELECT DISTINCT %s FROM request_logs", column)
+	args := make([]any, 0, 1)
+	if strings.TrimSpace(cutoff) != "" {
+		q += " WHERE timestamp >= ?"
+		args = append(args, cutoff)
+	}
+	q += fmt.Sprintf(" ORDER BY %s", column)
+	rows, err := db.Query(q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("usage: distinct %s: %w", column, err)
 	}
@@ -1919,8 +1927,12 @@ func queryDistinct(db *sql.DB, column, cutoff string) ([]string, error) {
 }
 
 func queryDistinctFiltered(db *sql.DB, column, cutoff, apiKey, model string, channelFilter ChannelFilter) ([]string, error) {
-	clauses := []string{"timestamp >= ?"}
-	args := []any{cutoff}
+	clauses := make([]string, 0, 4)
+	args := make([]any, 0, 4)
+	if strings.TrimSpace(cutoff) != "" {
+		clauses = append(clauses, "timestamp >= ?")
+		args = append(args, cutoff)
+	}
 	if strings.TrimSpace(apiKey) != "" {
 		clauses = append(clauses, "api_key = ?")
 		args = append(args, strings.TrimSpace(apiKey))
@@ -1931,12 +1943,11 @@ func queryDistinctFiltered(db *sql.DB, column, cutoff, apiKey, model string, cha
 	}
 	clauses, args = appendChannelFilterClause(clauses, args, channelFilter)
 
-	q := fmt.Sprintf(
-		"SELECT DISTINCT %s FROM request_logs WHERE %s ORDER BY %s",
-		column,
-		strings.Join(clauses, " AND "),
-		column,
-	)
+	q := fmt.Sprintf("SELECT DISTINCT %s FROM request_logs", column)
+	if len(clauses) > 0 {
+		q += " WHERE " + strings.Join(clauses, " AND ")
+	}
+	q += fmt.Sprintf(" ORDER BY %s", column)
 	rows, err := db.Query(q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("usage: distinct filtered %s: %w", column, err)
@@ -1966,15 +1977,15 @@ func QueryModelsForKey(apiKey string, days int) ([]string, error) {
 	if db == nil {
 		return nil, nil
 	}
-	if days < 1 {
-		days = 7
+	query := "SELECT DISTINCT model FROM request_logs WHERE api_key = ? AND model != ''"
+	args := []any{apiKey}
+	if days > 0 {
+		query += " AND timestamp >= ?"
+		args = append(args, localDayCutoff(days).Format(time.RFC3339))
 	}
-	cutoff := localDayCutoff(days).Format(time.RFC3339)
+	query += " ORDER BY model"
 
-	rows, err := db.Query(
-		"SELECT DISTINCT model FROM request_logs WHERE api_key = ? AND timestamp >= ? AND model != '' ORDER BY model",
-		apiKey, cutoff,
-	)
+	rows, err := db.Query(query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("usage: distinct models for key: %w", err)
 	}

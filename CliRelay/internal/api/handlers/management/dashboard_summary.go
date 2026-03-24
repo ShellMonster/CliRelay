@@ -51,7 +51,7 @@ func (h *Handler) GetDashboardSummary(c *gin.Context) {
 	// ── Usage KPIs (time-filtered) ──
 	daysStr := c.DefaultQuery("days", "7")
 	days := 7
-	if v, err := parsePositiveInt(daysStr); err == nil && v > 0 {
+	if v, err := parseNonNegativeInt(daysStr); err == nil {
 		days = v
 	}
 
@@ -90,7 +90,7 @@ func (h *Handler) GetDashboardSummary(c *gin.Context) {
 	})
 }
 
-func parsePositiveInt(s string) (int, error) {
+func parseNonNegativeInt(s string) (int, error) {
 	var v int
 	_, err := fmt.Sscanf(s, "%d", &v)
 	return v, err

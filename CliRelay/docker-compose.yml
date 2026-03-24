@@ -11,6 +11,7 @@ services:
         # 镜像源配置（国内网络加速）
         DOCKER_REGISTRY: ${DOCKER_REGISTRY:-}
         APK_MIRROR: ${APK_MIRROR:-}
+        GOPROXY: ${GOPROXY:-}
     container_name: cli-proxy-api
     command: ["./CLIProxyAPI", "-config", "/data/config.yaml"]
     # env_file:

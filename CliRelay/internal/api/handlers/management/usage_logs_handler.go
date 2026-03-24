@@ -165,7 +165,7 @@ func intQueryDefault(c *gin.Context, key string, def int) int {
 		return def
 	}
 	n, err := strconv.Atoi(v)
-	if err != nil || n < 1 {
+	if err != nil || n < 0 {
 		return def
 	}
 	return n

@@ -8,9 +8,10 @@ import { EmptyState } from "@/modules/ui/EmptyState";
 import { Tabs, TabsList, TabsTrigger } from "@/modules/ui/Tabs";
 import { useToast } from "@/modules/ui/ToastProvider";
 
-type DashboardRange = 1 | 7 | 14 | 30;
+type DashboardRange = 0 | 1 | 7 | 14 | 30;
 
 const RANGE_OPTIONS: ReadonlyArray<{ value: DashboardRange; label: string }> = [
+  { value: 0, label: "全部" },
   { value: 1, label: "今天" },
   { value: 7, label: "近 7 天" },
   { value: 14, label: "近 14 天" },
@@ -95,7 +96,7 @@ export function DashboardPage() {
         <KpiCard
           title="请求数"
           value={<span className="tabular-nums">{formatNumber(kpi?.total_requests ?? 0)}</span>}
-          hint={`${range === 1 ? "今天" : `最近 ${range} 天`}的总请求数`}
+          hint={`${range === 0 ? "全部时间" : range === 1 ? "今天" : `最近 ${range} 天`}的总请求数`}
           icon={Activity}
         />
         <KpiCard

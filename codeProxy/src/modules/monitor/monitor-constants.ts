@@ -1,7 +1,7 @@
-export type TimeRange = 1 | 7 | 14 | 30;
+export type TimeRange = 0 | 1 | 7 | 14 | 30;
 export type HourWindow = 6 | 12 | 24;
 
-export const TIME_RANGES: readonly TimeRange[] = [1, 7, 14, 30] as const;
+export const TIME_RANGES: readonly TimeRange[] = [0, 1, 7, 14, 30] as const;
 export const HOUR_WINDOWS: readonly HourWindow[] = [6, 12, 24] as const;
 
 export const CHART_COLORS: readonly string[] = [

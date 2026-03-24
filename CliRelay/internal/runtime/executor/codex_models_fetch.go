@@ -36,6 +36,12 @@ type codexModelsCacheEntry struct {
 
 var codexModelsCache sync.Map // key: auth id/fingerprint, value: codexModelsCacheEntry
 
+// CopilotCompatFallbackModels returns the static fallback model list used when
+// copilot-compatible dynamic model discovery is unavailable.
+func CopilotCompatFallbackModels() []*registry.ModelInfo {
+	return cloneModelInfos(registry.GetOpenAIModels())
+}
+
 // FetchCodexModels retrieves model definitions from the upstream models endpoint.
 // It returns nil when fetching fails so callers can fallback to static model lists.
 func FetchCodexModels(ctx context.Context, auth *cliproxyauth.Auth, cfg *config.Config) []*registry.ModelInfo {

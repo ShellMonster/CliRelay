@@ -1,6 +1,7 @@
 # 镜像源配置参数
 ARG DOCKER_REGISTRY=
 ARG APK_MIRROR=
+ARG GOPROXY=
 
 FROM ${DOCKER_REGISTRY:-}golang:1.26-alpine AS builder
 
@@ -13,6 +14,9 @@ RUN if [ -n "$APK_MIRROR" ]; then \
 WORKDIR /app
 
 COPY go.mod go.sum ./
+
+ARG GOPROXY
+ENV GOPROXY=${GOPROXY}
 
 RUN go mod download
 

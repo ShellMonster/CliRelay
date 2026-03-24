@@ -43,7 +43,8 @@ export const TimeRangeSelector = ({
     <Tabs value={String(value)} onValueChange={(next) => onChange(Number(next) as TimeRange)}>
       <TabsList>
         {TIME_RANGES.map((range) => {
-          const label = range === 1 ? "今天" : `${range} 天`;
+          const label =
+            range === 0 ? "全部" : range === 1 ? "今天" : `${range} 天`;
           return (
             <TabsTrigger key={range} value={String(range)}>
               {label}
