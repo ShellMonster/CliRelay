@@ -215,6 +215,17 @@ func TestTokenAggregatesKeepRawTotalsAndAdjustClaudeProcessedTokens(t *testing.T
 			t.Fatalf("ProcessedTokens = %d, want 136", summary.ProcessedTokens)
 		}
 
+		allTimeSummary, err := QueryDashboardSummary(0, "", "", ChannelFilter{})
+		if err != nil {
+			t.Fatalf("QueryDashboardSummary(0) error = %v", err)
+		}
+		if allTimeSummary.TotalRequests != summary.TotalRequests {
+			t.Fatalf("QueryDashboardSummary(0) TotalRequests = %d, want %d", allTimeSummary.TotalRequests, summary.TotalRequests)
+		}
+		if allTimeSummary.ProcessedTokens != summary.ProcessedTokens {
+			t.Fatalf("QueryDashboardSummary(0) ProcessedTokens = %d, want %d", allTimeSummary.ProcessedTokens, summary.ProcessedTokens)
+		}
+
 		points, err := QueryModelDistribution(1, 10, "", "", ChannelFilter{})
 		if err != nil {
 			t.Fatalf("QueryModelDistribution() error = %v", err)
@@ -261,6 +272,80 @@ func TestTokenAggregatesKeepRawTotalsAndAdjustClaudeProcessedTokens(t *testing.T
 		}
 		if compatDetail.ProcessedTokens != 24 {
 			t.Fatalf("compat detail ProcessedTokens = %d, want 24", compatDetail.ProcessedTokens)
+		}
+	})
+}
+
+func TestAllTimeLogPathsDoNotFallbackToSevenDays(t *testing.T) {
+	withTempUsageDB(t, func() {
+		loc := analyticsLocation()
+		now := time.Now().In(loc)
+		startOfToday := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
+
+		recentTime := startOfToday.Add(45 * time.Minute)
+		oldTime := startOfToday.AddDate(0, 0, -10).Add(30 * time.Minute)
+
+		InsertLog(
+			"key-recent",
+			"gpt-5.4",
+			"codex",
+			"Recent Channel",
+			"auth-recent",
+			"0",
+			false,
+			recentTime,
+			100,
+			TokenStats{InputTokens: 5, OutputTokens: 2, CachedTokens: 0, TotalTokens: 7},
+			"",
+			"",
+			map[string]any{"provider": "codex"},
+		)
+		InsertLog(
+			"key-old",
+			"gpt-4.1",
+			"codex",
+			"Old Channel",
+			"auth-old",
+			"1",
+			false,
+			oldTime,
+			110,
+			TokenStats{InputTokens: 20, OutputTokens: 4, CachedTokens: 0, TotalTokens: 24},
+			"",
+			"",
+			map[string]any{"provider": "codex"},
+		)
+
+		statsLast7, err := QueryStats(LogQueryParams{Days: 7})
+		if err != nil {
+			t.Fatalf("QueryStats(7) error = %v", err)
+		}
+		if statsLast7.Total != 1 {
+			t.Fatalf("QueryStats(7) Total = %d, want 1", statsLast7.Total)
+		}
+
+		statsAll, err := QueryStats(LogQueryParams{Days: 0})
+		if err != nil {
+			t.Fatalf("QueryStats(0) error = %v", err)
+		}
+		if statsAll.Total != 2 {
+			t.Fatalf("QueryStats(0) Total = %d, want 2", statsAll.Total)
+		}
+
+		refsLast7, err := QueryChannelRefs(LogQueryParams{Days: 7})
+		if err != nil {
+			t.Fatalf("QueryChannelRefs(7) error = %v", err)
+		}
+		if len(refsLast7) != 1 || refsLast7[0].AuthID != "auth-recent" {
+			t.Fatalf("QueryChannelRefs(7) = %+v, want only recent auth", refsLast7)
+		}
+
+		refsAll, err := QueryChannelRefs(LogQueryParams{Days: 0})
+		if err != nil {
+			t.Fatalf("QueryChannelRefs(0) error = %v", err)
+		}
+		if len(refsAll) != 2 {
+			t.Fatalf("QueryChannelRefs(0) len = %d, want 2", len(refsAll))
 		}
 	})
 }

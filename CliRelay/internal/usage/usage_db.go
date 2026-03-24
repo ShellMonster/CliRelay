@@ -371,9 +371,6 @@ func QueryChannelRefs(params LogQueryParams) ([]ChannelRef, error) {
 	if db == nil {
 		return []ChannelRef{}, nil
 	}
-	if params.Days < 1 {
-		params.Days = 7
-	}
 
 	where, args := buildWhereClause(params)
 	rows, err := db.Query(
@@ -441,9 +438,6 @@ func QueryStats(params LogQueryParams) (LogStats, error) {
 	db := getDB()
 	if db == nil {
 		return LogStats{}, nil
-	}
-	if params.Days < 1 {
-		params.Days = 7
 	}
 
 	where, args := buildWhereClause(params)
@@ -690,6 +684,9 @@ func buildAggregateWhere(days int, apiKey string, model string, channelFilter Ch
 	}
 	clauses, args = appendChannelFilterClause(clauses, args, channelFilter)
 
+	if len(clauses) == 0 {
+		return "", nil
+	}
 	return " WHERE " + strings.Join(clauses, " AND "), args
 }
 
