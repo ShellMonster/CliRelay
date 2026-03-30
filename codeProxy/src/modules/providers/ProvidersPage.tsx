@@ -140,7 +140,7 @@ export function ProvidersPage() {
             : editKeyType === "codex-compat"
               ? "Codex Compat"
               : editKeyType === "copilot-compat"
-                ? "Copilot Compat"
+                ? "GitHub Copilot"
               : "Vertex";
 
   // 按 Tab 加载数据，切换 Tab 时只请求当前 Tab 的数据
@@ -1064,7 +1064,7 @@ export function ProvidersPage() {
           <TabsTrigger value="claude">Claude</TabsTrigger>
           <TabsTrigger value="codex">Codex</TabsTrigger>
           <TabsTrigger value="codex-compat">Codex Compat</TabsTrigger>
-          <TabsTrigger value="copilot-compat">Copilot Compat</TabsTrigger>
+          <TabsTrigger value="copilot-compat">GitHub Copilot</TabsTrigger>
           <TabsTrigger value="vertex">Vertex</TabsTrigger>
           <TabsTrigger value="openai">OpenAI 兼容</TabsTrigger>
           <TabsTrigger value="ampcode">Ampcode</TabsTrigger>
@@ -1137,7 +1137,7 @@ export function ProvidersPage() {
         <TabsContent value="copilot-compat" className="mt-6">
           <ProviderKeyListCard
             icon={Settings2}
-            title="Copilot Compat Keys"
+            title="GitHub Copilot Keys"
             description="面向 GitHub Copilot / opencode 一类客户端，默认使用 copilot-compat prefix，并按请求形态自动切换 Responses 与 Chat Completions。"
             loading={loading}
             items={copilotCompatKeys}
@@ -1469,8 +1469,8 @@ export function ProvidersPage() {
                 ? editKeyType === "codex-compat"
                   ? "支持 Excluded Models、自定义 headers / models，以及自动兼容尝试 /models 与 /v1/models 拉取并合并模型；默认 prefix 为 codex-compat，并对 OpenAI Responses 事件 ID 做稳定化。"
                   : editKeyType === "copilot-compat"
-                    ? "支持 Excluded Models、自定义 headers / models，以及自动兼容尝试 /models 与 /v1/models 拉取并合并模型；默认 prefix 为 copilot-compat，并为 GitHub Copilot 兼容客户端自动切换 Responses / Chat Completions。"
-                  : "支持 Excluded Models、自定义 headers / models，以及自动兼容尝试 /models 与 /v1/models 拉取并合并 Codex 模型。"
+                    ? "支持 Excluded Models、自定义 headers / models，以及自动兼容尝试 /models 与 /v1/models 拉取并合并模型；默认 prefix 为 copilot-compat，并为 GitHub Copilot 客户端自动切换 Responses / Chat Completions。"
+                    : "支持 Excluded Models、自定义 headers / models，以及自动兼容尝试 /models 与 /v1/models 拉取并合并 Codex 模型。"
                 : editKeyType === "claude"
                   ? "支持 Excluded Models、自定义 headers / models，以及自动兼容尝试 Claude /v1/models 与 /models 拉取并合并模型。"
                 : editKeyType === "gemini"

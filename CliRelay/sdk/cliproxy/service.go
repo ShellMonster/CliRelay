@@ -326,7 +326,7 @@ func (s *Service) applyCoreAuthRemoval(ctx context.Context, id string) {
 			log.Errorf("failed to disable auth %s: %v", id, err)
 		}
 		switch strings.ToLower(strings.TrimSpace(existing.Provider)) {
-		case "codex", "codex-compat", "copilot-compat":
+		case "codex", "codex-compat", "copilot-compat", "github-copilot":
 			s.ensureExecutorsForAuth(existing)
 		}
 	}
@@ -386,7 +386,7 @@ func (s *Service) ensureExecutorsForAuthWithMode(a *coreauth.Auth, forceReplace 
 		}
 		return
 	}
-	if providerKey == "copilot-compat" {
+	if providerKey == "copilot-compat" || providerKey == "github-copilot" {
 		if !forceReplace {
 			if _, hasExecutor := s.coreManager.Executor(providerKey); hasExecutor {
 				return
@@ -452,7 +452,7 @@ func (s *Service) rebindExecutors() {
 	for _, auth := range auths {
 		if auth != nil {
 			providerKey := strings.ToLower(strings.TrimSpace(auth.Provider))
-			if providerKey == "codex" || providerKey == "codex-compat" || providerKey == "copilot-compat" {
+			if providerKey == "codex" || providerKey == "codex-compat" || providerKey == "copilot-compat" || providerKey == "github-copilot" {
 				if reboundProviders[providerKey] {
 					continue
 				}
@@ -834,12 +834,12 @@ func (s *Service) registerModelsForAuth(a *coreauth.Auth) {
 			}
 		}
 		models = applyExcludedModels(models, excluded)
-	case "codex", "codex-compat", "copilot-compat":
+	case "codex", "codex-compat", "copilot-compat", "github-copilot":
 		fetchCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		models = executor.FetchCodexModels(fetchCtx, a, s.cfg)
 		cancel()
 		if len(models) == 0 {
-			if provider == "copilot-compat" {
+			if provider == "copilot-compat" || provider == "github-copilot" {
 				models = executor.CopilotCompatFallbackModels()
 			} else {
 				models = registry.GetOpenAIModels()
@@ -848,7 +848,7 @@ func (s *Service) registerModelsForAuth(a *coreauth.Auth) {
 		var entry *config.CodexKey
 		if provider == "codex-compat" {
 			entry = s.resolveConfigCodexCompatKey(a)
-		} else if provider == "copilot-compat" {
+		} else if provider == "copilot-compat" || provider == "github-copilot" {
 			entry = s.resolveConfigCopilotCompatKey(a)
 		} else {
 			entry = s.resolveConfigCodexKey(a)
@@ -1125,7 +1125,7 @@ func effectiveAuthModelPrefix(auth *coreauth.Auth) string {
 		switch strings.ToLower(strings.TrimSpace(auth.Provider)) {
 		case "codex-compat":
 			return config.DefaultCodexCompatPrefix
-		case "copilot-compat":
+		case "copilot-compat", "github-copilot":
 			return config.DefaultCopilotCompatPrefix
 		}
 	}

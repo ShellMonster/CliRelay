@@ -286,12 +286,26 @@ func (e *CopilotCompatExecutor) executeChatStream(ctx context.Context, auth *cli
 		scanner := bufio.NewScanner(httpResp.Body)
 		scanner.Buffer(nil, 52_428_800)
 		var param any
+		var sawTerminalChunk bool
+		var pendingUsage usage.Detail
+		var hasPendingUsage bool
 		for scanner.Scan() {
 			line := bytes.Clone(scanner.Bytes())
 			appendAPIResponseChunk(ctx, e.cfg, line)
 			reporter.appendOutputChunk(line)
+			payload := jsonPayload(line)
+			if isCopilotResponsesTerminalPayload(payload) {
+				sawTerminalChunk = true
+			}
+			if errMsg := copilotChatTerminalError(payload); errMsg != nil {
+				recordAPIResponseError(ctx, e.cfg, errMsg)
+				reporter.publishFailure(ctx)
+				out <- cliproxyexecutor.StreamChunk{Err: errMsg}
+				return
+			}
 			if detail, ok := parseOpenAIStreamUsage(line); ok {
-				reporter.publish(ctx, detail)
+				pendingUsage = detail
+				hasPendingUsage = true
 			}
 			if len(line) == 0 {
 				continue
@@ -308,6 +322,17 @@ func (e *CopilotCompatExecutor) executeChatStream(ctx context.Context, auth *cli
 			recordAPIResponseError(ctx, e.cfg, errScan)
 			reporter.publishFailure(ctx)
 			out <- cliproxyexecutor.StreamChunk{Err: errScan}
+			return
+		}
+		if !sawTerminalChunk {
+			errIncomplete := statusErr{code: http.StatusRequestTimeout, msg: "stream error: stream disconnected before completion: stream closed before finish_reason"}
+			recordAPIResponseError(ctx, e.cfg, errIncomplete)
+			reporter.publishFailure(ctx)
+			out <- cliproxyexecutor.StreamChunk{Err: errIncomplete}
+			return
+		}
+		if hasPendingUsage {
+			reporter.publish(ctx, pendingUsage)
 		}
 		reporter.ensurePublished(ctx)
 	}()
@@ -544,6 +569,9 @@ func (e *CopilotCompatExecutor) executeResponsesStream(ctx context.Context, auth
 		scanner.Buffer(nil, 52_428_800)
 		state := newCopilotCompatResponsesState()
 		var param any
+		var sawFinishedChunk bool
+		var pendingUsage usage.Detail
+		var hasPendingUsage bool
 		for scanner.Scan() {
 			line := bytes.Clone(scanner.Bytes())
 			appendAPIResponseChunk(ctx, e.cfg, line)
@@ -554,9 +582,20 @@ func (e *CopilotCompatExecutor) executeResponsesStream(ctx context.Context, auth
 				continue
 			}
 			normalized := normalizeCopilotCompatResponseIDs(line, state)
+			payload := jsonPayload(normalized)
+			if isCopilotResponsesFinishedPayload(payload) {
+				sawFinishedChunk = true
+			}
+			if errMsg := copilotResponsesTerminalError(payload); errMsg != nil {
+				recordAPIResponseError(ctx, e.cfg, errMsg)
+				reporter.publishFailure(ctx)
+				out <- cliproxyexecutor.StreamChunk{Err: errMsg}
+				return
+			}
 			reporter.appendOutputChunk(normalized)
-			if detail, ok := parseCodexUsage(jsonPayload(normalized)); ok {
-				reporter.publish(ctx, detail)
+			if detail, ok := parseCodexUsage(payload); ok {
+				pendingUsage = detail
+				hasPendingUsage = true
 			}
 			chunks := translateResponsesStream(ctx, to, from, req.Model, opts.OriginalRequest, translated, normalized, &param)
 			for i := range chunks {
@@ -567,10 +606,70 @@ func (e *CopilotCompatExecutor) executeResponsesStream(ctx context.Context, auth
 			recordAPIResponseError(ctx, e.cfg, errScan)
 			reporter.publishFailure(ctx)
 			out <- cliproxyexecutor.StreamChunk{Err: errScan}
+			return
+		}
+		if !sawFinishedChunk {
+			errIncomplete := statusErr{code: http.StatusRequestTimeout, msg: "stream error: stream disconnected before completion: stream closed before response.completed"}
+			recordAPIResponseError(ctx, e.cfg, errIncomplete)
+			reporter.publishFailure(ctx)
+			out <- cliproxyexecutor.StreamChunk{Err: errIncomplete}
+			return
+		}
+		if hasPendingUsage {
+			reporter.publish(ctx, pendingUsage)
 		}
 		reporter.ensurePublished(ctx)
 	}()
 	return &cliproxyexecutor.StreamResult{Headers: httpResp.Header.Clone(), Chunks: out}, nil
+}
+
+func isCopilotResponsesFinishedPayload(payload []byte) bool {
+	if len(payload) == 0 || !gjson.ValidBytes(payload) {
+		return false
+	}
+	typeName := strings.TrimSpace(gjson.GetBytes(payload, "type").String())
+	return typeName == "response.completed" || typeName == "response.incomplete" || typeName == "response.done"
+}
+
+func isCopilotResponsesTerminalPayload(payload []byte) bool {
+	if len(payload) == 0 || !gjson.ValidBytes(payload) {
+		return false
+	}
+	if finishReason := strings.TrimSpace(gjson.GetBytes(payload, "choices.0.finish_reason").String()); finishReason != "" {
+		return true
+	}
+	return strings.EqualFold(strings.TrimSpace(gjson.GetBytes(payload, "object").String()), "chat.completion.chunk") && gjson.GetBytes(payload, "usage").Exists()
+}
+
+func copilotResponsesTerminalError(payload []byte) error {
+	if len(payload) == 0 || !gjson.ValidBytes(payload) {
+		return nil
+	}
+	if strings.TrimSpace(gjson.GetBytes(payload, "type").String()) != "error" {
+		return nil
+	}
+	message := strings.TrimSpace(gjson.GetBytes(payload, "message").String())
+	if message == "" {
+		message = "upstream responses stream returned error"
+	}
+	return statusErr{code: http.StatusBadGateway, msg: message}
+}
+
+func copilotChatTerminalError(payload []byte) error {
+	if len(payload) == 0 || !gjson.ValidBytes(payload) {
+		return nil
+	}
+	if !gjson.GetBytes(payload, "error").Exists() {
+		return nil
+	}
+	message := strings.TrimSpace(gjson.GetBytes(payload, "error.message").String())
+	if message == "" {
+		message = strings.TrimSpace(gjson.GetBytes(payload, "error").String())
+	}
+	if message == "" {
+		message = "upstream chat stream returned error"
+	}
+	return statusErr{code: http.StatusBadGateway, msg: message}
 }
 
 func (e *CopilotCompatExecutor) resolveCredentials(auth *cliproxyauth.Auth) (apiKey string, baseURL string, err error) {
@@ -591,6 +690,9 @@ func (e *CopilotCompatExecutor) shouldUseResponsesAPI(model string, opts cliprox
 	}
 	if opts.Alt == "responses/compact" {
 		return true
+	}
+	if opts.SourceFormat == sdktranslator.FormatCodex || opts.SourceFormat == sdktranslator.FormatCodexCompat {
+		return false
 	}
 	switch opts.SourceFormat {
 	case sdktranslator.FormatOpenAIResponse, sdktranslator.FormatClaude, sdktranslator.FormatGemini, sdktranslator.FormatGeminiCLI, sdktranslator.FormatAntigravity:
@@ -824,7 +926,7 @@ func sanitizeCopilotCompatResponsesPayload(body []byte, model string, compact bo
 		body, _ = sjson.SetBytes(body, "stream", true)
 	}
 	if !gjson.GetBytes(body, "store").Exists() {
-		body, _ = sjson.SetBytes(body, "store", false)
+		body, _ = sjson.SetBytes(body, "store", true)
 	}
 	if isCopilotResponsesModel(model) && !gjson.GetBytes(body, "reasoning.summary").Exists() {
 		body, _ = sjson.SetBytes(body, "reasoning.summary", "auto")
