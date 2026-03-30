@@ -54,10 +54,7 @@ export const getApiCallErrorMessage = (result: ApiCallResult): string => {
 };
 
 export const apiCallApi = {
-  request: async (
-    payload: ApiCallRequest,
-    config?: RequestOptions,
-  ): Promise<ApiCallResult> => {
+  request: async (payload: ApiCallRequest, config?: RequestOptions): Promise<ApiCallResult> => {
     const response = await apiClient.post<Record<string, unknown>>("/api-call", payload, {
       ...config,
       timeoutMs: config?.timeoutMs ?? 60000,

@@ -62,7 +62,9 @@ test("Config: page should not horizontally scroll; editor should allow horizonta
   expect(editorCanScroll.moved).toBe(true);
 });
 
-test("Sidebar: collapse/expand should keep nav items nowrap and slide out of view", async ({ page }) => {
+test("Sidebar: collapse/expand should keep nav items nowrap and slide out of view", async ({
+  page,
+}) => {
   await setAuthed(page);
 
   await page.route("**/v0/management/config", async (route) => {
@@ -93,13 +95,17 @@ test("Sidebar: collapse/expand should keep nav items nowrap and slide out of vie
   await expect(page.getByRole("button", { name: "展开侧边栏" })).toBeVisible();
 
   const aside = page.locator("aside");
-  await expect.poll(async () => {
-    return await aside.evaluate((el) => el.getBoundingClientRect().width);
-  }).toBeLessThan(2);
+  await expect
+    .poll(async () => {
+      return await aside.evaluate((el) => el.getBoundingClientRect().width);
+    })
+    .toBeLessThan(2);
 
   await page.getByRole("button", { name: "展开侧边栏" }).click();
   await expect(page.getByRole("button", { name: "收起侧边栏" })).toBeVisible();
-  await expect.poll(async () => {
-    return await aside.evaluate((el) => el.getBoundingClientRect().width);
-  }).toBeGreaterThan(200);
+  await expect
+    .poll(async () => {
+      return await aside.evaluate((el) => el.getBoundingClientRect().width);
+    })
+    .toBeGreaterThan(200);
 });

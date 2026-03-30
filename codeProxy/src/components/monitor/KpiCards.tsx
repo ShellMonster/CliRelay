@@ -31,7 +31,8 @@ export function KpiCards({ data, loading, timeRange }: KpiCardsProps) {
     if (data?.summary) {
       const summary = data.summary;
       const avgRpd = timeRange > 0 ? Math.round(summary.TotalRequests / timeRange) : 0;
-      const avgRpm = timeRange > 0 ? Number((summary.TotalRequests / (timeRange * 24 * 60)).toFixed(1)) : 0;
+      const avgRpm =
+        timeRange > 0 ? Number((summary.TotalRequests / (timeRange * 24 * 60)).toFixed(1)) : 0;
       const avgTpm = timeRange > 0 ? Math.round(summary.TotalTokens / (timeRange * 24 * 60)) : 0;
       return {
         totalRequests: summary.TotalRequests,

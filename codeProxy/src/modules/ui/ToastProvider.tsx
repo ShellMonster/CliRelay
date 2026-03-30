@@ -16,42 +16,32 @@ export function ToastProvider({ children }: PropsWithChildren) {
     state: { mode },
   } = useTheme();
 
-  const notify = useCallback(
-    (input: { type?: ToastType; message: string; duration?: number }) => {
-      const type = input.type ?? "info";
-      const options = input.duration
-        ? { timing: { displayDuration: input.duration } }
-        : {};
+  const notify = useCallback((input: { type?: ToastType; message: string; duration?: number }) => {
+    const type = input.type ?? "info";
+    const options = input.duration ? { timing: { displayDuration: input.duration } } : {};
 
-      switch (type) {
-        case "success":
-          goeyToast.success(input.message, options);
-          break;
-        case "error":
-          goeyToast.error(input.message, options);
-          break;
-        case "warning":
-          goeyToast.warning(input.message, options);
-          break;
-        case "info":
-        default:
-          goeyToast.info(input.message, options);
-          break;
-      }
-    },
-    [],
-  );
+    switch (type) {
+      case "success":
+        goeyToast.success(input.message, options);
+        break;
+      case "error":
+        goeyToast.error(input.message, options);
+        break;
+      case "warning":
+        goeyToast.warning(input.message, options);
+        break;
+      case "info":
+      default:
+        goeyToast.info(input.message, options);
+        break;
+    }
+  }, []);
 
   const value = useMemo<ToastContextState>(() => ({ notify }), [notify]);
 
   return (
     <ToastContext value={value}>
-      <GoeyToaster
-        position="top-right"
-        theme={mode}
-        preset="smooth"
-        showProgress
-      />
+      <GoeyToaster position="top-right" theme={mode} preset="smooth" showProgress />
       {children}
     </ToastContext>
   );

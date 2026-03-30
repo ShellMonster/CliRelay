@@ -8,13 +8,13 @@ import "goey-toast/styles.css";
 const rootElement = document.getElementById("root");
 
 if (!rootElement) {
-    throw new Error("根节点 #root 不存在");
+  throw new Error("根节点 #root 不存在");
 }
 
 createRoot(rootElement).render(
-    <StrictMode>
-        <BrowserRouter basename="/manage">
-            <AppRouter />
-        </BrowserRouter>
-    </StrictMode>,
+  <StrictMode>
+    <BrowserRouter basename="/manage">
+      <AppRouter />
+    </BrowserRouter>
+  </StrictMode>,
 );

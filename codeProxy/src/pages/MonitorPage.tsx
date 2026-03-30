@@ -181,15 +181,16 @@ export function MonitorPage() {
     setLoading(true);
     setError(null);
     try {
-      const [summaryRes, distributionRes, trendRes, hourlyRes, channelStatsRes, failureStatsRes] = await Promise.all([
-        usageApi.getMonitorSummary(timeRange, apiFilter),
-        usageApi.getMonitorModelDistribution(timeRange, 10, apiFilter),
-        usageApi.getMonitorDailyTrend(timeRange, apiFilter),
-        usageApi.getMonitorHourly(24, apiFilter),
-        usageApi.getMonitorChannelStats(timeRange, 10, apiFilter),
-        usageApi.getMonitorFailureStats(timeRange, 10, apiFilter),
-        loadProviderMap(),
-      ]);
+      const [summaryRes, distributionRes, trendRes, hourlyRes, channelStatsRes, failureStatsRes] =
+        await Promise.all([
+          usageApi.getMonitorSummary(timeRange, apiFilter),
+          usageApi.getMonitorModelDistribution(timeRange, 10, apiFilter),
+          usageApi.getMonitorDailyTrend(timeRange, apiFilter),
+          usageApi.getMonitorHourly(24, apiFilter),
+          usageApi.getMonitorChannelStats(timeRange, 10, apiFilter),
+          usageApi.getMonitorFailureStats(timeRange, 10, apiFilter),
+          loadProviderMap(),
+        ]);
 
       const nextData = createEmptyUsageData();
       nextData.summary = summaryRes.summary;

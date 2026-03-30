@@ -59,10 +59,9 @@ export function ProviderKeyListCard({
             const disabled = hasDisableAllModelsRule(item.excludedModels);
             const excludedModels = stripDisableAllModelsRule(item.excludedModels);
             const models = Array.isArray(item.models)
-              ? item.models.filter(
-                (model): model is NonNullable<(typeof item.models)[number]> =>
+              ? item.models.filter((model): model is NonNullable<(typeof item.models)[number]> =>
                   Boolean(model && typeof model === "object"),
-              )
+                )
               : [];
             const stats = getStats(item);
             const statusData = getStatusBar(item);
@@ -74,74 +73,76 @@ export function ProviderKeyListCard({
                 className="relative rounded-2xl border border-slate-200 bg-white/70 px-4 py-3 shadow-sm dark:border-neutral-800 dark:bg-neutral-950/60"
               >
                 <div className="min-w-0">
-                    <div className={onToggleEnabled ? "md:pr-[320px]" : "md:pr-[220px]"}>
-                      <p className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-white">
-                        <Icon size={16} className="text-slate-900 dark:text-white" />
-                        <span className="truncate">{item.name || maskApiKey(item.apiKey)}</span>
-                        <span
-                          className={[
-                            "rounded-full px-2 py-0.5 text-[11px] font-medium",
-                            participateInDefaultRouting
-                              ? "bg-emerald-600/10 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200"
-                              : "bg-amber-500/10 text-amber-700 dark:bg-amber-500/15 dark:text-amber-200",
-                          ].join(" ")}
-                        >
-                          {participateInDefaultRouting ? "参与默认路由" : "仅显式路由"}
-                        </span>
+                  <div className={onToggleEnabled ? "md:pr-[320px]" : "md:pr-[220px]"}>
+                    <p className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-white">
+                      <Icon size={16} className="text-slate-900 dark:text-white" />
+                      <span className="truncate">{item.name || maskApiKey(item.apiKey)}</span>
+                      <span
+                        className={[
+                          "rounded-full px-2 py-0.5 text-[11px] font-medium",
+                          participateInDefaultRouting
+                            ? "bg-emerald-600/10 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200"
+                            : "bg-amber-500/10 text-amber-700 dark:bg-amber-500/15 dark:text-amber-200",
+                        ].join(" ")}
+                      >
+                        {participateInDefaultRouting ? "参与默认路由" : "仅显式路由"}
+                      </span>
+                    </p>
+
+                    <div className="mt-1 space-y-1 text-xs text-slate-600 dark:text-white/65">
+                      <p className="truncate font-mono">apiKey：{maskApiKey(item.apiKey)}</p>
+                      <p className="truncate font-mono">baseUrl：{item.baseUrl || "--"}</p>
+                      {item.proxyUrl ? (
+                        <p className="truncate font-mono">proxyUrl：{item.proxyUrl}</p>
+                      ) : null}
+                      <p className="tabular-nums">
+                        models：{models.length} · excluded：{excludedModels.length} · 成功：
+                        {stats.success} · 失败：{stats.failure}
                       </p>
-
-                      <div className="mt-1 space-y-1 text-xs text-slate-600 dark:text-white/65">
-                        <p className="truncate font-mono">apiKey：{maskApiKey(item.apiKey)}</p>
-                        <p className="truncate font-mono">baseUrl：{item.baseUrl || "--"}</p>
-                        {item.proxyUrl ? (
-                          <p className="truncate font-mono">proxyUrl：{item.proxyUrl}</p>
-                        ) : null}
-                        <p className="tabular-nums">
-                          models：{models.length} · excluded：{excludedModels.length} · 成功：
-                          {stats.success} · 失败：{stats.failure}
-                        </p>
-                      </div>
                     </div>
-
-                    {models.length ? (
-                      <div className="mt-2 flex flex-wrap gap-1">
-                        {models.map((model) => (
-                          <span
-                            key={model.name}
-                            className="rounded-full bg-slate-900 px-2 py-0.5 text-[11px] text-white dark:bg-white dark:text-neutral-950"
-                            title={
-                              model.alias && model.alias !== model.name
-                                ? `${model.name} => ${model.alias}`
-                                : model.name
-                            }
-                          >
-                            {model.alias && model.alias !== model.name
-                              ? `${model.name} → ${model.alias}`
-                              : model.name}
-                          </span>
-                        ))}
-                      </div>
-                    ) : null}
-
-                    {excludedModels.length ? (
-                      <div className="mt-2 flex flex-wrap gap-1">
-                        {excludedModels.map((model) => (
-                          <span
-                            key={model}
-                            className="rounded-full bg-rose-600/10 px-2 py-0.5 text-[11px] text-rose-700 dark:bg-rose-500/15 dark:text-rose-200"
-                          >
-                            {model}
-                          </span>
-                        ))}
-                      </div>
-                    ) : null}
-
-                    <ProviderStatusBar data={statusData} />
                   </div>
+
+                  {models.length ? (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {models.map((model) => (
+                        <span
+                          key={model.name}
+                          className="rounded-full bg-slate-900 px-2 py-0.5 text-[11px] text-white dark:bg-white dark:text-neutral-950"
+                          title={
+                            model.alias && model.alias !== model.name
+                              ? `${model.name} => ${model.alias}`
+                              : model.name
+                          }
+                        >
+                          {model.alias && model.alias !== model.name
+                            ? `${model.name} → ${model.alias}`
+                            : model.name}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  {excludedModels.length ? (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {excludedModels.map((model) => (
+                        <span
+                          key={model}
+                          className="rounded-full bg-rose-600/10 px-2 py-0.5 text-[11px] text-rose-700 dark:bg-rose-500/15 dark:text-rose-200"
+                        >
+                          {model}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  <ProviderStatusBar data={statusData} />
+                </div>
                 <ProviderCardActionBar
                   enabled={!disabled}
                   showToggle={Boolean(onToggleEnabled)}
-                  onToggle={onToggleEnabled ? (enabled) => onToggleEnabled(idx, enabled) : undefined}
+                  onToggle={
+                    onToggleEnabled ? (enabled) => onToggleEnabled(idx, enabled) : undefined
+                  }
                   onEdit={() => onEdit(idx)}
                   onDelete={() => onDelete(idx)}
                 />

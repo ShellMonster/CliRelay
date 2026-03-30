@@ -48,8 +48,7 @@ const TIME_RANGES: readonly TimeRange[] = [1, 7, 14, 30] as const;
 const maskApiKey = (value: string): string => {
   const trimmed = value.trim();
   if (!trimmed) return "--";
-  if (trimmed.length <= 10)
-    return `${trimmed.slice(0, 2)}***${trimmed.slice(-2)}`;
+  if (trimmed.length <= 10) return `${trimmed.slice(0, 2)}***${trimmed.slice(-2)}`;
   return `${trimmed.slice(0, 6)}***${trimmed.slice(-4)}`;
 };
 
@@ -77,10 +76,7 @@ const TimeRangeSelector = ({
   onChange: (next: TimeRange) => void;
 }) => {
   return (
-    <Tabs
-      value={String(value)}
-      onValueChange={(next) => onChange(Number(next) as TimeRange)}
-    >
+    <Tabs value={String(value)} onValueChange={(next) => onChange(Number(next) as TimeRange)}>
       <TabsList>
         {TIME_RANGES.map((range) => {
           const label = range === 1 ? "今天" : `${range} 天`;
@@ -95,10 +91,7 @@ const TimeRangeSelector = ({
   );
 };
 
-import {
-  VirtualTable,
-  type VirtualTableColumn,
-} from "@/modules/ui/VirtualTable";
+import { VirtualTable, type VirtualTableColumn } from "@/modules/ui/VirtualTable";
 
 function buildLogColumns(
   onContentClick?: (logId: number, tab: "input" | "output") => void,
@@ -109,16 +102,10 @@ function buildLogColumns(
       key: "timestamp",
       label: "时间",
       width: "w-40",
-      cellClassName:
-        "font-mono text-xs tabular-nums text-slate-700 dark:text-slate-200",
+      cellClassName: "font-mono text-xs tabular-nums text-slate-700 dark:text-slate-200",
       render: (row) => (
-        <OverflowTooltip
-          content={formatTimestamp(row.timestamp)}
-          className="block min-w-0"
-        >
-          <span className="block min-w-0 truncate">
-            {formatTimestamp(row.timestamp)}
-          </span>
+        <OverflowTooltip content={formatTimestamp(row.timestamp)} className="block min-w-0">
+          <span className="block min-w-0 truncate">{formatTimestamp(row.timestamp)}</span>
         </OverflowTooltip>
       ),
     },
@@ -127,10 +114,7 @@ function buildLogColumns(
       label: "Key 名称",
       width: "w-28",
       render: (row) => (
-        <OverflowTooltip
-          content={row.apiKeyName || "--"}
-          className="block min-w-0"
-        >
+        <OverflowTooltip content={row.apiKeyName || "--"} className="block min-w-0">
           <span
             className={`block min-w-0 truncate text-xs font-medium ${row.apiKeyName ? "text-indigo-600 dark:text-indigo-400" : "text-slate-400 dark:text-white/30"}`}
           >
@@ -154,10 +138,7 @@ function buildLogColumns(
       label: "推理强度",
       width: "w-20",
       render: (row) => (
-        <OverflowTooltip
-          content={row.reasoningEffort || "--"}
-          className="block min-w-0"
-        >
+        <OverflowTooltip content={row.reasoningEffort || "--"} className="block min-w-0">
           <span
             className={`block min-w-0 truncate text-xs font-medium ${
               row.reasoningEffort
@@ -175,10 +156,7 @@ function buildLogColumns(
       label: "渠道名",
       width: "w-28",
       render: (row) => (
-        <OverflowTooltip
-          content={row.channelName || "--"}
-          className="block min-w-0"
-        >
+        <OverflowTooltip content={row.channelName || "--"} className="block min-w-0">
           <span
             className={`block min-w-0 truncate text-xs font-medium ${row.channelName ? "text-violet-600 dark:text-violet-400" : "text-slate-400 dark:text-white/30"}`}
           >
@@ -212,8 +190,7 @@ function buildLogColumns(
       label: "用时",
       width: "w-20",
       headerClassName: "text-right",
-      cellClassName:
-        "text-right font-mono text-xs tabular-nums text-slate-700 dark:text-slate-200",
+      cellClassName: "text-right font-mono text-xs tabular-nums text-slate-700 dark:text-slate-200",
       render: (row) => (
         <OverflowTooltip content={row.latencyText} className="block min-w-0">
           <span className="block min-w-0 truncate">{row.latencyText}</span>
@@ -225,8 +202,7 @@ function buildLogColumns(
       label: "输入",
       width: "w-20",
       headerClassName: "text-right",
-      cellClassName:
-        "text-right font-mono text-xs tabular-nums text-slate-700 dark:text-slate-200",
+      cellClassName: "text-right font-mono text-xs tabular-nums text-slate-700 dark:text-slate-200",
       render: (row) =>
         row.hasContent && onContentClick ? (
           <button
@@ -240,13 +216,8 @@ function buildLogColumns(
             </span>
           </button>
         ) : (
-          <OverflowTooltip
-            content={row.inputTokens.toLocaleString()}
-            className="block min-w-0"
-          >
-            <span className="block min-w-0 truncate">
-              {row.inputTokens.toLocaleString()}
-            </span>
+          <OverflowTooltip content={row.inputTokens.toLocaleString()} className="block min-w-0">
+            <span className="block min-w-0 truncate">{row.inputTokens.toLocaleString()}</span>
           </OverflowTooltip>
         ),
     },
@@ -257,10 +228,7 @@ function buildLogColumns(
       headerClassName: "text-right",
       cellClassName: "text-right font-mono text-xs tabular-nums",
       render: (row) => (
-        <OverflowTooltip
-          content={row.cachedTokens.toLocaleString()}
-          className="block min-w-0"
-        >
+        <OverflowTooltip content={row.cachedTokens.toLocaleString()} className="block min-w-0">
           <span
             className={`block min-w-0 truncate ${row.cachedTokens > 0 ? "font-semibold text-amber-600 dark:text-amber-400" : "text-slate-400 dark:text-white/30"}`}
           >
@@ -274,8 +242,7 @@ function buildLogColumns(
       label: "输出",
       width: "w-20",
       headerClassName: "text-right",
-      cellClassName:
-        "text-right font-mono text-xs tabular-nums text-slate-700 dark:text-slate-200",
+      cellClassName: "text-right font-mono text-xs tabular-nums text-slate-700 dark:text-slate-200",
       render: (row) =>
         row.hasContent && onContentClick ? (
           <button
@@ -289,13 +256,8 @@ function buildLogColumns(
             </span>
           </button>
         ) : (
-          <OverflowTooltip
-            content={row.outputTokens.toLocaleString()}
-            className="block min-w-0"
-          >
-            <span className="block min-w-0 truncate">
-              {row.outputTokens.toLocaleString()}
-            </span>
+          <OverflowTooltip content={row.outputTokens.toLocaleString()} className="block min-w-0">
+            <span className="block min-w-0 truncate">{row.outputTokens.toLocaleString()}</span>
           </OverflowTooltip>
         ),
     },
@@ -304,16 +266,10 @@ function buildLogColumns(
       label: "总 Token",
       width: "w-24",
       headerClassName: "text-right",
-      cellClassName:
-        "text-right font-mono text-xs tabular-nums text-slate-900 dark:text-white",
+      cellClassName: "text-right font-mono text-xs tabular-nums text-slate-900 dark:text-white",
       render: (row) => (
-        <OverflowTooltip
-          content={row.totalTokens.toLocaleString()}
-          className="block min-w-0"
-        >
-          <span className="block min-w-0 truncate">
-            {row.totalTokens.toLocaleString()}
-          </span>
+        <OverflowTooltip content={row.totalTokens.toLocaleString()} className="block min-w-0">
+          <span className="block min-w-0 truncate">{row.totalTokens.toLocaleString()}</span>
         </OverflowTooltip>
       ),
     },
@@ -347,21 +303,14 @@ export function RequestLogsPage() {
 
   // Content modal state
   const [contentModalOpen, setContentModalOpen] = useState(false);
-  const [contentModalLogId, setContentModalLogId] = useState<number | null>(
-    null,
-  );
-  const [contentModalTab, setContentModalTab] = useState<"input" | "output">(
-    "input",
-  );
+  const [contentModalLogId, setContentModalLogId] = useState<number | null>(null);
+  const [contentModalTab, setContentModalTab] = useState<"input" | "output">("input");
 
-  const handleContentClick = useCallback(
-    (logId: number, tab: "input" | "output") => {
-      setContentModalLogId(logId);
-      setContentModalTab(tab);
-      setContentModalOpen(true);
-    },
-    [],
-  );
+  const handleContentClick = useCallback((logId: number, tab: "input" | "output") => {
+    setContentModalLogId(logId);
+    setContentModalTab(tab);
+    setContentModalOpen(true);
+  }, []);
 
   // Error modal state
   const [errorModalOpen, setErrorModalOpen] = useState(false);
@@ -462,10 +411,7 @@ export function RequestLogsPage() {
   );
 
   // Derive display rows from raw items (names already resolved by backend)
-  const rows = useMemo<LogRow[]>(
-    () => rawItems.map((item) => toLogRow(item)),
-    [rawItems],
-  );
+  const rows = useMemo<LogRow[]>(() => rawItems.map((item) => toLogRow(item)), [rawItems]);
 
   const hasMore = rawItems.length < totalCount;
 
@@ -508,10 +454,7 @@ export function RequestLogsPage() {
     const validValues = new Set(channelOptions.map((item) => item.value));
     setChannelQuery((prev) => {
       const next = prev.filter((item) => validValues.has(item));
-      if (
-        next.length === prev.length &&
-        next.every((item, index) => item === prev[index])
-      ) {
+      if (next.length === prev.length && next.every((item, index) => item === prev[index])) {
         return prev;
       }
       return next;
@@ -533,11 +476,7 @@ export function RequestLogsPage() {
         {/* 标题栏 */}
         <div className="flex flex-wrap items-center justify-between gap-3 px-5 pt-5 pb-3">
           <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900 dark:text-white">
-            <ScrollText
-              size={18}
-              className="text-slate-900 dark:text-white"
-              aria-hidden="true"
-            />
+            <ScrollText size={18} className="text-slate-900 dark:text-white" aria-hidden="true" />
             请求日志
           </h2>
           <div className="flex flex-wrap items-center gap-2">
@@ -553,11 +492,7 @@ export function RequestLogsPage() {
             >
               <RefreshCw
                 size={14}
-                className={
-                  loading
-                    ? "motion-reduce:animate-none motion-safe:animate-spin"
-                    : ""
-                }
+                className={loading ? "motion-reduce:animate-none motion-safe:animate-spin" : ""}
                 aria-hidden="true"
               />
             </button>
@@ -612,39 +547,20 @@ export function RequestLogsPage() {
           {/* 统计摘要 */}
           <span className="inline-flex items-center gap-1.5 text-xs text-slate-600 dark:text-white/55">
             <Filter size={12} aria-hidden="true" />
-            <span className="font-mono tabular-nums">
-              {stats.total.toLocaleString()}
-            </span>{" "}
-            条
-            <span
-              className="text-slate-300 dark:text-white/10"
-              aria-hidden="true"
-            >
+            <span className="font-mono tabular-nums">{stats.total.toLocaleString()}</span> 条
+            <span className="text-slate-300 dark:text-white/10" aria-hidden="true">
               ·
             </span>
-            成功率{" "}
-            <span className="font-mono tabular-nums">
-              {stats.success_rate.toFixed(1)}%
-            </span>
-            <span
-              className="text-slate-300 dark:text-white/10"
-              aria-hidden="true"
-            >
+            成功率 <span className="font-mono tabular-nums">{stats.success_rate.toFixed(1)}%</span>
+            <span className="text-slate-300 dark:text-white/10" aria-hidden="true">
               ·
             </span>
             Token{" "}
-            <span className="font-mono tabular-nums">
-              {stats.total_tokens.toLocaleString()}
-            </span>
-            <span
-              className="text-slate-300 dark:text-white/10"
-              aria-hidden="true"
-            >
+            <span className="font-mono tabular-nums">{stats.total_tokens.toLocaleString()}</span>
+            <span className="text-slate-300 dark:text-white/10" aria-hidden="true">
               ·
             </span>
-            <span className="text-slate-400 dark:text-white/40">
-              {lastUpdatedText}
-            </span>
+            <span className="text-slate-400 dark:text-white/40">{lastUpdatedText}</span>
           </span>
         </div>
 

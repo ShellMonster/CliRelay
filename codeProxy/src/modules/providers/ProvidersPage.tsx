@@ -13,12 +13,7 @@ import {
   Settings2,
   Trash2,
 } from "lucide-react";
-import {
-  ampcodeApi,
-  modelsApi,
-  providersApi,
-  usageApi,
-} from "@/lib/http/apis";
+import { ampcodeApi, modelsApi, providersApi, usageApi } from "@/lib/http/apis";
 import type { OpenAIProvider, ProviderSimpleConfig } from "@/lib/http/types";
 import { Button } from "@/modules/ui/Button";
 import { Card } from "@/modules/ui/Card";
@@ -77,7 +72,14 @@ export function ProvidersPage() {
   const navigate = useNavigate();
 
   const [tab, setTab] = useState<
-    "gemini" | "claude" | "codex" | "codex-compat" | "copilot-compat" | "vertex" | "openai" | "ampcode"
+    | "gemini"
+    | "claude"
+    | "codex"
+    | "codex-compat"
+    | "copilot-compat"
+    | "vertex"
+    | "openai"
+    | "ampcode"
   >("gemini");
   const [loading, setLoading] = useState(true);
 
@@ -106,9 +108,9 @@ export function ProvidersPage() {
   const [editKeyIndex, setEditKeyIndex] = useState<number | null>(null);
   const [keyDraft, setKeyDraft] = useState<ProviderKeyDraft>(() => buildProviderKeyDraft(null));
   const [keyDraftError, setKeyDraftError] = useState<string | null>(null);
-  const [keyDiscoveredModels, setKeyDiscoveredModels] = useState<{ id: string; owned_by?: string }[]>(
-    [],
-  );
+  const [keyDiscoveredModels, setKeyDiscoveredModels] = useState<
+    { id: string; owned_by?: string }[]
+  >([]);
   const [keyDiscovering, setKeyDiscovering] = useState(false);
   const [keyDiscoverSelected, setKeyDiscoverSelected] = useState<Set<string>>(new Set());
 
@@ -123,10 +125,10 @@ export function ProvidersPage() {
   const [confirm, setConfirm] = useState<
     | null
     | {
-      type: "deleteKey";
-      keyType: "gemini" | "claude" | "codex" | "codex-compat" | "copilot-compat" | "vertex";
-      index: number;
-    }
+        type: "deleteKey";
+        keyType: "gemini" | "claude" | "codex" | "codex-compat" | "copilot-compat" | "vertex";
+        index: number;
+      }
     | { type: "deleteOpenAI"; index: number }
   >(null);
 
@@ -135,12 +137,12 @@ export function ProvidersPage() {
       ? "Gemini"
       : editKeyType === "claude"
         ? "Claude"
-          : editKeyType === "codex"
-            ? "Codex"
-            : editKeyType === "codex-compat"
-              ? "Codex Compat"
-              : editKeyType === "copilot-compat"
-                ? "GitHub Copilot"
+        : editKeyType === "codex"
+          ? "Codex"
+          : editKeyType === "codex-compat"
+            ? "Codex Compat"
+            : editKeyType === "copilot-compat"
+              ? "GitHub Copilot"
               : "Vertex";
 
   // 按 Tab 加载数据，切换 Tab 时只请求当前 Tab 的数据
@@ -273,7 +275,10 @@ export function ProvidersPage() {
   }, [location.pathname, navigate]);
 
   const openKeyEditor = useCallback(
-    (type: "gemini" | "claude" | "codex" | "codex-compat" | "copilot-compat" | "vertex", index: number | null) => {
+    (
+      type: "gemini" | "claude" | "codex" | "codex-compat" | "copilot-compat" | "vertex",
+      index: number | null,
+    ) => {
       const list =
         type === "gemini"
           ? geminiKeys
@@ -285,7 +290,7 @@ export function ProvidersPage() {
                 ? codexCompatKeys
                 : type === "copilot-compat"
                   ? copilotCompatKeys
-                : vertexKeys;
+                  : vertexKeys;
       const current = index === null ? null : (list[index] ?? null);
       setEditKeyType(type);
       setEditKeyIndex(index);
@@ -295,7 +300,15 @@ export function ProvidersPage() {
       setKeyDiscoverSelected(new Set());
       setEditKeyOpen(true);
     },
-    [buildKeyDraftForType, claudeKeys, codexCompatKeys, codexKeys, copilotCompatKeys, geminiKeys, vertexKeys],
+    [
+      buildKeyDraftForType,
+      claudeKeys,
+      codexCompatKeys,
+      codexKeys,
+      copilotCompatKeys,
+      geminiKeys,
+      vertexKeys,
+    ],
   );
 
   const commitKeyDraft = useCallback((): ProviderSimpleConfig | null => {
@@ -328,16 +341,16 @@ export function ProvidersPage() {
       editKeyIndex === null
         ? null
         : editKeyType === "gemini"
-          ? geminiKeys[editKeyIndex] ?? null
+          ? (geminiKeys[editKeyIndex] ?? null)
           : editKeyType === "claude"
-            ? claudeKeys[editKeyIndex] ?? null
-          : editKeyType === "codex"
-            ? codexKeys[editKeyIndex] ?? null
-            : editKeyType === "codex-compat"
-              ? codexCompatKeys[editKeyIndex] ?? null
-              : editKeyType === "copilot-compat"
-                ? copilotCompatKeys[editKeyIndex] ?? null
-                : vertexKeys[editKeyIndex] ?? null;
+            ? (claudeKeys[editKeyIndex] ?? null)
+            : editKeyType === "codex"
+              ? (codexKeys[editKeyIndex] ?? null)
+              : editKeyType === "codex-compat"
+                ? (codexCompatKeys[editKeyIndex] ?? null)
+                : editKeyType === "copilot-compat"
+                  ? (copilotCompatKeys[editKeyIndex] ?? null)
+                  : (vertexKeys[editKeyIndex] ?? null);
 
     const result: ProviderSimpleConfig = {
       apiKey,
@@ -354,7 +367,17 @@ export function ProvidersPage() {
 
     setKeyDraftError(null);
     return result;
-  }, [claudeKeys, codexCompatKeys, codexKeys, copilotCompatKeys, editKeyIndex, editKeyType, geminiKeys, keyDraft, vertexKeys]);
+  }, [
+    claudeKeys,
+    codexCompatKeys,
+    codexKeys,
+    copilotCompatKeys,
+    editKeyIndex,
+    editKeyType,
+    geminiKeys,
+    keyDraft,
+    vertexKeys,
+  ]);
 
   const saveKeyDraft = useCallback(async () => {
     const value = commitKeyDraft();
@@ -424,7 +447,11 @@ export function ProvidersPage() {
       const apiKey = keyDraft.apiKey.trim();
       let list: { id: string; owned_by?: string }[] = [];
 
-      if (editKeyType === "codex" || editKeyType === "codex-compat" || editKeyType === "copilot-compat") {
+      if (
+        editKeyType === "codex" ||
+        editKeyType === "codex-compat" ||
+        editKeyType === "copilot-compat"
+      ) {
         const baseUrl = keyDraft.baseUrl.trim();
         if (!baseUrl) {
           notify({ type: "info", message: "请先填写 baseUrl" });
@@ -498,19 +525,22 @@ export function ProvidersPage() {
   }, [keyDiscoverSelected, keyDiscoveredModels, keyDraft.modelEntries, notify]);
 
   const deleteKey = useCallback(
-    async (type: "gemini" | "claude" | "codex" | "codex-compat" | "copilot-compat" | "vertex", index: number) => {
+    async (
+      type: "gemini" | "claude" | "codex" | "codex-compat" | "copilot-compat" | "vertex",
+      index: number,
+    ) => {
       const list =
         type === "gemini"
           ? geminiKeys
           : type === "claude"
             ? claudeKeys
             : type === "codex"
-            ? codexKeys
-            : type === "codex-compat"
-              ? codexCompatKeys
-              : type === "copilot-compat"
-                ? copilotCompatKeys
-              : vertexKeys;
+              ? codexKeys
+              : type === "codex-compat"
+                ? codexCompatKeys
+                : type === "copilot-compat"
+                  ? copilotCompatKeys
+                  : vertexKeys;
       const entry = list[index];
       if (!entry) return;
 
@@ -543,7 +573,11 @@ export function ProvidersPage() {
   );
 
   const toggleKeyEnabled = useCallback(
-    async (type: "gemini" | "claude" | "codex" | "codex-compat" | "copilot-compat", index: number, enabled: boolean) => {
+    async (
+      type: "gemini" | "claude" | "codex" | "codex-compat" | "copilot-compat",
+      index: number,
+      enabled: boolean,
+    ) => {
       const list =
         type === "gemini"
           ? geminiKeys
@@ -593,7 +627,16 @@ export function ProvidersPage() {
         notify({ type: "error", message: err instanceof Error ? err.message : "更新失败" });
       }
     },
-    [claudeKeys, codexCompatKeys, codexKeys, copilotCompatKeys, geminiKeys, notify, refreshAll, startTransition],
+    [
+      claudeKeys,
+      codexCompatKeys,
+      codexKeys,
+      copilotCompatKeys,
+      geminiKeys,
+      notify,
+      refreshAll,
+      startTransition,
+    ],
   );
 
   const openOpenAIEditor = useCallback(
@@ -654,12 +697,18 @@ export function ProvidersPage() {
     ) {
       setTab(provider as typeof tab);
       if (action === "new") {
-        openKeyEditor(provider as "gemini" | "claude" | "codex" | "codex-compat" | "copilot-compat" | "vertex", null);
+        openKeyEditor(
+          provider as "gemini" | "claude" | "codex" | "codex-compat" | "copilot-compat" | "vertex",
+          null,
+        );
         return;
       }
       const index = Number(action);
       if (Number.isFinite(index) && index >= 0) {
-        openKeyEditor(provider as "gemini" | "claude" | "codex" | "codex-compat" | "copilot-compat" | "vertex", index);
+        openKeyEditor(
+          provider as "gemini" | "claude" | "codex" | "codex-compat" | "copilot-compat" | "vertex",
+          index,
+        );
       }
       return;
     }
@@ -931,7 +980,10 @@ export function ProvidersPage() {
       );
       const buckets = candidates.reduce<StatusBlockBucket[]>(
         (acc, candidate) =>
-          mergeStatusBlockBuckets(acc, usageBySource[candidate]?.blocks ?? createEmptyStatusBlockBuckets()),
+          mergeStatusBlockBuckets(
+            acc,
+            usageBySource[candidate]?.blocks ?? createEmptyStatusBlockBuckets(),
+          ),
         createEmptyStatusBlockBuckets(),
       );
       return calculateStatusBarDataFromBuckets(buckets);
@@ -968,7 +1020,10 @@ export function ProvidersPage() {
       });
       const buckets = Array.from(candidates).reduce<StatusBlockBucket[]>(
         (acc, candidate) =>
-          mergeStatusBlockBuckets(acc, usageBySource[candidate]?.blocks ?? createEmptyStatusBlockBuckets()),
+          mergeStatusBlockBuckets(
+            acc,
+            usageBySource[candidate]?.blocks ?? createEmptyStatusBlockBuckets(),
+          ),
         createEmptyStatusBlockBuckets(),
       );
       return calculateStatusBarDataFromBuckets(buckets);
@@ -1005,7 +1060,9 @@ export function ProvidersPage() {
   const editOpenAIEnabledToggle = useCallback(
     (enabled: boolean) => {
       const current = excludedModelsFromText(openaiDraft.excludedModelsText);
-      const next = enabled ? withoutDisableAllModelsRule(current) : withDisableAllModelsRule(current);
+      const next = enabled
+        ? withoutDisableAllModelsRule(current)
+        : withDisableAllModelsRule(current);
       setOpenaiDraft((prev) => ({ ...prev, excludedModelsText: next.join("\n") }));
     },
     [openaiDraft.excludedModelsText],
@@ -1054,11 +1111,14 @@ export function ProvidersPage() {
       </div>
 
       {/* Tabs 导航 */}
-      <Tabs value={tab} onValueChange={(next) => {
-        const nextTab = next as typeof tab;
-        setTab(nextTab);
-        void refreshTab(nextTab);
-      }}>
+      <Tabs
+        value={tab}
+        onValueChange={(next) => {
+          const nextTab = next as typeof tab;
+          setTab(nextTab);
+          void refreshTab(nextTab);
+        }}
+      >
         <TabsList>
           <TabsTrigger value="gemini">Gemini</TabsTrigger>
           <TabsTrigger value="claude">Claude</TabsTrigger>
@@ -1127,7 +1187,9 @@ export function ProvidersPage() {
             items={codexCompatKeys}
             onAdd={() => openKeyEditor("codex-compat", null)}
             onEdit={(idx) => openKeyEditor("codex-compat", idx)}
-            onDelete={(idx) => setConfirm({ type: "deleteKey", keyType: "codex-compat", index: idx })}
+            onDelete={(idx) =>
+              setConfirm({ type: "deleteKey", keyType: "codex-compat", index: idx })
+            }
             onToggleEnabled={(idx, enabled) => void toggleKeyEnabled("codex-compat", idx, enabled)}
             getStats={getSimpleStats}
             getStatusBar={getSimpleStatusBar}
@@ -1143,8 +1205,12 @@ export function ProvidersPage() {
             items={copilotCompatKeys}
             onAdd={() => openKeyEditor("copilot-compat", null)}
             onEdit={(idx) => openKeyEditor("copilot-compat", idx)}
-            onDelete={(idx) => setConfirm({ type: "deleteKey", keyType: "copilot-compat", index: idx })}
-            onToggleEnabled={(idx, enabled) => void toggleKeyEnabled("copilot-compat", idx, enabled)}
+            onDelete={(idx) =>
+              setConfirm({ type: "deleteKey", keyType: "copilot-compat", index: idx })
+            }
+            onToggleEnabled={(idx, enabled) =>
+              void toggleKeyEnabled("copilot-compat", idx, enabled)
+            }
             getStats={getSimpleStats}
             getStatusBar={getSimpleStatusBar}
           />
@@ -1191,7 +1257,8 @@ export function ProvidersPage() {
                   const statusData = getOpenAIProviderStatusBar(provider);
                   const disabled = hasDisableAllModelsRule(provider.excludedModels);
                   const excludedModels = stripDisableAllModelsRule(provider.excludedModels);
-                  const participateInDefaultRouting = provider.participateInDefaultRouting !== false;
+                  const participateInDefaultRouting =
+                    provider.participateInDefaultRouting !== false;
 
                   return (
                     <div
@@ -1202,7 +1269,7 @@ export function ProvidersPage() {
                       ].join(" ")}
                     >
                       <div className="min-w-0">
-                          <div className="md:pr-[280px]">
+                        <div className="md:pr-[280px]">
                           <p className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-white">
                             <span className="truncate">{provider.name}</span>
                             <span
@@ -1224,103 +1291,103 @@ export function ProvidersPage() {
                           <p className="mt-1 truncate font-mono text-xs text-slate-700 dark:text-slate-200">
                             baseUrl：{provider.baseUrl || "--"}
                           </p>
-                          </div>
+                        </div>
 
-                          {provider.apiKeyEntries?.length ? (
-                            <div className="mt-2 space-y-1">
-                              <p className="text-xs font-semibold text-slate-700 dark:text-white/75">
-                                Keys：{provider.apiKeyEntries.length}
-                              </p>
-                              <div className="space-y-1">
-                                {provider.apiKeyEntries.map((entry, entryIndex) => {
-                                  const entryCandidates = buildCandidateUsageSourceIds({
-                                    apiKey: entry.apiKey,
-                                    masker: maskApiKey,
-                                  });
-                                  const entryStats = sumStatsByCandidates(
-                                    entryCandidates,
-                                    usageStatsBySource,
-                                  );
-                                  return (
-                                    <div
-                                      key={`${entry.apiKey}:${entryIndex}`}
-                                      className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white/70 px-3 py-2 text-xs dark:border-neutral-800 dark:bg-neutral-950/60"
-                                    >
-                                      <div className="min-w-0">
-                                        <p className="truncate font-mono text-slate-900 dark:text-white">
-                                          {entryIndex + 1}. {maskApiKey(entry.apiKey)}
+                        {provider.apiKeyEntries?.length ? (
+                          <div className="mt-2 space-y-1">
+                            <p className="text-xs font-semibold text-slate-700 dark:text-white/75">
+                              Keys：{provider.apiKeyEntries.length}
+                            </p>
+                            <div className="space-y-1">
+                              {provider.apiKeyEntries.map((entry, entryIndex) => {
+                                const entryCandidates = buildCandidateUsageSourceIds({
+                                  apiKey: entry.apiKey,
+                                  masker: maskApiKey,
+                                });
+                                const entryStats = sumStatsByCandidates(
+                                  entryCandidates,
+                                  usageStatsBySource,
+                                );
+                                return (
+                                  <div
+                                    key={`${entry.apiKey}:${entryIndex}`}
+                                    className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white/70 px-3 py-2 text-xs dark:border-neutral-800 dark:bg-neutral-950/60"
+                                  >
+                                    <div className="min-w-0">
+                                      <p className="truncate font-mono text-slate-900 dark:text-white">
+                                        {entryIndex + 1}. {maskApiKey(entry.apiKey)}
+                                      </p>
+                                      {entry.proxyUrl ? (
+                                        <p className="mt-0.5 truncate font-mono text-slate-600 dark:text-white/55">
+                                          proxy：{entry.proxyUrl}
                                         </p>
-                                        {entry.proxyUrl ? (
-                                          <p className="mt-0.5 truncate font-mono text-slate-600 dark:text-white/55">
-                                            proxy：{entry.proxyUrl}
-                                          </p>
-                                        ) : null}
-                                      </div>
-                                      <div className="flex items-center gap-2 tabular-nums">
-                                        <span className="rounded-full bg-emerald-600/10 px-2 py-0.5 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200">
-                                          成功 {entryStats.success}
-                                        </span>
-                                        <span className="rounded-full bg-rose-600/10 px-2 py-0.5 text-rose-700 dark:bg-rose-500/15 dark:text-rose-200">
-                                          失败 {entryStats.failure}
-                                        </span>
-                                      </div>
+                                      ) : null}
                                     </div>
-                                  );
-                                })}
-                              </div>
+                                    <div className="flex items-center gap-2 tabular-nums">
+                                      <span className="rounded-full bg-emerald-600/10 px-2 py-0.5 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200">
+                                        成功 {entryStats.success}
+                                      </span>
+                                      <span className="rounded-full bg-rose-600/10 px-2 py-0.5 text-rose-700 dark:bg-rose-500/15 dark:text-rose-200">
+                                        失败 {entryStats.failure}
+                                      </span>
+                                    </div>
+                                  </div>
+                                );
+                              })}
                             </div>
-                          ) : null}
-
-                          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-600 dark:text-white/65 tabular-nums">
-                            <span>models：{provider.models?.length ?? 0}</span>
-                            <span>·</span>
-                            <span>excluded：{excludedModels.length}</span>
-                            <span>·</span>
-                            <span>成功：{stats.success}</span>
-                            <span>·</span>
-                            <span>失败：{stats.failure}</span>
-                            {provider.testModel ? (
-                              <>
-                                <span>·</span>
-                                <span className="truncate">testModel：{provider.testModel}</span>
-                              </>
-                            ) : null}
                           </div>
+                        ) : null}
 
-                          {provider.models?.length ? (
-                            <div className="mt-2 flex flex-wrap gap-1">
-                              {provider.models.map((model) => (
-                                <span
-                                  key={model.name}
-                                  className="rounded-full bg-slate-900 px-2 py-0.5 text-[11px] text-white dark:bg-white dark:text-neutral-950"
-                                  title={
-                                    model.alias && model.alias !== model.name
-                                      ? `${model.name} => ${model.alias}`
-                                      : model.name
-                                  }
-                                >
-                                  {model.alias && model.alias !== model.name
-                                    ? `${model.name} → ${model.alias}`
-                                    : model.name}
-                                </span>
-                              ))}
-                            </div>
+                        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-600 dark:text-white/65 tabular-nums">
+                          <span>models：{provider.models?.length ?? 0}</span>
+                          <span>·</span>
+                          <span>excluded：{excludedModels.length}</span>
+                          <span>·</span>
+                          <span>成功：{stats.success}</span>
+                          <span>·</span>
+                          <span>失败：{stats.failure}</span>
+                          {provider.testModel ? (
+                            <>
+                              <span>·</span>
+                              <span className="truncate">testModel：{provider.testModel}</span>
+                            </>
                           ) : null}
+                        </div>
 
-                          {excludedModels.length ? (
-                            <div className="mt-2 flex flex-wrap gap-1">
-                              {excludedModels.map((model) => (
-                                <span
-                                  key={model}
-                                  className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200"
-                                >
-                                  {model}
-                                </span>
-                              ))}
-                            </div>
-                          ) : null}
+                        {provider.models?.length ? (
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {provider.models.map((model) => (
+                              <span
+                                key={model.name}
+                                className="rounded-full bg-slate-900 px-2 py-0.5 text-[11px] text-white dark:bg-white dark:text-neutral-950"
+                                title={
+                                  model.alias && model.alias !== model.name
+                                    ? `${model.name} => ${model.alias}`
+                                    : model.name
+                                }
+                              >
+                                {model.alias && model.alias !== model.name
+                                  ? `${model.name} → ${model.alias}`
+                                  : model.name}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
 
-                          <ProviderStatusBar data={statusData} />
+                        {excludedModels.length ? (
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {excludedModels.map((model) => (
+                              <span
+                                key={model}
+                                className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200"
+                              >
+                                {model}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
+
+                        <ProviderStatusBar data={statusData} />
                       </div>
                       <ProviderCardActionBar
                         enabled={!disabled}
@@ -1446,9 +1513,7 @@ export function ProvidersPage() {
                   <Button
                     variant="secondary"
                     size="sm"
-                    onClick={() =>
-                      setAmpMappings([{ id: `map-${Date.now()}`, from: "", to: "" }])
-                    }
+                    onClick={() => setAmpMappings([{ id: `map-${Date.now()}`, from: "", to: "" }])}
                   >
                     清空
                   </Button>
@@ -1465,17 +1530,19 @@ export function ProvidersPage() {
         description={
           editKeyType === "vertex"
             ? "Vertex 的 models 必须填写 alias（name => alias）。Excluded Models 中使用 * 可一键禁用该配置。"
-              : editKeyType === "codex" || editKeyType === "codex-compat" || editKeyType === "copilot-compat"
-                ? editKeyType === "codex-compat"
-                  ? "支持 Excluded Models、自定义 headers / models，以及自动兼容尝试 /models 与 /v1/models 拉取并合并模型；默认 prefix 为 codex-compat，并对 OpenAI Responses 事件 ID 做稳定化。"
-                  : editKeyType === "copilot-compat"
-                    ? "支持 Excluded Models、自定义 headers / models，以及自动兼容尝试 /models 与 /v1/models 拉取并合并模型；默认 prefix 为 copilot-compat，并为 GitHub Copilot 客户端自动切换 Responses / Chat Completions。"
-                    : "支持 Excluded Models、自定义 headers / models，以及自动兼容尝试 /models 与 /v1/models 拉取并合并 Codex 模型。"
-                : editKeyType === "claude"
-                  ? "支持 Excluded Models、自定义 headers / models，以及自动兼容尝试 Claude /v1/models 与 /models 拉取并合并模型。"
+            : editKeyType === "codex" ||
+                editKeyType === "codex-compat" ||
+                editKeyType === "copilot-compat"
+              ? editKeyType === "codex-compat"
+                ? "支持 Excluded Models、自定义 headers / models，以及自动兼容尝试 /models 与 /v1/models 拉取并合并模型；默认 prefix 为 codex-compat，并对 OpenAI Responses 事件 ID 做稳定化。"
+                : editKeyType === "copilot-compat"
+                  ? "支持 Excluded Models、自定义 headers / models，以及自动兼容尝试 /models 与 /v1/models 拉取并合并模型；默认 prefix 为 copilot-compat，并为 GitHub Copilot 客户端自动切换 Responses / Chat Completions。"
+                  : "支持 Excluded Models、自定义 headers / models，以及自动兼容尝试 /models 与 /v1/models 拉取并合并 Codex 模型。"
+              : editKeyType === "claude"
+                ? "支持 Excluded Models、自定义 headers / models，以及自动兼容尝试 Claude /v1/models 与 /models 拉取并合并模型。"
                 : editKeyType === "gemini"
                   ? "支持 Excluded Models、自定义 headers / models，以及自动兼容尝试 /models 与 /v1/models 获取 Gemini 模型并合并到当前配置。"
-              : "支持 Excluded Models（每行一个；用 * 一键禁用）、自定义 headers 与 models。"
+                  : "支持 Excluded Models（每行一个；用 * 一键禁用）、自定义 headers 与 models。"
         }
         onClose={closeKeyEditor}
         footer={
@@ -1525,9 +1592,7 @@ export function ProvidersPage() {
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white/70 p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-950/60">
-            <p className="text-sm font-semibold text-slate-900 dark:text-white">
-              渠道名称（必填）
-            </p>
+            <p className="text-sm font-semibold text-slate-900 dark:text-white">渠道名称（必填）</p>
             <div className="mt-2">
               <TextInput
                 value={keyDraft.name}
@@ -1677,7 +1742,11 @@ export function ProvidersPage() {
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white/70 p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-950/60">
-            {editKeyType === "codex" || editKeyType === "codex-compat" || editKeyType === "copilot-compat" || editKeyType === "claude" || editKeyType === "gemini" ? (
+            {editKeyType === "codex" ||
+            editKeyType === "codex-compat" ||
+            editKeyType === "copilot-compat" ||
+            editKeyType === "claude" ||
+            editKeyType === "gemini" ? (
               <div className="space-y-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-sm font-semibold text-slate-900 dark:text-white">
@@ -1866,7 +1935,8 @@ export function ProvidersPage() {
               models：<span className="font-semibold tabular-nums">{editOpenAIModelCount}</span>
             </span>
             <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 dark:border-neutral-800 dark:bg-neutral-950/60 dark:text-white/75">
-              excluded：<span className="font-semibold tabular-nums">{editOpenAIExcludedCount}</span>
+              excluded：
+              <span className="font-semibold tabular-nums">{editOpenAIExcludedCount}</span>
             </span>
           </div>
 
@@ -2105,7 +2175,11 @@ export function ProvidersPage() {
                 Excluded Models（可选）
               </p>
               <div className="flex items-center gap-2">
-                <Button variant="secondary" size="sm" onClick={() => editOpenAIEnabledToggle(false)}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => editOpenAIEnabledToggle(false)}
+                >
                   写入 * 禁用
                 </Button>
                 <Button variant="secondary" size="sm" onClick={() => editOpenAIEnabledToggle(true)}>
@@ -2133,8 +2207,9 @@ export function ProvidersPage() {
             />
 
             <p className="mt-2 text-xs text-slate-500 dark:text-white/55">
-              当前排除：<span className="font-semibold tabular-nums">{editOpenAIExcludedCount}</span>{" "}
-              条（不含 *）。
+              当前排除：
+              <span className="font-semibold tabular-nums">{editOpenAIExcludedCount}</span> 条（不含
+              *）。
             </p>
           </div>
 
@@ -2236,6 +2311,6 @@ export function ProvidersPage() {
           void deleteKey(action.keyType, action.index);
         }}
       />
-    </div >
+    </div>
   );
 }

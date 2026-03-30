@@ -681,11 +681,7 @@ export function getModelNamesFromUsage(usageData: unknown): string[] {
   const entries = getEntries(usageData);
   if (entries) {
     return Array.from(
-      new Set(
-        entries
-          .map((entry) => String(entry.model || "").trim())
-          .filter(Boolean),
-      ),
+      new Set(entries.map((entry) => String(entry.model || "").trim()).filter(Boolean)),
     ).sort((a, b) => a.localeCompare(b));
   }
 
@@ -875,18 +871,17 @@ export function getApiStats(
     >();
 
     entries.forEach((entry) => {
-      const endpoint = maskUsageSensitiveValue(entry.apiKey) || entry.apiKey || entry.source || "--";
+      const endpoint =
+        maskUsageSensitiveValue(entry.apiKey) || entry.apiKey || entry.source || "--";
       const modelName = String(entry.model || "Unknown").trim() || "Unknown";
-      const apiBucket =
-        apiMap.get(endpoint) ??
-        {
-          totalRequests: 0,
-          successCount: 0,
-          failureCount: 0,
-          totalTokens: 0,
-          totalCost: 0,
-          models: {},
-        };
+      const apiBucket = apiMap.get(endpoint) ?? {
+        totalRequests: 0,
+        successCount: 0,
+        failureCount: 0,
+        totalTokens: 0,
+        totalCost: 0,
+        models: {},
+      };
 
       apiBucket.totalRequests += 1;
       apiBucket.totalTokens += Number(entry.totalTokens) || 0;
@@ -1706,7 +1701,7 @@ export function calculateServiceHealthDataFromOverview(
       failure,
       rate: total > 0 ? success / total : -1,
       startTime,
-      endTime: startTime + 15*60*1000,
+      endTime: startTime + 15 * 60 * 1000,
     });
   });
 

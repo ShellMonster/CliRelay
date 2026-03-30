@@ -211,7 +211,11 @@ function ShellHeader({
 
 function ShellMain({ children }: PropsWithChildren) {
   return (
-    <main id="main-content" tabIndex={-1} className="flex min-h-full flex-col p-6 focus-visible:outline-none">
+    <main
+      id="main-content"
+      tabIndex={-1}
+      className="flex min-h-full flex-col p-6 focus-visible:outline-none"
+    >
       {children}
     </main>
   );

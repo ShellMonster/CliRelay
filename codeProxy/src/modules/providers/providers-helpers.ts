@@ -38,7 +38,10 @@ export const maskApiKey = (value: unknown): string => {
 
 export const excludedModelsToText = (models?: string[]) =>
   Array.isArray(models)
-    ? models.map((model) => asTrimmedString(model)).filter(Boolean).join("\n")
+    ? models
+        .map((model) => asTrimmedString(model))
+        .filter(Boolean)
+        .join("\n")
     : "";
 
 export const excludedModelsFromText = (text: string) =>
@@ -199,15 +202,15 @@ export const buildOpenAIDraft = (input?: OpenAIProvider | null): OpenAIDraft => 
   apiKeyEntries:
     Array.isArray(input?.apiKeyEntries) && input.apiKeyEntries.length
       ? input.apiKeyEntries.reduce<OpenAIDraft["apiKeyEntries"]>((acc, entry, idx) => {
-        if (!entry || typeof entry !== "object") return acc;
-        acc.push({
-          id: `key-${idx}-${asTrimmedString(entry.apiKey) || idx}`,
-          apiKey: asEditableString(entry.apiKey),
-          proxyUrl: asEditableString(entry.proxyUrl),
-          headersEntries: recordToKeyValueEntries(entry.headers),
-        });
-        return acc;
-      }, [])
+          if (!entry || typeof entry !== "object") return acc;
+          acc.push({
+            id: `key-${idx}-${asTrimmedString(entry.apiKey) || idx}`,
+            apiKey: asEditableString(entry.apiKey),
+            proxyUrl: asEditableString(entry.proxyUrl),
+            headersEntries: recordToKeyValueEntries(entry.headers),
+          });
+          return acc;
+        }, [])
       : [{ id: `key-${Date.now()}`, apiKey: "", proxyUrl: "", headersEntries: [] }],
   modelEntries: buildModelEntries(input?.models),
 });
