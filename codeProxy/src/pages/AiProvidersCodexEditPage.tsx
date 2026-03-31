@@ -418,14 +418,12 @@ export function AiProvidersCodexEditPage() {
             />
             <div className="form-group">
               <ToggleSwitch
-                label="自动同步模型"
+                label={t("ai_providers.auto_sync_models_label")}
                 checked={Boolean(form.autoSyncModels)}
                 onChange={(value) => setForm((prev) => ({ ...prev, autoSyncModels: value }))}
                 disabled={disableControls || saving}
               />
-              <div className="hint">
-                开启后后台会定时拉取该渠道可用模型并追加新模型。当前版本后端已支持 Codex 系列自动同步。
-              </div>
+              <div className="hint">{t("ai_providers.auto_sync_models_hint_codex")}</div>
             </div>
             <div className={styles.modelConfigSection}>
               <div className={styles.modelConfigHeader}>

@@ -281,12 +281,14 @@ export function AiProvidersVertexEditPage() {
             />
             <div className="form-group">
               <ToggleSwitch
-                label="自动同步模型"
+                label={t("ai_providers.auto_sync_models_label")}
                 checked={Boolean(form.autoSyncModels)}
                 onChange={(value) => setForm((prev) => ({ ...prev, autoSyncModels: value }))}
                 disabled={disableControls || saving}
               />
-              <div className="hint">已预留开关，当前版本后端暂未启用 Vertex 定时同步。</div>
+              <div className="hint">
+                {t("ai_providers.auto_sync_models_hint_pending", { provider: "Vertex" })}
+              </div>
             </div>
             <div className="form-group">
               <label>{t("ai_providers.vertex_models_label")}</label>

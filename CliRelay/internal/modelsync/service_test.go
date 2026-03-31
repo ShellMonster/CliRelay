@@ -7,32 +7,57 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/registry"
 )
 
-func TestMergeCodexModels_AppendsOnlyNewModels(t *testing.T) {
-	entry := &config.CodexKey{
-		Models: []config.CodexModel{
-			{Name: "gpt-5", Alias: "g5"},
-		},
-	}
-
-	changed := mergeCodexModels(entry, []*registry.ModelInfo{
+func TestCollectMissingCodexModels_AppendsOnlyNewModels(t *testing.T) {
+	out := collectMissingCodexModels([]config.CodexModel{
+		{Name: "gpt-5", Alias: "g5"},
+	}, []*registry.ModelInfo{
 		{ID: "gpt-5"},
 		{ID: "gpt-5.4"},
 		{Name: "o3"},
 	})
-	if !changed {
-		t.Fatal("expected merge to report changes")
+
+	if len(out) != 2 {
+		t.Fatalf("expected 2 new models, got %d", len(out))
 	}
-	if len(entry.Models) != 3 {
-		t.Fatalf("expected 3 models after merge, got %d", len(entry.Models))
+	if out[0].Name != "gpt-5.4" || out[0].Alias != "" {
+		t.Fatalf("unexpected first appended model: %#v", out[0])
 	}
-	if entry.Models[0].Alias != "g5" {
-		t.Fatalf("expected existing alias to remain unchanged, got %q", entry.Models[0].Alias)
-	}
-	if entry.Models[1].Name != "gpt-5.4" || entry.Models[1].Alias != "" {
-		t.Fatalf("unexpected second model: %#v", entry.Models[1])
-	}
-	if entry.Models[2].Name != "o3" {
-		t.Fatalf("unexpected third model: %#v", entry.Models[2])
+	if out[1].Name != "o3" {
+		t.Fatalf("unexpected second appended model: %#v", out[1])
 	}
 }
 
+func TestApplySyncPlan_AppendsModelsWithoutOverwritingExistingAlias(t *testing.T) {
+	cfg := &config.Config{
+		CodexKey: []config.CodexKey{{
+			APIKey:   "k",
+			BaseURL:  "https://api.example.com",
+			ProxyURL: "socks5://127.0.0.1:1080",
+			Headers:  map[string]string{"X-Test": "1"},
+			Models: []config.CodexModel{
+				{Name: "gpt-5", Alias: "g5"},
+			},
+		}},
+	}
+
+	changed := applySyncPlan(cfg, &providerSyncPlan{
+		targets: []codexSyncTarget{{
+			kind:        "codex",
+			apiKey:      "k",
+			baseURL:     "https://api.example.com",
+			proxyURL:    "socks5://127.0.0.1:1080",
+			headers:     map[string]string{"X-Test": "1"},
+			modelsToAdd: []config.CodexModel{{Name: "gpt-5.4"}},
+		}},
+	})
+
+	if !changed {
+		t.Fatal("expected applySyncPlan to report changes")
+	}
+	if len(cfg.CodexKey[0].Models) != 2 {
+		t.Fatalf("expected 2 models after apply, got %d", len(cfg.CodexKey[0].Models))
+	}
+	if cfg.CodexKey[0].Models[0].Alias != "g5" {
+		t.Fatalf("expected existing alias to remain unchanged, got %q", cfg.CodexKey[0].Models[0].Alias)
+	}
+}

@@ -2,7 +2,8 @@ package modelsync
 
 import (
 	"context"
-	"fmt"
+	"crypto/sha256"
+	"encoding/hex"
 	"strings"
 	"sync"
 	"time"
@@ -17,6 +18,7 @@ import (
 const defaultSyncInterval = 30 * time.Minute
 
 type ConfigManager interface {
+	Snapshot() (*config.Config, error)
 	UpdateConfig(func(*config.Config) bool) error
 }
 
@@ -25,6 +27,19 @@ type Service struct {
 	interval time.Duration
 	stopCh   chan struct{}
 	stopOnce sync.Once
+}
+
+type providerSyncPlan struct {
+	targets []codexSyncTarget
+}
+
+type codexSyncTarget struct {
+	kind        string
+	apiKey      string
+	baseURL     string
+	proxyURL    string
+	headers     map[string]string
+	modelsToAdd []config.CodexModel
 }
 
 func New(manager ConfigManager, interval time.Duration) *Service {
@@ -73,51 +88,66 @@ func (s *Service) loop(ctx context.Context) {
 }
 
 func (s *Service) runOnce(ctx context.Context) {
+	snapshot, err := s.manager.Snapshot()
+	if err != nil {
+		log.WithError(err).Warn("failed to snapshot config for model sync")
+		return
+	}
+	plan, err := buildSyncPlan(ctx, snapshot)
+	if err != nil {
+		log.WithError(err).Warn("model sync failed")
+		return
+	}
+	if len(plan.targets) == 0 {
+		return
+	}
+
 	if err := s.manager.UpdateConfig(func(cfg *config.Config) bool {
-		changed, syncErr := syncCodexProviders(ctx, cfg)
-		if syncErr != nil {
-			log.WithError(syncErr).Warn("model sync failed")
-			return false
-		}
-		return changed
+		return applySyncPlan(cfg, plan)
 	}); err != nil {
 		log.WithError(err).Warn("failed to persist synced models")
 	}
 }
 
-func syncCodexProviders(ctx context.Context, cfg *config.Config) (bool, error) {
+func buildSyncPlan(ctx context.Context, cfg *config.Config) (*providerSyncPlan, error) {
 	if cfg == nil {
-		return false, nil
+		return &providerSyncPlan{}, nil
 	}
 
-	changed := false
-	for i := range cfg.CodexKey {
-		entryChanged, err := syncCodexKey(ctx, &cfg.CodexKey[i], "codex")
+	targets := make([]codexSyncTarget, 0)
+	for _, entry := range cfg.CodexKey {
+		target, err := buildCodexTarget(ctx, entry, "codex")
 		if err != nil {
-			return changed, err
+			return nil, err
 		}
-		changed = changed || entryChanged
+		if target != nil {
+			targets = append(targets, *target)
+		}
 	}
-	for i := range cfg.CodexCompatKey {
-		entryChanged, err := syncCodexKey(ctx, &cfg.CodexCompatKey[i], "codex-compat")
+	for _, entry := range cfg.CodexCompatKey {
+		target, err := buildCodexTarget(ctx, entry, "codex-compat")
 		if err != nil {
-			return changed, err
+			return nil, err
 		}
-		changed = changed || entryChanged
+		if target != nil {
+			targets = append(targets, *target)
+		}
 	}
-	for i := range cfg.CopilotCompatKey {
-		entryChanged, err := syncCodexKey(ctx, &cfg.CopilotCompatKey[i], "copilot-compat")
+	for _, entry := range cfg.CopilotCompatKey {
+		target, err := buildCodexTarget(ctx, entry, "copilot-compat")
 		if err != nil {
-			return changed, err
+			return nil, err
 		}
-		changed = changed || entryChanged
+		if target != nil {
+			targets = append(targets, *target)
+		}
 	}
-	return changed, nil
+	return &providerSyncPlan{targets: targets}, nil
 }
 
-func syncCodexKey(ctx context.Context, entry *config.CodexKey, provider string) (bool, error) {
-	if entry == nil || !entry.AutoSyncModels {
-		return false, nil
+func buildCodexTarget(ctx context.Context, entry config.CodexKey, provider string) (*codexSyncTarget, error) {
+	if !entry.AutoSyncModels {
+		return nil, nil
 	}
 
 	fetchCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
@@ -125,12 +155,25 @@ func syncCodexKey(ctx context.Context, entry *config.CodexKey, provider string) 
 
 	models := executor.FetchCodexModels(fetchCtx, buildCodexAuth(entry, provider), &config.Config{})
 	if len(models) == 0 {
-		return false, nil
+		return nil, nil
 	}
-	return mergeCodexModels(entry, models), nil
+
+	modelsToAdd := collectMissingCodexModels(entry.Models, models)
+	if len(modelsToAdd) == 0 {
+		return nil, nil
+	}
+
+	return &codexSyncTarget{
+		kind:        provider,
+		apiKey:      strings.TrimSpace(entry.APIKey),
+		baseURL:     strings.TrimSpace(entry.BaseURL),
+		proxyURL:    strings.TrimSpace(entry.ProxyURL),
+		headers:     cloneHeaders(entry.Headers),
+		modelsToAdd: modelsToAdd,
+	}, nil
 }
 
-func buildCodexAuth(entry *config.CodexKey, provider string) *coreauth.Auth {
+func buildCodexAuth(entry config.CodexKey, provider string) *coreauth.Auth {
 	apiKey := strings.TrimSpace(entry.APIKey)
 	baseURL := strings.TrimSpace(entry.BaseURL)
 	proxyURL := strings.TrimSpace(entry.ProxyURL)
@@ -147,22 +190,22 @@ func buildCodexAuth(entry *config.CodexKey, provider string) *coreauth.Auth {
 		attrs[trimmedKey] = trimmedValue
 	}
 
-	idSource := provider + "|" + apiKey + "|" + baseURL
+	sum := sha256.Sum256([]byte(provider + "|" + apiKey + "|" + baseURL))
 	return &coreauth.Auth{
-		ID:         fmt.Sprintf("model-sync:%x", idSource),
+		ID:         "model-sync:" + hex.EncodeToString(sum[:8]),
 		Provider:   provider,
 		ProxyURL:   proxyURL,
 		Attributes: attrs,
 	}
 }
 
-func mergeCodexModels(entry *config.CodexKey, models []*registry.ModelInfo) bool {
-	if entry == nil || len(models) == 0 {
-		return false
+func collectMissingCodexModels(existing []config.CodexModel, models []*registry.ModelInfo) []config.CodexModel {
+	if len(models) == 0 {
+		return nil
 	}
 
-	seen := make(map[string]struct{}, len(entry.Models))
-	for _, model := range entry.Models {
+	seen := make(map[string]struct{}, len(existing))
+	for _, model := range existing {
 		name := strings.ToLower(strings.TrimSpace(model.Name))
 		if name == "" {
 			continue
@@ -170,7 +213,7 @@ func mergeCodexModels(entry *config.CodexKey, models []*registry.ModelInfo) bool
 		seen[name] = struct{}{}
 	}
 
-	changed := false
+	out := make([]config.CodexModel, 0)
 	for _, model := range models {
 		if model == nil {
 			continue
@@ -186,9 +229,85 @@ func mergeCodexModels(entry *config.CodexKey, models []*registry.ModelInfo) bool
 		if _, exists := seen[key]; exists {
 			continue
 		}
-		entry.Models = append(entry.Models, config.CodexModel{Name: name})
 		seen[key] = struct{}{}
-		changed = true
+		out = append(out, config.CodexModel{Name: name})
+	}
+	return out
+}
+
+func applySyncPlan(cfg *config.Config, plan *providerSyncPlan) bool {
+	if cfg == nil || plan == nil || len(plan.targets) == 0 {
+		return false
+	}
+
+	changed := false
+	for _, target := range plan.targets {
+		switch target.kind {
+		case "codex":
+			if appendToMatchingCodexEntries(cfg.CodexKey, target) {
+				changed = true
+			}
+		case "codex-compat":
+			if appendToMatchingCodexEntries(cfg.CodexCompatKey, target) {
+				changed = true
+			}
+		case "copilot-compat":
+			if appendToMatchingCodexEntries(cfg.CopilotCompatKey, target) {
+				changed = true
+			}
+		}
 	}
 	return changed
+}
+
+func appendToMatchingCodexEntries(entries []config.CodexKey, target codexSyncTarget) bool {
+	changed := false
+	for i := range entries {
+		entry := &entries[i]
+		if !sameCodexEntry(*entry, target) {
+			continue
+		}
+		before := len(entry.Models)
+		entry.Models = append(entry.Models, target.modelsToAdd...)
+		if len(entry.Models) != before {
+			changed = true
+		}
+	}
+	return changed
+}
+
+func sameCodexEntry(entry config.CodexKey, target codexSyncTarget) bool {
+	if strings.TrimSpace(entry.APIKey) != target.apiKey {
+		return false
+	}
+	if strings.TrimSpace(entry.BaseURL) != target.baseURL {
+		return false
+	}
+	if strings.TrimSpace(entry.ProxyURL) != target.proxyURL {
+		return false
+	}
+	return headersEqual(entry.Headers, target.headers)
+}
+
+func cloneHeaders(headers map[string]string) map[string]string {
+	if len(headers) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(headers))
+	for key, value := range headers {
+		out[key] = value
+	}
+	return out
+}
+
+func headersEqual(left, right map[string]string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for key, value := range left {
+		if right[key] != value {
+			return false
+		}
+	}
+	return true
 }

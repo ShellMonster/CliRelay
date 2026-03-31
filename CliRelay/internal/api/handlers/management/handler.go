@@ -19,6 +19,7 @@ import (
 	sdkAuth "github.com/router-for-me/CLIProxyAPI/v6/sdk/auth"
 	coreauth "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/auth"
 	"golang.org/x/crypto/bcrypt"
+	"gopkg.in/yaml.v3"
 )
 
 type ConfigSnapshotManager struct {
@@ -80,6 +81,27 @@ func (h *Handler) ConfigManager() *ConfigSnapshotManager {
 		return nil
 	}
 	return &ConfigSnapshotManager{handler: h}
+}
+
+func (m *ConfigSnapshotManager) Snapshot() (*config.Config, error) {
+	if m == nil || m.handler == nil {
+		return nil, nil
+	}
+	m.handler.mu.Lock()
+	defer m.handler.mu.Unlock()
+
+	if m.handler.cfg == nil {
+		return nil, nil
+	}
+	data, err := yaml.Marshal(m.handler.cfg)
+	if err != nil {
+		return nil, err
+	}
+	var cloned config.Config
+	if err := yaml.Unmarshal(data, &cloned); err != nil {
+		return nil, err
+	}
+	return &cloned, nil
 }
 
 // startAttemptCleanup launches a background goroutine that periodically

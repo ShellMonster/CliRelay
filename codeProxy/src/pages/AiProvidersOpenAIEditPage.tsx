@@ -573,12 +573,16 @@ export function AiProvidersOpenAIEditPage() {
             />
             <div className="form-group">
               <ToggleSwitch
-                label="自动同步模型"
+                label={t("ai_providers.auto_sync_models_label")}
                 checked={Boolean(form.autoSyncModels)}
                 onChange={(value) => setForm((prev) => ({ ...prev, autoSyncModels: value }))}
                 disabled={saving || disableControls || isTestingKeys}
               />
-              <div className="hint">已预留开关，当前版本后端暂未启用 OpenAI Compatible 定时同步。</div>
+              <div className="hint">
+                {t("ai_providers.auto_sync_models_hint_pending", {
+                  provider: "OpenAI Compatible",
+                })}
+              </div>
             </div>
 
             {/* 模型配置区域 - 统一布局 */}

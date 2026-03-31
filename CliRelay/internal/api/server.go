@@ -942,6 +942,10 @@ func (s *Server) Start() error {
 func (s *Server) Stop(ctx context.Context) error {
 	log.Debug("Stopping API server...")
 
+	if s.modelSyncService != nil {
+		s.modelSyncService.Stop()
+	}
+
 	if s.keepAliveEnabled {
 		select {
 		case s.keepAliveStop <- struct{}{}:
