@@ -89,7 +89,7 @@ const API_KEY_PROVIDER_LABELS: Record<string, string> = {
   claude: "Claude",
   codex: "Codex",
   "codex-compat": "Codex Compat",
-  "copilot-compat": "Copilot Compat",
+  "copilot-compat": "GitHub Copilot",
   vertex: "Vertex",
   "openai-compatibility": "OpenAI Compatible",
   ampcode: "Ampcode",
@@ -246,7 +246,9 @@ const describeProviderAccess = (
     provider?.channels.forEach((channel) => {
       channelLabelMap.set(channel.id, channel.label || channel.id);
     });
-    const channelLabels = selectedChannels.map((channelID) => channelLabelMap.get(channelID) || channelID);
+    const channelLabels = selectedChannels.map(
+      (channelID) => channelLabelMap.get(channelID) || channelID,
+    );
     return `${label}：${channelLabels.join(", ")}`;
   });
 };
@@ -342,9 +344,7 @@ export function ApiKeysPage() {
                     label: String(model.label || model.id || "").trim() || modelID,
                   };
                 })
-                .filter(
-                  (model): model is { id: string; label: string } => model !== null,
-                )
+                .filter((model): model is { id: string; label: string } => model !== null)
             : [],
         });
       });
@@ -468,9 +468,7 @@ export function ApiKeysPage() {
       // Canonicalize top-level legacy api-keys into api-key-entries so later disable/delete
       // operations are authoritative and don't leave an active legacy duplicate behind.
       const entryKeySet = new Set(
-        entriesData
-          .map((entry) => String(entry.key || "").trim())
-          .filter(Boolean),
+        entriesData.map((entry) => String(entry.key || "").trim()).filter(Boolean),
       );
       const legacyEntryKeys = Array.from(
         new Set(legacyKeys.map((key) => String(key || "").trim()).filter(Boolean)),
@@ -486,11 +484,15 @@ export function ApiKeysPage() {
 
       let finalEntries = entriesData;
       if (legacyEntryKeys.length > 0) {
-        const merged = missingEntries.length > 0 ? [...entriesData, ...missingEntries] : entriesData;
+        const merged =
+          missingEntries.length > 0 ? [...entriesData, ...missingEntries] : entriesData;
         try {
           await apiKeyEntriesApi.replace(merged);
           if (missingEntries.length > 0) {
-            notify({ type: "success", message: `已自动导入 ${missingEntries.length} 个旧 API Key` });
+            notify({
+              type: "success",
+              message: `已自动导入 ${missingEntries.length} 个旧 API Key`,
+            });
           }
           finalEntries = merged;
         } catch (err: unknown) {
