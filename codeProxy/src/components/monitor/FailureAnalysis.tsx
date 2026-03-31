@@ -4,7 +4,12 @@ import { Card } from "@/components/ui/Card";
 import { useDisableModel } from "@/hooks";
 import { TimeRangeSelector, formatTimeRangeCaption, type TimeRange } from "./TimeRangeSelector";
 import { DisableModelModal } from "./DisableModelModal";
-import { formatTimestamp, getProviderDisplayParts, getRateClassName, type DateRange } from "@/utils/monitor";
+import {
+  formatTimestamp,
+  getProviderDisplayParts,
+  getRateClassName,
+  type DateRange,
+} from "@/utils/monitor";
 import type { MonitorUsageData } from "@/modules/monitor/types";
 import styles from "@/pages/MonitorPage.module.scss";
 
@@ -101,7 +106,9 @@ export function FailureAnalysis({
         total: modelPoint.requests,
         successRate: modelPoint.success_rate,
         recentRequests: [],
-        lastTimestamp: modelPoint.last_request_at ? new Date(modelPoint.last_request_at).getTime() : 0,
+        lastTimestamp: modelPoint.last_request_at
+          ? new Date(modelPoint.last_request_at).getTime()
+          : 0,
       };
     });
 

@@ -51,7 +51,16 @@ export function AiProvidersOpenAIModelsPage() {
             _key: `${name}:${index}`,
           };
         })
-        .filter((model): model is ModelInfo & { name: string; alias: string; description: string; _key: string } => Boolean(model)),
+        .filter(
+          (
+            model,
+          ): model is ModelInfo & {
+            name: string;
+            alias: string;
+            description: string;
+            _key: string;
+          } => Boolean(model),
+        ),
     [models],
   );
 

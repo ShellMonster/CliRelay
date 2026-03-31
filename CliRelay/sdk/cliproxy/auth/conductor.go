@@ -319,7 +319,7 @@ func (m *Manager) rebuildAPIKeyModelAliasLocked(cfg *internalconfig.Config) {
 			if entry := resolveCodexCompatAPIKeyConfig(cfg, auth); entry != nil {
 				compileAPIKeyModelAliasForModels(byAlias, entry.Models)
 			}
-		case "copilot-compat":
+		case "copilot-compat", "github-copilot":
 			if entry := resolveCopilotCompatAPIKeyConfig(cfg, auth); entry != nil {
 				compileAPIKeyModelAliasForModels(byAlias, entry.Models)
 			}
@@ -1018,7 +1018,7 @@ func (m *Manager) applyAPIKeyModelAlias(auth *Auth, requestedModel string) strin
 		upstreamModel = resolveUpstreamModelForCodexAPIKey(cfg, auth, requestedModel)
 	case "codex-compat":
 		upstreamModel = resolveUpstreamModelForCodexCompatAPIKey(cfg, auth, requestedModel)
-	case "copilot-compat":
+	case "copilot-compat", "github-copilot":
 		upstreamModel = resolveUpstreamModelForCopilotCompatAPIKey(cfg, auth, requestedModel)
 	case "vertex":
 		upstreamModel = resolveUpstreamModelForVertexAPIKey(cfg, auth, requestedModel)

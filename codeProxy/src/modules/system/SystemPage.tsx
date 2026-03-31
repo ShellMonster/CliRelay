@@ -1,7 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Check, Copy, ExternalLink, Globe, GitBranch, CalendarClock,
-  MonitorSmartphone, KeyRound, RefreshCw, Search, Server, Layers,
+  Check,
+  Copy,
+  ExternalLink,
+  Globe,
+  GitBranch,
+  CalendarClock,
+  MonitorSmartphone,
+  KeyRound,
+  RefreshCw,
+  Search,
+  Server,
+  Layers,
 } from "lucide-react";
 import { configApi } from "@/lib/http/apis";
 import { useAuth } from "@/modules/auth/AuthProvider";
@@ -57,31 +67,104 @@ const extractModelIds = (payload: V1ModelsResponse): string[] => {
         ? ((payload as { models: unknown[] }).models as Array<{ id?: string }>)
         : [];
   return Array.from(
-    new Set(data.map((i) => (i && typeof i === "object" ? String((i as { id?: unknown }).id) : "")).map((s) => s.trim()).filter(Boolean)),
+    new Set(
+      data
+        .map((i) => (i && typeof i === "object" ? String((i as { id?: unknown }).id) : ""))
+        .map((s) => s.trim())
+        .filter(Boolean),
+    ),
   ).sort((a, b) => a.localeCompare(b));
 };
 
 /** Vendor prefix → color scheme */
 const VENDOR_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  claude: { bg: "bg-orange-50 dark:bg-orange-950/20", text: "text-orange-700 dark:text-orange-300", border: "border-orange-200/60 dark:border-orange-800/30" },
-  gpt: { bg: "bg-emerald-50 dark:bg-emerald-950/20", text: "text-emerald-700 dark:text-emerald-300", border: "border-emerald-200/60 dark:border-emerald-800/30" },
-  o1: { bg: "bg-emerald-50 dark:bg-emerald-950/20", text: "text-emerald-700 dark:text-emerald-300", border: "border-emerald-200/60 dark:border-emerald-800/30" },
-  o3: { bg: "bg-emerald-50 dark:bg-emerald-950/20", text: "text-emerald-700 dark:text-emerald-300", border: "border-emerald-200/60 dark:border-emerald-800/30" },
-  o4: { bg: "bg-emerald-50 dark:bg-emerald-950/20", text: "text-emerald-700 dark:text-emerald-300", border: "border-emerald-200/60 dark:border-emerald-800/30" },
-  gemini: { bg: "bg-blue-50 dark:bg-blue-950/20", text: "text-blue-700 dark:text-blue-300", border: "border-blue-200/60 dark:border-blue-800/30" },
-  deepseek: { bg: "bg-cyan-50 dark:bg-cyan-950/20", text: "text-cyan-700 dark:text-cyan-300", border: "border-cyan-200/60 dark:border-cyan-800/30" },
-  qwen: { bg: "bg-violet-50 dark:bg-violet-950/20", text: "text-violet-700 dark:text-violet-300", border: "border-violet-200/60 dark:border-violet-800/30" },
-  llama: { bg: "bg-indigo-50 dark:bg-indigo-950/20", text: "text-indigo-700 dark:text-indigo-300", border: "border-indigo-200/60 dark:border-indigo-800/30" },
-  mistral: { bg: "bg-amber-50 dark:bg-amber-950/20", text: "text-amber-700 dark:text-amber-300", border: "border-amber-200/60 dark:border-amber-800/30" },
-  minimax: { bg: "bg-sky-50 dark:bg-sky-950/20", text: "text-sky-700 dark:text-sky-300", border: "border-sky-200/60 dark:border-sky-800/30" },
-  grok: { bg: "bg-slate-50 dark:bg-slate-900/30", text: "text-slate-700 dark:text-slate-300", border: "border-slate-200/60 dark:border-slate-700/30" },
-  kimi: { bg: "bg-slate-50 dark:bg-slate-900/30", text: "text-slate-700 dark:text-slate-300", border: "border-slate-200/60 dark:border-slate-700/30" },
-  codex: { bg: "bg-emerald-50 dark:bg-emerald-950/20", text: "text-emerald-700 dark:text-emerald-300", border: "border-emerald-200/60 dark:border-emerald-800/30" },
-  glm: { bg: "bg-blue-50 dark:bg-blue-950/20", text: "text-blue-700 dark:text-blue-300", border: "border-blue-200/60 dark:border-blue-800/30" },
-  kiro: { bg: "bg-amber-50 dark:bg-amber-950/20", text: "text-amber-700 dark:text-amber-300", border: "border-amber-200/60 dark:border-amber-800/30" },
+  claude: {
+    bg: "bg-orange-50 dark:bg-orange-950/20",
+    text: "text-orange-700 dark:text-orange-300",
+    border: "border-orange-200/60 dark:border-orange-800/30",
+  },
+  gpt: {
+    bg: "bg-emerald-50 dark:bg-emerald-950/20",
+    text: "text-emerald-700 dark:text-emerald-300",
+    border: "border-emerald-200/60 dark:border-emerald-800/30",
+  },
+  o1: {
+    bg: "bg-emerald-50 dark:bg-emerald-950/20",
+    text: "text-emerald-700 dark:text-emerald-300",
+    border: "border-emerald-200/60 dark:border-emerald-800/30",
+  },
+  o3: {
+    bg: "bg-emerald-50 dark:bg-emerald-950/20",
+    text: "text-emerald-700 dark:text-emerald-300",
+    border: "border-emerald-200/60 dark:border-emerald-800/30",
+  },
+  o4: {
+    bg: "bg-emerald-50 dark:bg-emerald-950/20",
+    text: "text-emerald-700 dark:text-emerald-300",
+    border: "border-emerald-200/60 dark:border-emerald-800/30",
+  },
+  gemini: {
+    bg: "bg-blue-50 dark:bg-blue-950/20",
+    text: "text-blue-700 dark:text-blue-300",
+    border: "border-blue-200/60 dark:border-blue-800/30",
+  },
+  deepseek: {
+    bg: "bg-cyan-50 dark:bg-cyan-950/20",
+    text: "text-cyan-700 dark:text-cyan-300",
+    border: "border-cyan-200/60 dark:border-cyan-800/30",
+  },
+  qwen: {
+    bg: "bg-violet-50 dark:bg-violet-950/20",
+    text: "text-violet-700 dark:text-violet-300",
+    border: "border-violet-200/60 dark:border-violet-800/30",
+  },
+  llama: {
+    bg: "bg-indigo-50 dark:bg-indigo-950/20",
+    text: "text-indigo-700 dark:text-indigo-300",
+    border: "border-indigo-200/60 dark:border-indigo-800/30",
+  },
+  mistral: {
+    bg: "bg-amber-50 dark:bg-amber-950/20",
+    text: "text-amber-700 dark:text-amber-300",
+    border: "border-amber-200/60 dark:border-amber-800/30",
+  },
+  minimax: {
+    bg: "bg-sky-50 dark:bg-sky-950/20",
+    text: "text-sky-700 dark:text-sky-300",
+    border: "border-sky-200/60 dark:border-sky-800/30",
+  },
+  grok: {
+    bg: "bg-slate-50 dark:bg-slate-900/30",
+    text: "text-slate-700 dark:text-slate-300",
+    border: "border-slate-200/60 dark:border-slate-700/30",
+  },
+  kimi: {
+    bg: "bg-slate-50 dark:bg-slate-900/30",
+    text: "text-slate-700 dark:text-slate-300",
+    border: "border-slate-200/60 dark:border-slate-700/30",
+  },
+  codex: {
+    bg: "bg-emerald-50 dark:bg-emerald-950/20",
+    text: "text-emerald-700 dark:text-emerald-300",
+    border: "border-emerald-200/60 dark:border-emerald-800/30",
+  },
+  glm: {
+    bg: "bg-blue-50 dark:bg-blue-950/20",
+    text: "text-blue-700 dark:text-blue-300",
+    border: "border-blue-200/60 dark:border-blue-800/30",
+  },
+  kiro: {
+    bg: "bg-amber-50 dark:bg-amber-950/20",
+    text: "text-amber-700 dark:text-amber-300",
+    border: "border-amber-200/60 dark:border-amber-800/30",
+  },
 };
 
-const DEFAULT_VENDOR = { bg: "bg-slate-50 dark:bg-neutral-900/40", text: "text-slate-600 dark:text-slate-300", border: "border-slate-200/60 dark:border-neutral-700/40" };
+const DEFAULT_VENDOR = {
+  bg: "bg-slate-50 dark:bg-neutral-900/40",
+  text: "text-slate-600 dark:text-slate-300",
+  border: "border-slate-200/60 dark:border-neutral-700/40",
+};
 
 /** Vendor prefix → icon (light, dark) */
 const VENDOR_ICONS: Record<string, { light: string; dark: string }> = {
@@ -135,7 +218,14 @@ function VendorIcon({ modelId, size = 14 }: { modelId: string; size?: number }) 
    InfoCard — compact grid card with icon
    ═══════════════════════════════════════════════════════════ */
 
-function InfoCard({ icon: Icon, label, value, mono = false, copyable = false, link = false }: {
+function InfoCard({
+  icon: Icon,
+  label,
+  value,
+  mono = false,
+  copyable = false,
+  link = false,
+}: {
   icon: typeof Globe;
   label: string;
   value: string;
@@ -155,7 +245,9 @@ function InfoCard({ icon: Icon, label, value, mono = false, copyable = false, li
     <div className="group relative rounded-xl border border-slate-200/80 bg-white px-4 py-3 shadow-sm transition hover:shadow-md dark:border-neutral-800 dark:bg-neutral-950/60">
       <div className="flex items-center gap-2 mb-1.5">
         <Icon size={13} className="text-slate-400 dark:text-white/35" />
-        <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-white/35">{label}</span>
+        <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-white/35">
+          {label}
+        </span>
       </div>
       <div className="flex items-center gap-2 min-w-0">
         {link ? (
@@ -168,7 +260,9 @@ function InfoCard({ icon: Icon, label, value, mono = false, copyable = false, li
             {value}
           </a>
         ) : (
-          <span className={`truncate text-sm font-medium text-slate-800 dark:text-white ${mono ? "font-mono text-xs" : ""}`}>
+          <span
+            className={`truncate text-sm font-medium text-slate-800 dark:text-white ${mono ? "font-mono text-xs" : ""}`}
+          >
             {value}
           </span>
         )}
@@ -182,9 +276,7 @@ function InfoCard({ icon: Icon, label, value, mono = false, copyable = false, li
             {copied ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
           </button>
         )}
-        {link && (
-          <ExternalLink size={11} className="shrink-0 text-indigo-400/50" />
-        )}
+        {link && <ExternalLink size={11} className="shrink-0 text-indigo-400/50" />}
       </div>
     </div>
   );
@@ -288,8 +380,12 @@ export function SystemPage() {
     }
   }, [modelsUrl, primaryApiKey]);
 
-  useEffect(() => { void loadConfig(); }, [loadConfig]);
-  useEffect(() => { if (!loadingConfig && modelsUrl) void loadModels(); }, [loadingConfig, modelsUrl, loadModels]);
+  useEffect(() => {
+    void loadConfig();
+  }, [loadConfig]);
+  useEffect(() => {
+    if (!loadingConfig && modelsUrl) void loadModels();
+  }, [loadingConfig, modelsUrl, loadModels]);
   useEffect(() => {
     if (!modelsUrl) return;
     const timer = setInterval(() => void loadModels(), AUTO_REFRESH_INTERVAL);
@@ -309,7 +405,10 @@ export function SystemPage() {
       const lower = id.toLowerCase();
       let vendor = "其他";
       for (const prefix of Object.keys(VENDOR_COLORS)) {
-        if (lower.startsWith(prefix)) { vendor = prefix; break; }
+        if (lower.startsWith(prefix)) {
+          vendor = prefix;
+          break;
+        }
       }
       map.set(vendor, (map.get(vendor) ?? 0) + 1);
     }
@@ -338,9 +437,20 @@ export function SystemPage() {
       {/* ── Connection & Version Grid ── */}
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <InfoCard icon={Globe} label="API Base" value={auth.state.apiBase || "--"} mono copyable />
-        <InfoCard icon={Globe} label="管理接口" value={auth.meta.managementEndpoint || "--"} mono copyable />
+        <InfoCard
+          icon={Globe}
+          label="管理接口"
+          value={auth.meta.managementEndpoint || "--"}
+          mono
+          copyable
+        />
         <InfoCard icon={GitBranch} label="服务版本" value={auth.state.serverVersion ?? "--"} />
-        <InfoCard icon={CalendarClock} label="构建时间" value={auth.state.serverBuildDate ?? "--"} mono />
+        <InfoCard
+          icon={CalendarClock}
+          label="构建时间"
+          value={auth.state.serverBuildDate ?? "--"}
+          mono
+        />
         <InfoCard icon={MonitorSmartphone} label="前端版本" value={__APP_VERSION__ || "--"} />
         <InfoCard icon={KeyRound} label="API Key 查询" value={apiKeyLookupUrl} link />
       </div>
@@ -356,12 +466,17 @@ export function SystemPage() {
               {filteredModels.length}
             </span>
             {modelFilter && filteredModels.length !== models.length && (
-              <span className="text-[10px] text-slate-400 dark:text-white/30">/ {models.length}</span>
+              <span className="text-[10px] text-slate-400 dark:text-white/30">
+                / {models.length}
+              </span>
             )}
           </div>
           <div className="flex items-center gap-2">
             <div className="relative">
-              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-white/30 pointer-events-none" />
+              <Search
+                size={13}
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-white/30 pointer-events-none"
+              />
               <TextInput
                 value={modelFilter}
                 onChange={(e) => setModelFilter(e.target.value)}
@@ -369,7 +484,12 @@ export function SystemPage() {
                 className="!w-48 !rounded-lg !py-1.5 !pl-8 !text-xs"
               />
             </div>
-            <Button variant="secondary" size="sm" onClick={() => void loadModels()} disabled={modelsLoading}>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => void loadModels()}
+              disabled={modelsLoading}
+            >
               <RefreshCw size={13} className={modelsLoading ? "animate-spin" : ""} />
               刷新
             </Button>
@@ -384,7 +504,10 @@ export function SystemPage() {
               // Reuse vendor name to resolve a stable icon slot.
               const iconKey = vendor + "-placeholder";
               return (
-                <span key={vendor} className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[10px] font-semibold ${vc.bg} ${vc.text} ${vc.border}`}>
+                <span
+                  key={vendor}
+                  className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[10px] font-semibold ${vc.bg} ${vc.text} ${vc.border}`}
+                >
                   <VendorIcon modelId={iconKey} size={12} />
                   {vendor}
                   <span className="tabular-nums">{count}</span>

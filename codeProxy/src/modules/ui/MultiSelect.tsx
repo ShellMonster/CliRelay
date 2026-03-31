@@ -1,11 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown, X } from "lucide-react";
 
 export interface MultiSelectOption {
@@ -56,9 +49,7 @@ export function MultiSelect({
     const estimatedDropdownHeight = 280;
     const spaceBelow = window.innerHeight - rect.bottom - gap;
     const spaceAbove = rect.top - gap;
-    setOpenAbove(
-      spaceBelow < 220 && spaceAbove > spaceBelow && spaceAbove >= 160,
-    );
+    setOpenAbove(spaceBelow < 220 && spaceAbove > spaceBelow && spaceAbove >= 160);
   }, []);
   // Close on outside click
   useEffect(() => {
@@ -99,8 +90,7 @@ export function MultiSelect({
     if (!search) return options;
     const q = search.toLowerCase();
     return options.filter(
-      (o) =>
-        o.label.toLowerCase().includes(q) || o.value.toLowerCase().includes(q),
+      (o) => o.label.toLowerCase().includes(q) || o.value.toLowerCase().includes(q),
     );
   }, [options, search]);
 
@@ -172,9 +162,7 @@ export function MultiSelect({
                 : "border-slate-300 dark:border-neutral-600"
             }`}
           >
-            {value.length === 0 && (
-              <Check size={12} className="text-white dark:text-black" />
-            )}
+            {value.length === 0 && <Check size={12} className="text-white dark:text-black" />}
           </div>
           <span className="font-medium">{selectAllLabel}</span>
         </button>
@@ -206,9 +194,7 @@ export function MultiSelect({
                       : "border-slate-300 dark:border-neutral-600"
                   }`}
                 >
-                  {checked && (
-                    <Check size={12} className="text-white dark:text-black" />
-                  )}
+                  {checked && <Check size={12} className="text-white dark:text-black" />}
                 </div>
                 <span className="font-mono text-xs">{opt.label}</span>
               </button>
@@ -264,9 +250,7 @@ export function MultiSelect({
             ))
           )}
           {value.length > visibleTagCount && (
-            <span className="text-xs text-slate-400">
-              +{value.length - visibleTagCount}
-            </span>
+            <span className="text-xs text-slate-400">+{value.length - visibleTagCount}</span>
           )}
         </div>
         <ChevronDown

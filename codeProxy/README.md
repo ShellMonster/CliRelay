@@ -81,65 +81,65 @@ This dashboard provides a complete management interface for your AI proxy infras
 
 ### 📊 Dashboard
 
-| Module | Description |
-|:-------|:------------|
-| **KPI Cards** | Total requests, success rate, token consumption, failed request count (7-day / 30-day) |
-| **Health Score** | Real-time circular gauge (0–100) evaluating overall system health |
-| **System Monitor** | WebSocket-powered live stats: uptime, goroutines, CPU, memory, network I/O, DB size |
-| **Channel Latency** | Top 5 channel average latency with visual bar indicators |
-| **Resource Bars** | System CPU, memory, service CPU, memory, database size — color-coded status |
+| Module              | Description                                                                            |
+| :------------------ | :------------------------------------------------------------------------------------- |
+| **KPI Cards**       | Total requests, success rate, token consumption, failed request count (7-day / 30-day) |
+| **Health Score**    | Real-time circular gauge (0–100) evaluating overall system health                      |
+| **System Monitor**  | WebSocket-powered live stats: uptime, goroutines, CPU, memory, network I/O, DB size    |
+| **Channel Latency** | Top 5 channel average latency with visual bar indicators                               |
+| **Resource Bars**   | System CPU, memory, service CPU, memory, database size — color-coded status            |
 
 ### 📈 Monitor Center
 
-| Module | Description |
-|:-------|:------------|
-| **KPI Summary** | Total requests, success rate, total/output tokens with time range selection |
-| **Model Distribution** | Interactive donut chart showing Top 10 model usage by request count or token |
-| **Daily Trends** | Dual-axis chart with input/output tokens (bar) and request count (line) over time |
-| **Hourly Heatmap** | Stacked bar chart showing per-model hourly request distribution (6h / 12h / 24h) |
-| **API Key Filter** | Filter all metrics by specific API Key prefix |
+| Module                 | Description                                                                       |
+| :--------------------- | :-------------------------------------------------------------------------------- |
+| **KPI Summary**        | Total requests, success rate, total/output tokens with time range selection       |
+| **Model Distribution** | Interactive donut chart showing Top 10 model usage by request count or token      |
+| **Daily Trends**       | Dual-axis chart with input/output tokens (bar) and request count (line) over time |
+| **Hourly Heatmap**     | Stacked bar chart showing per-model hourly request distribution (6h / 12h / 24h)  |
+| **API Key Filter**     | Filter all metrics by specific API Key prefix                                     |
 
 ### 📋 Request Logs
 
-| Module | Description |
-|:-------|:------------|
-| **Virtual Table** | High-performance virtual scrolling for 10,000+ log entries |
-| **Multi-Filter** | Filter by Key, model, status (success/fail), with time range selection |
-| **Token Details** | Click on input/output tokens to view full message content |
-| **Error Modal** | Click on "失败" (Failed) status to view error details in a red-themed modal |
+| Module             | Description                                                                                       |
+| :----------------- | :------------------------------------------------------------------------------------------------ |
+| **Virtual Table**  | High-performance virtual scrolling for 10,000+ log entries                                        |
+| **Multi-Filter**   | Filter by Key, model, status (success/fail), with time range selection                            |
+| **Token Details**  | Click on input/output tokens to view full message content                                         |
+| **Error Modal**    | Click on "失败" (Failed) status to view error details in a red-themed modal                       |
 | **Message Viewer** | Markdown rendering with syntax highlighting, XML tag detection, and role-based collapsible blocks |
 
 ### 🔗 AI Providers
 
-| Module | Description |
-|:-------|:------------|
-| **Multi-Tab** | Gemini, Claude, Codex, Vertex, OpenAI Compatible, Ampcode tabs |
-| **Channel Cards** | Name, masked API key, base URL, model count, success/fail stats, latency bar |
-| **CRUD** | Add, edit, delete channels with full configuration (proxyUrl, headers, model aliases, excluded models) |
-| **Toggle** | Enable/disable individual channels with instant visual feedback |
+| Module            | Description                                                                                            |
+| :---------------- | :----------------------------------------------------------------------------------------------------- |
+| **Multi-Tab**     | Gemini, Claude, Codex, Vertex, OpenAI Compatible, Ampcode tabs                                         |
+| **Channel Cards** | Name, masked API key, base URL, model count, success/fail stats, latency bar                           |
+| **CRUD**          | Add, edit, delete channels with full configuration (proxyUrl, headers, model aliases, excluded models) |
+| **Toggle**        | Enable/disable individual channels with instant visual feedback                                        |
 
 ### 🔍 API Key Lookup
 
-| Module | Description |
-|:-------|:------------|
-| **Self-Service** | Public page (no login required) for end users to check their API Key usage |
-| **Usage Stats** | Per-key KPI cards, model distribution chart, daily trend chart |
+| Module           | Description                                                                 |
+| :--------------- | :-------------------------------------------------------------------------- |
+| **Self-Service** | Public page (no login required) for end users to check their API Key usage  |
+| **Usage Stats**  | Per-key KPI cards, model distribution chart, daily trend chart              |
 | **Request Logs** | Per-key request history with detailed virtual table and source channel info |
 
 ## 🛠️ Tech Stack
 
-| Category | Technology |
-|:---------|:-----------|
-| **Framework** | React 19.2 + TypeScript 5.9 |
-| **Build Tool** | Vite 7.3 |
-| **Package Manager** | Bun 1.2 |
-| **Styling** | Tailwind CSS v4 |
-| **State Management** | Zustand |
-| **Charts** | Apache ECharts |
-| **Routing** | React Router v7 |
-| **HTTP** | Axios + WebSocket (real-time monitoring) |
-| **Icons** | Lucide React + Custom vendor SVGs (14 vendors) |
-| **Linting** | oxlint + oxfmt |
+| Category             | Technology                                     |
+| :------------------- | :--------------------------------------------- |
+| **Framework**        | React 19.2 + TypeScript 5.9                    |
+| **Build Tool**       | Vite 7.3                                       |
+| **Package Manager**  | Bun 1.2                                        |
+| **Styling**          | Tailwind CSS v4                                |
+| **State Management** | Zustand                                        |
+| **Charts**           | Apache ECharts                                 |
+| **Routing**          | React Router v7                                |
+| **HTTP**             | Axios + WebSocket (real-time monitoring)       |
+| **Icons**            | Lucide React + Custom vendor SVGs (14 vendors) |
+| **Linting**          | oxlint + oxfmt                                 |
 
 ## 🚀 Getting Started
 
@@ -204,22 +204,22 @@ src/
 
 This dashboard communicates with the CliRelay backend via the Management API:
 
-| Endpoint | Method | Description |
-|:---------|:-------|:------------|
-| `/v0/management/config` | `GET` | Verify login & fetch configuration |
-| `/v0/management/usage` | `GET` | Retrieve usage statistics |
-| `/v0/management/usage/logs` | `GET` | Paginated request log history |
-| `/v0/management/usage/log-content` | `GET` | Full message content (input/output) |
-| `/v0/management/usage/dashboard-summary` | `GET` | Dashboard KPI data |
-| `/v0/management/usage/model-distribution` | `GET` | Model usage distribution |
-| `/v0/management/usage/daily-trends` | `GET` | Daily token/request trends |
-| `/v0/management/usage/hourly-model` | `GET` | Hourly per-model request data |
-| `/v0/management/openai-compatibility` | `GET/POST/DELETE` | OpenAI channel CRUD |
-| `/v0/management/gemini-api-key` | `GET/POST/DELETE` | Gemini channel CRUD |
-| `/v0/management/claude-api-key` | `GET/POST/DELETE` | Claude channel CRUD |
-| `/v0/management/codex-api-key` | `GET/POST/DELETE` | Codex channel CRUD |
-| `/v0/management/vertex-api-key` | `GET/POST/DELETE` | Vertex channel CRUD |
-| `/v0/management/system-stats` | `WebSocket` | Real-time system monitoring |
+| Endpoint                                  | Method            | Description                         |
+| :---------------------------------------- | :---------------- | :---------------------------------- |
+| `/v0/management/config`                   | `GET`             | Verify login & fetch configuration  |
+| `/v0/management/usage`                    | `GET`             | Retrieve usage statistics           |
+| `/v0/management/usage/logs`               | `GET`             | Paginated request log history       |
+| `/v0/management/usage/log-content`        | `GET`             | Full message content (input/output) |
+| `/v0/management/usage/dashboard-summary`  | `GET`             | Dashboard KPI data                  |
+| `/v0/management/usage/model-distribution` | `GET`             | Model usage distribution            |
+| `/v0/management/usage/daily-trends`       | `GET`             | Daily token/request trends          |
+| `/v0/management/usage/hourly-model`       | `GET`             | Hourly per-model request data       |
+| `/v0/management/openai-compatibility`     | `GET/POST/DELETE` | OpenAI channel CRUD                 |
+| `/v0/management/gemini-api-key`           | `GET/POST/DELETE` | Gemini channel CRUD                 |
+| `/v0/management/claude-api-key`           | `GET/POST/DELETE` | Claude channel CRUD                 |
+| `/v0/management/codex-api-key`            | `GET/POST/DELETE` | Codex channel CRUD                  |
+| `/v0/management/vertex-api-key`           | `GET/POST/DELETE` | Vertex channel CRUD                 |
+| `/v0/management/system-stats`             | `WebSocket`       | Real-time system monitoring         |
 
 > **Note:** The API base is automatically normalized to `{apiBase}/v0/management`
 

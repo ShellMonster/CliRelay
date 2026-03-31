@@ -149,26 +149,26 @@ export const useProviderStats = (collections: ProviderCollections) => {
 
       collections.geminiKeys.forEach((config) => {
         if (!config.apiKey) return;
-        buildCandidateUsageSourceIds({ apiKey: config.apiKey, prefix: config.prefix }).forEach((id) =>
-          providerSourceMaps.gemini.set(id, config.apiKey),
+        buildCandidateUsageSourceIds({ apiKey: config.apiKey, prefix: config.prefix }).forEach(
+          (id) => providerSourceMaps.gemini.set(id, config.apiKey),
         );
       });
       collections.codexConfigs.forEach((config) => {
         if (!config.apiKey) return;
-        buildCandidateUsageSourceIds({ apiKey: config.apiKey, prefix: config.prefix }).forEach((id) =>
-          providerSourceMaps.codex.set(id, config.apiKey),
+        buildCandidateUsageSourceIds({ apiKey: config.apiKey, prefix: config.prefix }).forEach(
+          (id) => providerSourceMaps.codex.set(id, config.apiKey),
         );
       });
       collections.claudeConfigs.forEach((config) => {
         if (!config.apiKey) return;
-        buildCandidateUsageSourceIds({ apiKey: config.apiKey, prefix: config.prefix }).forEach((id) =>
-          providerSourceMaps.claude.set(id, config.apiKey),
+        buildCandidateUsageSourceIds({ apiKey: config.apiKey, prefix: config.prefix }).forEach(
+          (id) => providerSourceMaps.claude.set(id, config.apiKey),
         );
       });
       collections.vertexConfigs.forEach((config) => {
         if (!config.apiKey) return;
-        buildCandidateUsageSourceIds({ apiKey: config.apiKey, prefix: config.prefix }).forEach((id) =>
-          providerSourceMaps.vertex.set(id, config.apiKey),
+        buildCandidateUsageSourceIds({ apiKey: config.apiKey, prefix: config.prefix }).forEach(
+          (id) => providerSourceMaps.vertex.set(id, config.apiKey),
         );
       });
       collections.openaiProviders.forEach((provider) => {
@@ -192,23 +192,58 @@ export const useProviderStats = (collections: ProviderCollections) => {
 
         const geminiKey = providerSourceMaps.gemini.get(source);
         if (geminiKey) {
-          applyHealthPoint(nextStatusBarCache.gemini, geminiKey, bucket, successCount, failureCount, nowMs);
+          applyHealthPoint(
+            nextStatusBarCache.gemini,
+            geminiKey,
+            bucket,
+            successCount,
+            failureCount,
+            nowMs,
+          );
         }
         const codexKey = providerSourceMaps.codex.get(source);
         if (codexKey) {
-          applyHealthPoint(nextStatusBarCache.codex, codexKey, bucket, successCount, failureCount, nowMs);
+          applyHealthPoint(
+            nextStatusBarCache.codex,
+            codexKey,
+            bucket,
+            successCount,
+            failureCount,
+            nowMs,
+          );
         }
         const claudeKey = providerSourceMaps.claude.get(source);
         if (claudeKey) {
-          applyHealthPoint(nextStatusBarCache.claude, claudeKey, bucket, successCount, failureCount, nowMs);
+          applyHealthPoint(
+            nextStatusBarCache.claude,
+            claudeKey,
+            bucket,
+            successCount,
+            failureCount,
+            nowMs,
+          );
         }
         const vertexKey = providerSourceMaps.vertex.get(source);
         if (vertexKey) {
-          applyHealthPoint(nextStatusBarCache.vertex, vertexKey, bucket, successCount, failureCount, nowMs);
+          applyHealthPoint(
+            nextStatusBarCache.vertex,
+            vertexKey,
+            bucket,
+            successCount,
+            failureCount,
+            nowMs,
+          );
         }
         const openaiKey = providerSourceMaps.openai.get(source);
         if (openaiKey) {
-          applyHealthPoint(nextStatusBarCache.openai, openaiKey, bucket, successCount, failureCount, nowMs);
+          applyHealthPoint(
+            nextStatusBarCache.openai,
+            openaiKey,
+            bucket,
+            successCount,
+            failureCount,
+            nowMs,
+          );
         }
       });
 
@@ -225,4 +260,4 @@ export const useProviderStats = (collections: ProviderCollections) => {
   useInterval(loadKeyStats, 240_000);
 
   return { keyStats, statusBarCache, loadKeyStats, isLoading };
-}
+};

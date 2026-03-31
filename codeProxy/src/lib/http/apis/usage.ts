@@ -1,10 +1,6 @@
 import { apiClient } from "@/lib/http/client";
 
-function appendMultiValueQuery(
-  query: URLSearchParams,
-  key: string,
-  values?: string[],
-) {
+function appendMultiValueQuery(query: URLSearchParams, key: string, values?: string[]) {
   values
     ?.map((value) => value.trim())
     .filter(Boolean)
@@ -36,10 +32,7 @@ function uniqueTrimmedStrings(values: string[]): string[] {
   return result;
 }
 
-function normalizeChannelOptions(
-  rawOptions: unknown,
-  fallbackChannels: string[],
-): ChannelOption[] {
+function normalizeChannelOptions(rawOptions: unknown, fallbackChannels: string[]): ChannelOption[] {
   const options: ChannelOption[] = [];
   const seen = new Set<string>();
 
@@ -84,17 +77,12 @@ function normalizeFilterOptions(rawFilters: unknown): UsageFilterOptions {
   const channels = Array.isArray(source?.channels)
     ? source.channels.filter((item): item is string => typeof item === "string")
     : [];
-  const channelOptions = normalizeChannelOptions(
-    source?.channel_options,
-    channels,
-  );
+  const channelOptions = normalizeChannelOptions(source?.channel_options, channels);
 
   return {
     api_keys: apiKeys,
     api_key_names:
-      source?.api_key_names && typeof source.api_key_names === "object"
-        ? source.api_key_names
-        : {},
+      source?.api_key_names && typeof source.api_key_names === "object" ? source.api_key_names : {},
     models,
     channels:
       channels.length > 0
@@ -248,9 +236,9 @@ export const usageApi = {
     if (params.status) qs.set("status", params.status);
     appendMultiValueQuery(qs, "channel_name", params.channel_name);
     const query = qs.toString();
-    const response = await apiClient.get<
-      Partial<UsageLogsResponse> | undefined
-    >(`/usage/logs${query ? `?${query}` : ""}`);
+    const response = await apiClient.get<Partial<UsageLogsResponse> | undefined>(
+      `/usage/logs${query ? `?${query}` : ""}`,
+    );
 
     const rawItems = Array.isArray(response?.items) ? response.items : [];
     const rawStats = response?.stats;
@@ -258,23 +246,13 @@ export const usageApi = {
     return {
       items: rawItems,
       total: typeof response?.total === "number" ? response.total : 0,
-      page:
-        typeof response?.page === "number" ? response.page : (params.page ?? 1),
-      size:
-        typeof response?.size === "number"
-          ? response.size
-          : (params.size ?? 50),
+      page: typeof response?.page === "number" ? response.page : (params.page ?? 1),
+      size: typeof response?.size === "number" ? response.size : (params.size ?? 50),
       filters: normalizeFilterOptions(response?.filters),
       stats: {
         total: typeof rawStats?.total === "number" ? rawStats.total : 0,
-        success_rate:
-          typeof rawStats?.success_rate === "number"
-            ? rawStats.success_rate
-            : 0,
-        total_tokens:
-          typeof rawStats?.total_tokens === "number"
-            ? rawStats.total_tokens
-            : 0,
+        success_rate: typeof rawStats?.success_rate === "number" ? rawStats.success_rate : 0,
+        total_tokens: typeof rawStats?.total_tokens === "number" ? rawStats.total_tokens : 0,
       },
     };
   },
@@ -290,15 +268,10 @@ export const usageApi = {
   getUsageOverview(days = 30, apiKey?: string): Promise<UsageOverviewResponse> {
     const query = new URLSearchParams({ days: String(days) });
     if (apiKey?.trim()) query.set("api_key", apiKey.trim());
-    return apiClient.get<UsageOverviewResponse>(
-      `/usage/overview?${query.toString()}`,
-    );
+    return apiClient.get<UsageOverviewResponse>(`/usage/overview?${query.toString()}`);
   },
 
-  getUsageCredentialHealth(
-    days = 30,
-    apiKey?: string,
-  ): Promise<UsageCredentialHealthResponse> {
+  getUsageCredentialHealth(days = 30, apiKey?: string): Promise<UsageCredentialHealthResponse> {
     const query = new URLSearchParams({ days: String(days) });
     if (apiKey?.trim()) query.set("api_key", apiKey.trim());
     return apiClient.get<UsageCredentialHealthResponse>(
@@ -311,9 +284,7 @@ export const usageApi = {
       days: String(days),
       limit: String(limit),
     });
-    return apiClient.get<UsageModelStatsResponse>(
-      `/usage/models/stats?${query.toString()}`,
-    );
+    return apiClient.get<UsageModelStatsResponse>(`/usage/models/stats?${query.toString()}`);
   },
 
   getUsageSourceStats(
@@ -326,9 +297,7 @@ export const usageApi = {
       recent_minutes: String(recentMinutes),
       block_minutes: String(blockMinutes),
     });
-    return apiClient.get<UsageSourceStatsResponse>(
-      `/usage/source-stats?${query.toString()}`,
-    );
+    return apiClient.get<UsageSourceStatsResponse>(`/usage/source-stats?${query.toString()}`);
   },
 
   getDashboardSummary(days = 7): Promise<DashboardSummary> {
@@ -344,9 +313,7 @@ export const usageApi = {
     if (apiKey?.trim()) query.set("api_key", apiKey.trim());
     appendMultiValueQuery(query, "channel_name", channelNames);
     return apiClient
-      .get<Partial<MonitorFiltersResponse> | undefined>(
-        `/monitor/filters?${query.toString()}`,
-      )
+      .get<Partial<MonitorFiltersResponse> | undefined>(`/monitor/filters?${query.toString()}`)
       .then((response) => ({
         days: typeof response?.days === "number" ? response.days : days,
         filters: normalizeFilterOptions(response?.filters),
@@ -363,9 +330,7 @@ export const usageApi = {
     if (apiKey?.trim()) query.set("api_key", apiKey.trim());
     if (model?.trim()) query.set("model", model.trim());
     appendMultiValueQuery(query, "channel_name", channelNames);
-    return apiClient.get<MonitorSummaryResponse>(
-      `/monitor/summary?${query.toString()}`,
-    );
+    return apiClient.get<MonitorSummaryResponse>(`/monitor/summary?${query.toString()}`);
   },
 
   getMonitorModelDistribution(
@@ -397,9 +362,7 @@ export const usageApi = {
     if (apiKey?.trim()) query.set("api_key", apiKey.trim());
     if (model?.trim()) query.set("model", model.trim());
     appendMultiValueQuery(query, "channel_name", channelNames);
-    return apiClient.get<MonitorDailyTrendResponse>(
-      `/monitor/daily-trend?${query.toString()}`,
-    );
+    return apiClient.get<MonitorDailyTrendResponse>(`/monitor/daily-trend?${query.toString()}`);
   },
 
   getMonitorHourly(
@@ -412,9 +375,7 @@ export const usageApi = {
     if (apiKey?.trim()) query.set("api_key", apiKey.trim());
     if (model?.trim()) query.set("model", model.trim());
     appendMultiValueQuery(query, "channel_name", channelNames);
-    return apiClient.get<MonitorHourlyResponse>(
-      `/monitor/hourly?${query.toString()}`,
-    );
+    return apiClient.get<MonitorHourlyResponse>(`/monitor/hourly?${query.toString()}`);
   },
 
   getMonitorChannelStats(
@@ -431,9 +392,7 @@ export const usageApi = {
     if (apiKey?.trim()) query.set("api_key", apiKey.trim());
     if (model?.trim()) query.set("model", model.trim());
     appendMultiValueQuery(query, "channel_name", channelNames);
-    return apiClient.get<MonitorChannelStatsResponse>(
-      `/monitor/channel-stats?${query.toString()}`,
-    );
+    return apiClient.get<MonitorChannelStatsResponse>(`/monitor/channel-stats?${query.toString()}`);
   },
 
   getMonitorFailureStats(
@@ -450,9 +409,7 @@ export const usageApi = {
     if (apiKey?.trim()) query.set("api_key", apiKey.trim());
     if (model?.trim()) query.set("model", model.trim());
     appendMultiValueQuery(query, "channel_name", channelNames);
-    return apiClient.get<MonitorFailureStatsResponse>(
-      `/monitor/failure-stats?${query.toString()}`,
-    );
+    return apiClient.get<MonitorFailureStatsResponse>(`/monitor/failure-stats?${query.toString()}`);
   },
 
   async getLogContent(id: number): Promise<LogContentResponse> {

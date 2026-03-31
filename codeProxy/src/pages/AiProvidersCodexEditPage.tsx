@@ -63,15 +63,10 @@ export function AiProvidersCodexEditPage() {
   const [fetchingModels, setFetchingModels] = useState(false);
   const [modelFetchError, setModelFetchError] = useState("");
   const [modelSearch, setModelSearch] = useState("");
-  const [selectedDiscovered, setSelectedDiscovered] = useState<Set<string>>(
-    new Set(),
-  );
+  const [selectedDiscovered, setSelectedDiscovered] = useState<Set<string>>(new Set());
 
   const hasIndexParam = typeof params.index === "string";
-  const editIndex = useMemo(
-    () => parseIndexParam(params.index),
-    [params.index],
-  );
+  const editIndex = useMemo(() => parseIndexParam(params.index), [params.index]);
   const invalidIndexParam = hasIndexParam && editIndex === null;
 
   const initialData = useMemo(() => {
@@ -150,12 +145,7 @@ export function AiProvidersCodexEditPage() {
     setForm(buildEmptyForm());
   }, [initialData, loading]);
 
-  const canSave =
-    !disableControls &&
-    !saving &&
-    !loading &&
-    !invalidIndexParam &&
-    !invalidIndex;
+  const canSave = !disableControls && !saving && !loading && !invalidIndexParam && !invalidIndex;
   const modelsEndpoint = useMemo(
     () => modelsApi.buildModelDiscoveryEndpoints("codex", form.baseUrl ?? "").join(" -> "),
     [form.baseUrl],
@@ -195,11 +185,7 @@ export function AiProvidersCodexEditPage() {
       const name = model.name.toLowerCase();
       const alias = model.alias.toLowerCase();
       const description = model.description.toLowerCase();
-      return (
-        name.includes(keyword) ||
-        alias.includes(keyword) ||
-        description.includes(keyword)
-      );
+      return name.includes(keyword) || alias.includes(keyword) || description.includes(keyword);
     });
   }, [modelSearch, normalizedDiscoveredModels]);
 
@@ -245,10 +231,7 @@ export function AiProvidersCodexEditPage() {
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "";
       setError(message);
-      showNotification(
-        `${t("notification.update_failed")}: ${message}`,
-        "error",
-      );
+      showNotification(`${t("notification.update_failed")}: ${message}`, "error");
     } finally {
       setSaving(false);
     }
@@ -267,10 +250,7 @@ export function AiProvidersCodexEditPage() {
   const fetchCodexModels = useCallback(async () => {
     const baseUrl = (form.baseUrl ?? "").trim();
     if (!baseUrl) {
-      showNotification(
-        t("ai_providers.openai_models_fetch_invalid_url"),
-        "error",
-      );
+      showNotification(t("ai_providers.openai_models_fetch_invalid_url"), "error");
       return;
     }
 
@@ -310,9 +290,7 @@ export function AiProvidersCodexEditPage() {
         (entry) => entry.name.trim() || entry.alias.trim(),
       );
       const seen = new Set(
-        baseEntries
-          .map((entry) => entry.name.trim().toLowerCase())
-          .filter(Boolean),
+        baseEntries.map((entry) => entry.name.trim().toLowerCase()).filter(Boolean),
       );
       const nextEntries = [...baseEntries];
 
@@ -330,9 +308,7 @@ export function AiProvidersCodexEditPage() {
 
       return {
         ...prev,
-        modelEntries: nextEntries.length
-          ? nextEntries
-          : [{ name: "", alias: "" }],
+        modelEntries: nextEntries.length ? nextEntries : [{ name: "", alias: "" }],
       };
     });
 
@@ -366,12 +342,7 @@ export function AiProvidersCodexEditPage() {
       backLabel={t("common.back")}
       backAriaLabel={t("common.back")}
       rightAction={
-        <Button
-          size="sm"
-          onClick={handleSave}
-          loading={saving}
-          disabled={!canSave}
-        >
+        <Button size="sm" onClick={handleSave} loading={saving} disabled={!canSave}>
           {t("common.save")}
         </Button>
       }
@@ -434,9 +405,7 @@ export function AiProvidersCodexEditPage() {
             />
             <HeaderInputList
               entries={form.headers}
-              onChange={(entries) =>
-                setForm((prev) => ({ ...prev, headers: entries }))
-              }
+              onChange={(entries) => setForm((prev) => ({ ...prev, headers: entries }))}
               addLabel={t("common.custom_headers_add")}
               keyPlaceholder={t("common.custom_headers_key_placeholder")}
               valuePlaceholder={t("common.custom_headers_value_placeholder")}
@@ -456,10 +425,7 @@ export function AiProvidersCodexEditPage() {
                     onClick={() =>
                       setForm((prev) => ({
                         ...prev,
-                        modelEntries: [
-                          ...prev.modelEntries,
-                          { name: "", alias: "" },
-                        ],
+                        modelEntries: [...prev.modelEntries, { name: "", alias: "" }],
                       }))
                     }
                     disabled={disableControls || saving || fetchingModels}
@@ -477,14 +443,10 @@ export function AiProvidersCodexEditPage() {
                   </Button>
                 </div>
               </div>
-              <div className={styles.sectionHint}>
-                {t("ai_providers.openai_models_hint")}
-              </div>
+              <div className={styles.sectionHint}>{t("ai_providers.openai_models_hint")}</div>
               <ModelInputList
                 entries={form.modelEntries}
-                onChange={(entries) =>
-                  setForm((prev) => ({ ...prev, modelEntries: entries }))
-                }
+                onChange={(entries) => setForm((prev) => ({ ...prev, modelEntries: entries }))}
                 namePlaceholder={t("common.model_name_placeholder")}
                 aliasPlaceholder={t("common.model_alias_placeholder")}
                 disabled={disableControls || saving || fetchingModels}
@@ -519,10 +481,7 @@ export function AiProvidersCodexEditPage() {
                     size="sm"
                     onClick={handleApplyDiscoveredModels}
                     disabled={
-                      disableControls ||
-                      saving ||
-                      fetchingModels ||
-                      selectedDiscovered.size === 0
+                      disableControls || saving || fetchingModels || selectedDiscovered.size === 0
                     }
                   >
                     {t("ai_providers.openai_models_fetch_apply")}
@@ -536,9 +495,7 @@ export function AiProvidersCodexEditPage() {
                 onChange={(e) => setModelSearch(e.target.value)}
                 disabled={fetchingModels}
               />
-              {modelFetchError && (
-                <div className="error-box">{modelFetchError}</div>
-              )}
+              {modelFetchError && <div className="error-box">{modelFetchError}</div>}
               {fetchingModels ? (
                 <div className={styles.sectionHint}>
                   {t("ai_providers.openai_models_fetch_loading")}
@@ -571,15 +528,11 @@ export function AiProvidersCodexEditPage() {
                           <div className={styles.modelDiscoveryName}>
                             {model.name}
                             {model.alias && (
-                              <span className={styles.modelDiscoveryAlias}>
-                                {model.alias}
-                              </span>
+                              <span className={styles.modelDiscoveryAlias}>{model.alias}</span>
                             )}
                           </div>
                           {model.description && (
-                            <div className={styles.modelDiscoveryDesc}>
-                              {model.description}
-                            </div>
+                            <div className={styles.modelDiscoveryDesc}>{model.description}</div>
                           )}
                         </div>
                       </label>
@@ -601,9 +554,7 @@ export function AiProvidersCodexEditPage() {
                 rows={4}
                 disabled={disableControls || saving}
               />
-              <div className="hint">
-                {t("ai_providers.excluded_models_hint")}
-              </div>
+              <div className="hint">{t("ai_providers.excluded_models_hint")}</div>
             </div>
           </>
         )}

@@ -67,7 +67,7 @@ vi.mock("@/lib/http/apis", () => ({
   },
 }));
 
-describe("ProvidersPage copilot compat editor", () => {
+describe("ProvidersPage GitHub Copilot editor", () => {
   test("malformed model entries do not crash the page and api key remains editable", async () => {
     const user = userEvent.setup();
 
@@ -84,7 +84,7 @@ describe("ProvidersPage copilot compat editor", () => {
     );
 
     await screen.findByText("配置总览");
-    await user.click(screen.getByText("Copilot Compat", { exact: true }));
+    await user.click(screen.getByText("GitHub Copilot", { exact: true }));
 
     await waitFor(() => {
       expect(mocks.getCopilotCompatConfigs).toHaveBeenCalledTimes(1);

@@ -36,6 +36,7 @@ var apiKeyAccessProviderOrder = map[string]int{
 	"codex":                40,
 	"codex-compat":         50,
 	"copilot-compat":       60,
+	"github-copilot":       60,
 	"vertex":               70,
 	"openai-compatibility": 80,
 	"ampcode":              90,
@@ -52,7 +53,8 @@ var apiKeyAccessProviderLabels = map[string]string{
 	"claude":               "Claude",
 	"codex":                "Codex",
 	"codex-compat":         "Codex Compat",
-	"copilot-compat":       "Copilot Compat",
+	"copilot-compat":       "GitHub Copilot",
+	"github-copilot":       "GitHub Copilot",
 	"vertex":               "Vertex",
 	"openai-compatibility": "OpenAI Compatible",
 	"ampcode":              "Ampcode",
@@ -316,7 +318,7 @@ func resolveFallbackAPIKeyAccessModels(cfg *config.Config, auth *coreauth.Auth) 
 			}
 		}
 		return registry.GetOpenAIModels()
-	case "copilot-compat":
+	case "copilot-compat", "github-copilot":
 		if cfg != nil {
 			if entry := resolveAPIKeyAccessConfigEntry(cfg, auth, cfg.CopilotCompatKey); entry != nil && len(entry.Models) > 0 {
 				return buildAPIKeyAccessConfigModels(entry.Models)
@@ -532,7 +534,7 @@ func effectiveAPIKeyAccessModelPrefix(auth *coreauth.Auth) string {
 		switch strings.ToLower(strings.TrimSpace(auth.Provider)) {
 		case "codex-compat":
 			return config.DefaultCodexCompatPrefix
-		case "copilot-compat":
+		case "copilot-compat", "github-copilot":
 			return config.DefaultCopilotCompatPrefix
 		}
 	}

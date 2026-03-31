@@ -9,11 +9,7 @@ vi.mock("@/lib/http/apis/api-call", () => ({
   apiCallApi: {
     request: requestMock,
   },
-  getApiCallErrorMessage: (result: {
-    statusCode?: number;
-    body?: unknown;
-    bodyText?: string;
-  }) => {
+  getApiCallErrorMessage: (result: { statusCode?: number; body?: unknown; bodyText?: string }) => {
     const status = Number(result?.statusCode ?? 0);
     const body =
       typeof result?.body === "string"
@@ -46,17 +42,13 @@ describe("modelsApi model discovery fallback", () => {
   });
 
   it("builds distinct openai-compatible fallback endpoints", () => {
-    expect(modelsApi.buildModelDiscoveryEndpoints("openai", "https://api.githubcopilot.com")).toEqual([
-      "https://api.githubcopilot.com/models",
-      "https://api.githubcopilot.com/v1/models",
-    ]);
+    expect(
+      modelsApi.buildModelDiscoveryEndpoints("openai", "https://api.githubcopilot.com"),
+    ).toEqual(["https://api.githubcopilot.com/models", "https://api.githubcopilot.com/v1/models"]);
 
     expect(
       modelsApi.buildModelDiscoveryEndpoints("openai", "https://api.githubcopilot.com/v1"),
-    ).toEqual([
-      "https://api.githubcopilot.com/models",
-      "https://api.githubcopilot.com/v1/models",
-    ]);
+    ).toEqual(["https://api.githubcopilot.com/models", "https://api.githubcopilot.com/v1/models"]);
   });
 
   it("falls back from /models to /v1/models for codex-style providers", async () => {

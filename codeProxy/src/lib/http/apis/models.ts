@@ -65,7 +65,10 @@ const resolveBearerTokenFromAuthorization = (headers: Record<string, string>): s
   return match?.[1]?.trim() || "";
 };
 
-const resolveApiKeyCandidate = (apiKey: string | undefined, headers: Record<string, string>): string => {
+const resolveApiKeyCandidate = (
+  apiKey: string | undefined,
+  headers: Record<string, string>,
+): string => {
   const fieldValue = String(apiKey ?? "").trim();
   if (fieldValue) return fieldValue;
 
@@ -86,7 +89,8 @@ const buildRequestSignature = (url: string, headers: Record<string, string>) => 
 const buildDiscoverySignature = (
   provider: ModelDiscoveryProvider,
   attempts: Array<{ url: string; headers: Record<string, string> }>,
-) => `${provider}||${attempts.map((attempt) => buildRequestSignature(attempt.url, attempt.headers)).join(";;")}`;
+) =>
+  `${provider}||${attempts.map((attempt) => buildRequestSignature(attempt.url, attempt.headers)).join(";;")}`;
 
 const buildOpenAIAttemptHeaders = (
   apiKey: string | undefined,
@@ -229,7 +233,9 @@ export const modelsApi = {
   fetchProviderModelsViaApiCall,
 
   async getStaticModelDefinitions(channel: string) {
-    const normalized = String(channel ?? "").trim().toLowerCase();
+    const normalized = String(channel ?? "")
+      .trim()
+      .toLowerCase();
     if (!normalized) return [] as ModelInfo[];
     const data = await apiClient.get<Record<string, unknown>>(
       `/model-definitions/${encodeURIComponent(normalized)}`,

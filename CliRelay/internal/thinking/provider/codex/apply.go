@@ -34,6 +34,8 @@ func init() {
 	thinking.RegisterProvider("openai-response", NewApplier())
 	thinking.RegisterProvider("codex", NewApplier())
 	thinking.RegisterProvider("codex-compat", NewApplier())
+	thinking.RegisterProvider("copilot-compat", NewApplier())
+	thinking.RegisterProvider("github-copilot", NewApplier())
 }
 
 // Apply applies thinking configuration to Codex request body.

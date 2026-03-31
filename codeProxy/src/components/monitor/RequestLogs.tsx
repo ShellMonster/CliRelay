@@ -123,7 +123,9 @@ export function RequestLogs({
     }
   }, []);
 
-  const showLoading = (parentLoading && isFirstLoad && logItems.length === 0) || (logLoading && logItems.length === 0);
+  const showLoading =
+    (parentLoading && isFirstLoad && logItems.length === 0) ||
+    (logLoading && logItems.length === 0);
 
   // 当父组件数据加载完成时，标记首次加载完成
   useEffect(() => {
@@ -434,7 +436,14 @@ export function RequestLogs({
         <td className={getRateClassName(rateValue, styles)}>{stats.successRate}%</td>
         <td>{formatNumber(stats.totalCount)}</td>
         <td>{formatNumber(entry.inputTokens)}</td>
-        <td style={{ color: entry.cachedTokens > 0 ? 'var(--color-warning, #d97706)' : undefined, fontWeight: entry.cachedTokens > 0 ? 600 : undefined }}>{entry.cachedTokens > 0 ? formatNumber(entry.cachedTokens) : '0'}</td>
+        <td
+          style={{
+            color: entry.cachedTokens > 0 ? "var(--color-warning, #d97706)" : undefined,
+            fontWeight: entry.cachedTokens > 0 ? 600 : undefined,
+          }}
+        >
+          {entry.cachedTokens > 0 ? formatNumber(entry.cachedTokens) : "0"}
+        </td>
         <td>{formatNumber(entry.outputTokens)}</td>
         <td>{formatNumber(entry.totalTokens)}</td>
         <td>{formatTimestamp(entry.timestamp)}</td>
