@@ -4,7 +4,6 @@ summary: 目录职责、依赖方向与最小模块化策略
 ---
 
 <!-- AI-KIT:START -->
-
 # 项目结构规范（Project Structure Rules）
 
 ## Purpose
@@ -38,7 +37,5 @@ summary: 目录职责、依赖方向与最小模块化策略
 <!-- AI-KIT:END -->
 
 <!-- PROJECT-OVERRIDES:START -->
-
 （可选）在此处记录本项目的目录基线、依赖方向与关键模块边界（脚手架不会覆盖）。
-
 <!-- PROJECT-OVERRIDES:END -->

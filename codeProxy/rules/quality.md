@@ -4,7 +4,6 @@ summary: 架构、代码质量、性能与测试
 ---
 
 <!-- AI-KIT:START -->
-
 # 工程质量规范（Quality Rules）
 
 ## Purpose
@@ -43,7 +42,6 @@ summary: 架构、代码质量、性能与测试
 <!-- AI-KIT:END -->
 
 <!-- PROJECT-OVERRIDES:START -->
-
 （可选）在此处追加本项目的性能红线、测试要求与覆盖口径（脚手架不会覆盖）。
-
 <!-- PROJECT-OVERRIDES:END -->
+

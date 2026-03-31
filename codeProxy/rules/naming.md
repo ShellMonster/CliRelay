@@ -4,7 +4,6 @@ summary: 文件/目录/组件命名规范
 ---
 
 <!-- AI-KIT:START -->
-
 # 命名规范（Naming Rules）
 
 ## Purpose
@@ -31,7 +30,6 @@ summary: 文件/目录/组件命名规范
 <!-- AI-KIT:END -->
 
 <!-- PROJECT-OVERRIDES:START -->
-
 （可选）在此处追加本项目的命名细则与示例（脚手架不会覆盖）。
-
 <!-- PROJECT-OVERRIDES:END -->
+

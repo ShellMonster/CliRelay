@@ -4,7 +4,6 @@ summary: 角色定位、优先级、语言与输出基准
 ---
 
 <!-- AI-KIT:START -->
-
 # 基础规范（Base Rules）
 
 ## Purpose
@@ -69,7 +68,6 @@ summary: 角色定位、优先级、语言与输出基准
 <!-- AI-KIT:END -->
 
 <!-- PROJECT-OVERRIDES:START -->
-
 （可选）在此处追加本项目的特殊角色定位/语言/交付要求（脚手架不会覆盖）。
-
 <!-- PROJECT-OVERRIDES:END -->
+

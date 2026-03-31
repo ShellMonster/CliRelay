@@ -4,7 +4,6 @@ summary: 前端样式与组件一致性（无前端则忽略）
 ---
 
 <!-- AI-KIT:START -->
-
 # 前端规范（Frontend Rules）
 
 ## Purpose
@@ -25,10 +24,8 @@ summary: 前端样式与组件一致性（无前端则忽略）
   - 格式化检查：`bunx oxfmt . --check`
   - 构建：`bun run build`
   - （可选）测试：暂无（当前仓库未配置测试脚本/用例）
-  <!-- AI-KIT:END -->
+<!-- AI-KIT:END -->
 
 <!-- PROJECT-OVERRIDES:START -->
-
 （可选）在此处追加本项目的前端技术栈约束（例如：Tailwind/shadcn/ui/设计规范/无 CSS 文件等）。
-
 <!-- PROJECT-OVERRIDES:END -->

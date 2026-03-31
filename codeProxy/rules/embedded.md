@@ -4,7 +4,6 @@ summary: 嵌入式/固件项目约束与工作流（无嵌入式则忽略）
 ---
 
 <!-- AI-KIT:START -->
-
 # 嵌入式/固件规范（Embedded Rules）
 
 ## Purpose
@@ -39,7 +38,6 @@ summary: 嵌入式/固件项目约束与工作流（无嵌入式则忽略）
 <!-- AI-KIT:END -->
 
 <!-- PROJECT-OVERRIDES:START -->
-
 （可选）在此处记录本项目的板型、工具链、构建/烧录/调试命令、量产流程与安全策略（脚手架不会覆盖）。
-
 <!-- PROJECT-OVERRIDES:END -->
+

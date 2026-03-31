@@ -21,7 +21,8 @@ const RANGE_OPTIONS: ReadonlyArray<{ value: DashboardRange; label: string }> = [
 const formatNumber = (n: number) =>
   n >= 10_000 ? `${(n / 1000).toFixed(1)}k` : n.toLocaleString();
 
-const formatRate = (rate: number) => `${rate.toFixed(2)}%`;
+const formatRate = (rate: number) =>
+  `${rate.toFixed(2)}%`;
 
 export function DashboardPage() {
   const { notify } = useToast();
@@ -30,23 +31,20 @@ export function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(
-    async (days: DashboardRange) => {
-      setLoading(true);
-      setError(null);
-      try {
-        const data = await usageApi.getDashboardSummary(days);
-        setSummary(data);
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : "数据获取失败";
-        setError(message);
-        notify({ type: "error", message });
-      } finally {
-        setLoading(false);
-      }
-    },
-    [notify],
-  );
+  const refresh = useCallback(async (days: DashboardRange) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await usageApi.getDashboardSummary(days);
+      setSummary(data);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "数据获取失败";
+      setError(message);
+      notify({ type: "error", message });
+    } finally {
+      setLoading(false);
+    }
+  }, [notify]);
 
   useEffect(() => {
     void refresh(range);
@@ -62,10 +60,7 @@ export function DashboardPage() {
           仪表盘
         </h2>
         <div className="flex flex-wrap items-center gap-2">
-          <Tabs
-            value={String(range)}
-            onValueChange={(next) => setRange(Number(next) as DashboardRange)}
-          >
+          <Tabs value={String(range)} onValueChange={(next) => setRange(Number(next) as DashboardRange)}>
             <TabsList>
               {RANGE_OPTIONS.map((opt) => (
                 <TabsTrigger key={opt.value} value={String(opt.value)}>
@@ -74,12 +69,7 @@ export function DashboardPage() {
               ))}
             </TabsList>
           </Tabs>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => void refresh(range)}
-            disabled={loading}
-          >
+          <Button variant="secondary" size="sm" onClick={() => void refresh(range)} disabled={loading}>
             <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
             刷新
           </Button>

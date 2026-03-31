@@ -37,9 +37,10 @@ export const createHourlyTokenOption = (input: {
   });
 
   const totals = points.map((point) =>
-    Number.isFinite(point.total)
-      ? Number(point.total)
-      : point.stacks.reduce((acc, item) => acc + (Number.isFinite(item.value) ? item.value : 0), 0),
+    Number.isFinite(point.total) ? Number(point.total) : point.stacks.reduce(
+      (acc, item) => acc + (Number.isFinite(item.value) ? item.value : 0),
+      0,
+    ),
   );
   const totalLineColor = "#3b82f6";
   const selectedSums = points.map((point) =>

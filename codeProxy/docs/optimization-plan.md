@@ -1,5 +1,4 @@
 <!-- AI-KIT:START -->
-
 # 可维护性优化计划（Optimization Plan）
 
 本文件用于记录“面向未来的改进计划”，与 `docs/evolution.md` 不同：
@@ -47,11 +46,9 @@
 - 构建：
 - 测试（如有）：
 ```
-
 <!-- AI-KIT:END -->
 
 <!-- PROJECT-OVERRIDES:START -->
-
 （可选）在此处添加本项目真实的优化计划条目（脚手架不会覆盖）。
-
 <!-- PROJECT-OVERRIDES:END -->
+

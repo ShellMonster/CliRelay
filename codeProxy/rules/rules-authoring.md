@@ -4,7 +4,6 @@ summary: 规范写作与演进方式（AGENTS/rules/docs）
 ---
 
 <!-- AI-KIT:START -->
-
 # 规范维护（Rules Authoring）
 
 ## Purpose
@@ -53,7 +52,6 @@ summary: 规范写作与演进方式（AGENTS/rules/docs）
 <!-- AI-KIT:END -->
 
 <!-- PROJECT-OVERRIDES:START -->
-
 （可选）在此处追加本项目的规范维护流程（例如：ADR 流程、评审要求、CI 门禁等）。
-
 <!-- PROJECT-OVERRIDES:END -->
+

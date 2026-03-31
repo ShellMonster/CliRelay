@@ -1,5 +1,4 @@
 <!-- AI-KIT:START -->
-
 # 开发守则（code-proxy-admin · 硬性约束）
 
 ## 适用范围
@@ -41,7 +40,5 @@
 <!-- AI-KIT:END -->
 
 <!-- PROJECT-OVERRIDES:START -->
-
 （可选）在此处追加项目特定的硬性约束（例如：只允许某包管理器、版本必须固定、CI 必跑哪些命令等）。
-
 <!-- PROJECT-OVERRIDES:END -->
