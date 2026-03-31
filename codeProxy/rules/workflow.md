@@ -4,6 +4,7 @@ summary: 执行流程、交付自检清单与风险操作确认
 ---
 
 <!-- AI-KIT:START -->
+
 # 流程规范（Workflow Rules）
 
 ## Purpose
@@ -131,9 +132,11 @@ summary: 执行流程、交付自检清单与风险操作确认
 回滚策略：xxx
 验证方式：xxx
 ```
+
 <!-- AI-KIT:END -->
 
 <!-- PROJECT-OVERRIDES:START -->
+
 ### 本项目约定：复杂任务必须维护 Todolist
 
 - 当任务属于“对齐/迁移/重构/多步骤交付”（通常需要多文件联动或多轮验证）时，必须在 `.helloagents/plan/` 下创建本次任务目录，并维护 `tasks.md` 作为 todolist。

@@ -4,6 +4,7 @@ summary: Agent/技能开发规范（无此类需求则忽略）
 ---
 
 <!-- AI-KIT:START -->
+
 # Agent/技能开发规范（Agent Rules）
 
 ## Purpose
@@ -40,6 +41,7 @@ summary: Agent/技能开发规范（无此类需求则忽略）
 <!-- AI-KIT:END -->
 
 <!-- PROJECT-OVERRIDES:START -->
-（可选）在此处记录本项目的技能清单约定、命名空间、或团队协作规范（脚手架不会覆盖）。
-<!-- PROJECT-OVERRIDES:END -->
 
+（可选）在此处记录本项目的技能清单约定、命名空间、或团队协作规范（脚手架不会覆盖）。
+
+<!-- PROJECT-OVERRIDES:END -->

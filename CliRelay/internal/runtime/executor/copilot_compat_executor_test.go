@@ -192,21 +192,26 @@ func TestShouldUseResponsesAPI_DisablesResponsesForCodexSource(t *testing.T) {
 	}
 }
 
-func TestCopilotCompatFallbackModels_ProvidesOpenAIFallback(t *testing.T) {
+func TestCopilotCompatFallbackModels_IncludesOpenAIClaudeGemini(t *testing.T) {
 	models := CopilotCompatFallbackModels()
 	if len(models) == 0 {
 		t.Fatal("expected fallback models")
 	}
-	var hasGPT bool
+	var hasGPT, hasClaude, hasGemini bool
 	for _, model := range models {
 		if model == nil {
 			continue
 		}
-		if strings.HasPrefix(model.ID, "gpt-") {
+		switch {
+		case !hasGPT && strings.HasPrefix(model.ID, "gpt-"):
 			hasGPT = true
+		case !hasClaude && strings.HasPrefix(model.ID, "claude-"):
+			hasClaude = true
+		case !hasGemini && strings.HasPrefix(model.ID, "gemini-"):
+			hasGemini = true
 		}
 	}
-	if !hasGPT {
-		t.Fatal("expected GPT fallback coverage")
+	if !hasGPT || !hasClaude || !hasGemini {
+		t.Fatalf("expected GPT/Claude/Gemini fallback coverage, got gpt=%t claude=%t gemini=%t", hasGPT, hasClaude, hasGemini)
 	}
 }

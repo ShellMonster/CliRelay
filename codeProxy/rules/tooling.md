@@ -4,6 +4,7 @@ summary: 常用命令、构建校验与升级约定
 ---
 
 <!-- AI-KIT:START -->
+
 # 工具链规范（Tooling Rules）
 
 ## Purpose
@@ -32,5 +33,7 @@ summary: 常用命令、构建校验与升级约定
 <!-- AI-KIT:END -->
 
 <!-- PROJECT-OVERRIDES:START -->
+
 （可选）在此处追加本项目“必须跑哪些命令才算验证闭环”、CI 约束、版本策略（脚手架不会覆盖）。
+
 <!-- PROJECT-OVERRIDES:END -->
