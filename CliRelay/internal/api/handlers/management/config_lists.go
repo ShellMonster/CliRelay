@@ -381,6 +381,7 @@ func (h *Handler) PatchGeminiKey(c *gin.Context) {
 		BaseURL                     *string               `json:"base-url"`
 		ProxyURL                    *string               `json:"proxy-url"`
 		ParticipateInDefaultRouting *bool                 `json:"participate-in-default-routing"`
+		AutoSyncModels              *bool                 `json:"auto-sync-models"`
 		Models                      *[]config.GeminiModel `json:"models"`
 		Headers                     *map[string]string    `json:"headers"`
 		ExcludedModels              *[]string             `json:"excluded-models"`
@@ -439,6 +440,9 @@ func (h *Handler) PatchGeminiKey(c *gin.Context) {
 	}
 	if body.Value.ParticipateInDefaultRouting != nil {
 		entry.ParticipateInDefaultRouting = body.Value.ParticipateInDefaultRouting
+	}
+	if body.Value.AutoSyncModels != nil {
+		entry.AutoSyncModels = *body.Value.AutoSyncModels
 	}
 	if body.Value.Models != nil {
 		entry.Models = append([]config.GeminiModel(nil), (*body.Value.Models)...)
@@ -519,6 +523,7 @@ func (h *Handler) PatchClaudeKey(c *gin.Context) {
 		BaseURL                     *string               `json:"base-url"`
 		ProxyURL                    *string               `json:"proxy-url"`
 		ParticipateInDefaultRouting *bool                 `json:"participate-in-default-routing"`
+		AutoSyncModels              *bool                 `json:"auto-sync-models"`
 		Models                      *[]config.ClaudeModel `json:"models"`
 		Headers                     *map[string]string    `json:"headers"`
 		ExcludedModels              *[]string             `json:"excluded-models"`
@@ -568,6 +573,9 @@ func (h *Handler) PatchClaudeKey(c *gin.Context) {
 	}
 	if body.Value.ParticipateInDefaultRouting != nil {
 		entry.ParticipateInDefaultRouting = body.Value.ParticipateInDefaultRouting
+	}
+	if body.Value.AutoSyncModels != nil {
+		entry.AutoSyncModels = *body.Value.AutoSyncModels
 	}
 	if body.Value.Models != nil {
 		entry.Models = append([]config.ClaudeModel(nil), (*body.Value.Models)...)
@@ -648,6 +656,7 @@ func (h *Handler) PatchOpenAICompat(c *gin.Context) {
 		Prefix                      *string                             `json:"prefix"`
 		BaseURL                     *string                             `json:"base-url"`
 		ParticipateInDefaultRouting *bool                               `json:"participate-in-default-routing"`
+		AutoSyncModels              *bool                               `json:"auto-sync-models"`
 		APIKeyEntries               *[]config.OpenAICompatibilityAPIKey `json:"api-key-entries"`
 		Models                      *[]config.OpenAICompatibilityModel  `json:"models"`
 		Headers                     *map[string]string                  `json:"headers"`
@@ -699,6 +708,9 @@ func (h *Handler) PatchOpenAICompat(c *gin.Context) {
 	}
 	if body.Value.ParticipateInDefaultRouting != nil {
 		entry.ParticipateInDefaultRouting = body.Value.ParticipateInDefaultRouting
+	}
+	if body.Value.AutoSyncModels != nil {
+		entry.AutoSyncModels = *body.Value.AutoSyncModels
 	}
 	if body.Value.APIKeyEntries != nil {
 		entry.APIKeyEntries = append([]config.OpenAICompatibilityAPIKey(nil), (*body.Value.APIKeyEntries)...)
@@ -779,6 +791,7 @@ func (h *Handler) PatchVertexCompatKey(c *gin.Context) {
 		BaseURL                     *string                     `json:"base-url"`
 		ProxyURL                    *string                     `json:"proxy-url"`
 		ParticipateInDefaultRouting *bool                       `json:"participate-in-default-routing"`
+		AutoSyncModels              *bool                       `json:"auto-sync-models"`
 		Headers                     *map[string]string          `json:"headers"`
 		Models                      *[]config.VertexCompatModel `json:"models"`
 	}
@@ -840,6 +853,9 @@ func (h *Handler) PatchVertexCompatKey(c *gin.Context) {
 	}
 	if body.Value.ParticipateInDefaultRouting != nil {
 		entry.ParticipateInDefaultRouting = body.Value.ParticipateInDefaultRouting
+	}
+	if body.Value.AutoSyncModels != nil {
+		entry.AutoSyncModels = *body.Value.AutoSyncModels
 	}
 	if body.Value.Headers != nil {
 		entry.Headers = config.NormalizeHeaders(*body.Value.Headers)
@@ -1104,6 +1120,7 @@ func (h *Handler) PatchCodexKey(c *gin.Context) {
 		Websockets                  *bool                `json:"websockets"`
 		ProxyURL                    *string              `json:"proxy-url"`
 		ParticipateInDefaultRouting *bool                `json:"participate-in-default-routing"`
+		AutoSyncModels              *bool                `json:"auto-sync-models"`
 		Models                      *[]config.CodexModel `json:"models"`
 		Headers                     *map[string]string   `json:"headers"`
 		ExcludedModels              *[]string            `json:"excluded-models"`
@@ -1160,6 +1177,9 @@ func (h *Handler) PatchCodexKey(c *gin.Context) {
 	}
 	if body.Value.ParticipateInDefaultRouting != nil {
 		entry.ParticipateInDefaultRouting = body.Value.ParticipateInDefaultRouting
+	}
+	if body.Value.AutoSyncModels != nil {
+		entry.AutoSyncModels = *body.Value.AutoSyncModels
 	}
 	if body.Value.Models != nil {
 		entry.Models = append([]config.CodexModel(nil), (*body.Value.Models)...)
@@ -1246,6 +1266,7 @@ func (h *Handler) PatchCodexCompatKey(c *gin.Context) {
 		Websockets                  *bool                `json:"websockets"`
 		ProxyURL                    *string              `json:"proxy-url"`
 		ParticipateInDefaultRouting *bool                `json:"participate-in-default-routing"`
+		AutoSyncModels              *bool                `json:"auto-sync-models"`
 		Models                      *[]config.CodexModel `json:"models"`
 		Headers                     *map[string]string   `json:"headers"`
 		ExcludedModels              *[]string            `json:"excluded-models"`
@@ -1302,6 +1323,9 @@ func (h *Handler) PatchCodexCompatKey(c *gin.Context) {
 	}
 	if body.Value.ParticipateInDefaultRouting != nil {
 		entry.ParticipateInDefaultRouting = body.Value.ParticipateInDefaultRouting
+	}
+	if body.Value.AutoSyncModels != nil {
+		entry.AutoSyncModels = *body.Value.AutoSyncModels
 	}
 	if body.Value.Models != nil {
 		entry.Models = append([]config.CodexModel(nil), (*body.Value.Models)...)
@@ -1388,6 +1412,7 @@ func (h *Handler) PatchCopilotCompatKey(c *gin.Context) {
 		Websockets                  *bool                `json:"websockets"`
 		ProxyURL                    *string              `json:"proxy-url"`
 		ParticipateInDefaultRouting *bool                `json:"participate-in-default-routing"`
+		AutoSyncModels              *bool                `json:"auto-sync-models"`
 		Models                      *[]config.CodexModel `json:"models"`
 		Headers                     *map[string]string   `json:"headers"`
 		ExcludedModels              *[]string            `json:"excluded-models"`
@@ -1444,6 +1469,9 @@ func (h *Handler) PatchCopilotCompatKey(c *gin.Context) {
 	}
 	if body.Value.ParticipateInDefaultRouting != nil {
 		entry.ParticipateInDefaultRouting = body.Value.ParticipateInDefaultRouting
+	}
+	if body.Value.AutoSyncModels != nil {
+		entry.AutoSyncModels = *body.Value.AutoSyncModels
 	}
 	if body.Value.Models != nil {
 		entry.Models = append([]config.CodexModel(nil), (*body.Value.Models)...)

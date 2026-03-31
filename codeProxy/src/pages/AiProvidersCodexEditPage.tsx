@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { HeaderInputList } from "@/components/ui/HeaderInputList";
 import { ModelInputList } from "@/components/ui/ModelInputList";
+import { ToggleSwitch } from "@/components/ui/ToggleSwitch";
 import { useEdgeSwipeBack } from "@/hooks/useEdgeSwipeBack";
 import { SecondaryScreenShell } from "@/components/common/SecondaryScreenShell";
 import { modelsApi, providersApi } from "@/lib/http/apis";
@@ -27,6 +28,7 @@ const buildEmptyForm = (): ProviderFormState => ({
   prefix: "",
   baseUrl: "",
   proxyUrl: "",
+  autoSyncModels: false,
   headers: [],
   models: [],
   excludedModels: [],
@@ -208,6 +210,7 @@ export function AiProvidersCodexEditPage() {
         prefix: form.prefix?.trim() || undefined,
         baseUrl,
         proxyUrl: form.proxyUrl?.trim() || undefined,
+        autoSyncModels: form.autoSyncModels ?? false,
         headers: buildHeaderObject(form.headers),
         models: entriesToModels(form.modelEntries),
         excludedModels: parseExcludedModels(form.excludedText),
@@ -413,6 +416,17 @@ export function AiProvidersCodexEditPage() {
               removeButtonAriaLabel={t("common.delete")}
               disabled={disableControls || saving}
             />
+            <div className="form-group">
+              <ToggleSwitch
+                label="自动同步模型"
+                checked={Boolean(form.autoSyncModels)}
+                onChange={(value) => setForm((prev) => ({ ...prev, autoSyncModels: value }))}
+                disabled={disableControls || saving}
+              />
+              <div className="hint">
+                开启后后台会定时拉取该渠道可用模型并追加新模型。当前版本后端已支持 Codex 系列自动同步。
+              </div>
+            </div>
             <div className={styles.modelConfigSection}>
               <div className={styles.modelConfigHeader}>
                 <label className={styles.modelConfigTitle}>

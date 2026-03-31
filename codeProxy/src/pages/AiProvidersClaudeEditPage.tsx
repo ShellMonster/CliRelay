@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { HeaderInputList } from "@/components/ui/HeaderInputList";
 import { ModelInputList } from "@/components/ui/ModelInputList";
+import { ToggleSwitch } from "@/components/ui/ToggleSwitch";
 import { useEdgeSwipeBack } from "@/hooks/useEdgeSwipeBack";
 import { SecondaryScreenShell } from "@/components/common/SecondaryScreenShell";
 import { apiCallApi, getApiCallErrorMessage } from "@/lib/http/apis";
@@ -319,6 +320,15 @@ export function AiProvidersClaudeEditPage() {
               removeButtonAriaLabel={t("common.delete")}
               disabled={saving || disableControls || isTesting}
             />
+            <div className="form-group">
+              <ToggleSwitch
+                label="自动同步模型"
+                checked={Boolean(form.autoSyncModels)}
+                onChange={(value) => setForm((prev) => ({ ...prev, autoSyncModels: value }))}
+                disabled={saving || disableControls || isTesting}
+              />
+              <div className="hint">已预留开关，当前版本后端暂未启用 Claude 定时同步。</div>
+            </div>
 
             <div className={styles.modelConfigSection}>
               <div className={styles.modelConfigHeader}>

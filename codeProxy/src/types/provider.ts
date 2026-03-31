@@ -23,6 +23,7 @@ export interface GeminiKeyConfig {
   baseUrl?: string;
   proxyUrl?: string;
   participateInDefaultRouting?: boolean;
+  autoSyncModels?: boolean;
   models?: ModelAlias[];
   headers?: Record<string, string>;
   excludedModels?: string[];
@@ -36,6 +37,7 @@ export interface ProviderKeyConfig {
   websockets?: boolean;
   proxyUrl?: string;
   participateInDefaultRouting?: boolean;
+  autoSyncModels?: boolean;
   headers?: Record<string, string>;
   models?: ModelAlias[];
   excludedModels?: string[];
@@ -46,6 +48,7 @@ export interface OpenAIProviderConfig {
   prefix?: string;
   baseUrl: string;
   participateInDefaultRouting?: boolean;
+  autoSyncModels?: boolean;
   apiKeyEntries: ApiKeyEntry[];
   headers?: Record<string, string>;
   models?: ModelAlias[];

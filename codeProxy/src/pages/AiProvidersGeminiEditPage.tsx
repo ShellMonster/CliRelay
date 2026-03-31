@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { HeaderInputList } from "@/components/ui/HeaderInputList";
+import { ToggleSwitch } from "@/components/ui/ToggleSwitch";
 import { useEdgeSwipeBack } from "@/hooks/useEdgeSwipeBack";
 import { SecondaryScreenShell } from "@/components/common/SecondaryScreenShell";
 import { providersApi } from "@/lib/http/apis";
@@ -23,6 +24,7 @@ const buildEmptyForm = (): GeminiFormState => ({
   prefix: "",
   baseUrl: "",
   proxyUrl: "",
+  autoSyncModels: false,
   headers: [],
   excludedModels: [],
   excludedText: "",
@@ -144,6 +146,7 @@ export function AiProvidersGeminiEditPage() {
         prefix: form.prefix?.trim() || undefined,
         baseUrl: form.baseUrl?.trim() || undefined,
         proxyUrl: form.proxyUrl?.trim() || undefined,
+        autoSyncModels: form.autoSyncModels ?? false,
         headers: buildHeaderObject(form.headers),
         excludedModels: parseExcludedModels(form.excludedText),
       };
@@ -265,6 +268,15 @@ export function AiProvidersGeminiEditPage() {
               removeButtonAriaLabel={t("common.delete")}
               disabled={disableControls || saving}
             />
+            <div className="form-group">
+              <ToggleSwitch
+                label="自动同步模型"
+                checked={Boolean(form.autoSyncModels)}
+                onChange={(value) => setForm((prev) => ({ ...prev, autoSyncModels: value }))}
+                disabled={disableControls || saving}
+              />
+              <div className="hint">开启后后台会定时拉取该渠道可用模型并追加新模型。</div>
+            </div>
             <div className="form-group">
               <label>{t("ai_providers.excluded_models_label")}</label>
               <textarea

@@ -399,6 +399,9 @@ type ClaudeKey struct {
 	// ExcludedModels lists model IDs that should be excluded for this provider.
 	ExcludedModels []string `yaml:"excluded-models,omitempty" json:"excluded-models,omitempty"`
 
+	// AutoSyncModels enables background synchronization of upstream model listings into Models.
+	AutoSyncModels bool `yaml:"auto-sync-models,omitempty" json:"auto-sync-models,omitempty"`
+
 	// Cloak configures request cloaking for non-Claude-Code clients.
 	Cloak *CloakConfig `yaml:"cloak,omitempty" json:"cloak,omitempty"`
 }
@@ -457,6 +460,9 @@ type CodexKey struct {
 
 	// ExcludedModels lists model IDs that should be excluded for this provider.
 	ExcludedModels []string `yaml:"excluded-models,omitempty" json:"excluded-models,omitempty"`
+
+	// AutoSyncModels enables background synchronization of upstream model listings into Models.
+	AutoSyncModels bool `yaml:"auto-sync-models,omitempty" json:"auto-sync-models,omitempty"`
 }
 
 func (k CodexKey) GetAPIKey() string  { return k.APIKey }
@@ -509,6 +515,9 @@ type GeminiKey struct {
 
 	// ExcludedModels lists model IDs that should be excluded for this provider.
 	ExcludedModels []string `yaml:"excluded-models,omitempty" json:"excluded-models,omitempty"`
+
+	// AutoSyncModels enables background synchronization of upstream model listings into Models.
+	AutoSyncModels bool `yaml:"auto-sync-models,omitempty" json:"auto-sync-models,omitempty"`
 }
 
 func (k GeminiKey) GetAPIKey() string  { return k.APIKey }
@@ -558,6 +567,9 @@ type OpenAICompatibility struct {
 
 	// ExcludedModels lists model IDs that should be excluded for this provider.
 	ExcludedModels []string `yaml:"excluded-models,omitempty" json:"excluded-models,omitempty"`
+
+	// AutoSyncModels enables background synchronization of upstream model listings into Models.
+	AutoSyncModels bool `yaml:"auto-sync-models,omitempty" json:"auto-sync-models,omitempty"`
 }
 
 // OpenAICompatibilityAPIKey represents an API key configuration with optional proxy setting.

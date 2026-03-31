@@ -21,6 +21,10 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+type ConfigSnapshotManager struct {
+	handler *Handler
+}
+
 type attemptInfo struct {
 	count        int
 	blockedUntil time.Time
@@ -69,6 +73,13 @@ func NewHandler(cfg *config.Config, configFilePath string, manager *coreauth.Man
 	}
 	h.startAttemptCleanup()
 	return h
+}
+
+func (h *Handler) ConfigManager() *ConfigSnapshotManager {
+	if h == nil {
+		return nil
+	}
+	return &ConfigSnapshotManager{handler: h}
 }
 
 // startAttemptCleanup launches a background goroutine that periodically
@@ -289,6 +300,23 @@ func (h *Handler) persist(c *gin.Context) bool {
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	return true
+}
+
+func (h *Handler) persistLocked() error {
+	return config.SaveConfigPreserveComments(h.configFilePath, h.cfg)
+}
+
+func (m *ConfigSnapshotManager) UpdateConfig(update func(*config.Config) bool) error {
+	if m == nil || m.handler == nil || update == nil {
+		return nil
+	}
+	m.handler.mu.Lock()
+	defer m.handler.mu.Unlock()
+
+	if !update(m.handler.cfg) {
+		return nil
+	}
+	return m.handler.persistLocked()
 }
 
 // Helper methods for simple types

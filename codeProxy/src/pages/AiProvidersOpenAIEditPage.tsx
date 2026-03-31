@@ -7,6 +7,7 @@ import { HeaderInputList } from "@/components/ui/HeaderInputList";
 import { Input } from "@/components/ui/Input";
 import { ModelInputList } from "@/components/ui/ModelInputList";
 import { Select } from "@/components/ui/Select";
+import { ToggleSwitch } from "@/components/ui/ToggleSwitch";
 import { SecondaryScreenShell } from "@/components/common/SecondaryScreenShell";
 import { useEdgeSwipeBack } from "@/hooks/useEdgeSwipeBack";
 import { useNotificationStore } from "@/stores";
@@ -570,6 +571,15 @@ export function AiProvidersOpenAIEditPage() {
               removeButtonAriaLabel={t("common.delete")}
               disabled={saving || disableControls || isTestingKeys}
             />
+            <div className="form-group">
+              <ToggleSwitch
+                label="自动同步模型"
+                checked={Boolean(form.autoSyncModels)}
+                onChange={(value) => setForm((prev) => ({ ...prev, autoSyncModels: value }))}
+                disabled={saving || disableControls || isTestingKeys}
+              />
+              <div className="hint">已预留开关，当前版本后端暂未启用 OpenAI Compatible 定时同步。</div>
+            </div>
 
             {/* 模型配置区域 - 统一布局 */}
             <div className={styles.modelConfigSection}>

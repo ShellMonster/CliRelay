@@ -202,11 +202,20 @@ const normalizeProviderKeyConfig = (item: unknown): ProviderKeyConfig | null => 
       record?.["participate_in_default_routing"] ??
       record?.participate_in_default_routing,
   );
+  const autoSyncModels = normalizeBoolean(
+    record?.["auto-sync-models"] ??
+      record?.autoSyncModels ??
+      record?.["auto_sync_models"] ??
+      record?.auto_sync_models,
+  );
   if (baseUrl) config.baseUrl = String(baseUrl);
   if (websockets !== undefined) config.websockets = websockets;
   if (proxyUrl) config.proxyUrl = String(proxyUrl);
   if (participateInDefaultRouting !== undefined) {
     config.participateInDefaultRouting = participateInDefaultRouting;
+  }
+  if (autoSyncModels !== undefined) {
+    config.autoSyncModels = autoSyncModels;
   }
   const headers = normalizeHeaders(record?.headers);
   if (headers) config.headers = headers;
@@ -246,9 +255,18 @@ const normalizeGeminiKeyConfig = (item: unknown): GeminiKeyConfig | null => {
       record?.["participate_in_default_routing"] ??
       record?.participate_in_default_routing,
   );
+  const autoSyncModels = normalizeBoolean(
+    record?.["auto-sync-models"] ??
+      record?.autoSyncModels ??
+      record?.["auto_sync_models"] ??
+      record?.auto_sync_models,
+  );
   if (proxyUrl) config.proxyUrl = String(proxyUrl);
   if (participateInDefaultRouting !== undefined) {
     config.participateInDefaultRouting = participateInDefaultRouting;
+  }
+  if (autoSyncModels !== undefined) {
+    config.autoSyncModels = autoSyncModels;
   }
   const headers = normalizeHeaders(record?.headers);
   if (headers) config.headers = headers;
@@ -289,6 +307,12 @@ const normalizeOpenAIProvider = (provider: unknown): OpenAIProviderConfig | null
       provider["participate_in_default_routing"] ??
       provider.participate_in_default_routing,
   );
+  const autoSyncModels = normalizeBoolean(
+    provider["auto-sync-models"] ??
+      provider.autoSyncModels ??
+      provider["auto_sync_models"] ??
+      provider.auto_sync_models,
+  );
   const priority = provider.priority ?? provider["priority"];
   const testModel = provider["test-model"] ?? provider.testModel;
 
@@ -302,6 +326,9 @@ const normalizeOpenAIProvider = (provider: unknown): OpenAIProviderConfig | null
   if (prefix) result.prefix = prefix;
   if (participateInDefaultRouting !== undefined) {
     result.participateInDefaultRouting = participateInDefaultRouting;
+  }
+  if (autoSyncModels !== undefined) {
+    result.autoSyncModels = autoSyncModels;
   }
   if (headers) result.headers = headers;
   if (models.length) result.models = models;

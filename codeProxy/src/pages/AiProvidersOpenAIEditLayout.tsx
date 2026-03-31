@@ -48,6 +48,7 @@ const buildEmptyForm = (): OpenAIFormState => ({
   name: "",
   prefix: "",
   baseUrl: "",
+  autoSyncModels: false,
   headers: [],
   apiKeyEntries: [buildApiKeyEntry()],
   modelEntries: [{ name: "", alias: "" }],
@@ -81,6 +82,7 @@ const normalizeOpenAIForm = (form?: Partial<OpenAIFormState> | null): OpenAIForm
     name: String(form?.name ?? ""),
     prefix: String(form?.prefix ?? ""),
     baseUrl: String(form?.baseUrl ?? ""),
+    autoSyncModels: Boolean(form?.autoSyncModels ?? false),
     headers: Array.isArray(form?.headers)
       ? form.headers.map((entry) => ({
           key: String(entry?.key ?? ""),
@@ -362,6 +364,7 @@ export function AiProvidersOpenAIEditLayout() {
         name,
         prefix: form.prefix?.trim() || undefined,
         baseUrl,
+        autoSyncModels: form.autoSyncModels ?? false,
         headers: buildHeaderObject(form.headers),
         apiKeyEntries: form.apiKeyEntries.map((entry: ApiKeyEntry) => ({
           apiKey: entry.apiKey.trim(),
