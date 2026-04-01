@@ -61,3 +61,22 @@ func TestApplySyncPlan_AppendsModelsWithoutOverwritingExistingAlias(t *testing.T
 		t.Fatalf("expected existing alias to remain unchanged, got %q", cfg.CodexKey[0].Models[0].Alias)
 	}
 }
+
+func TestAppendMissingCodexModels_DedupesAgainstLiveEntries(t *testing.T) {
+	existing := []config.CodexModel{
+		{Name: "gpt-5"},
+		{Name: "gpt-5.4"},
+	}
+
+	out := appendMissingCodexModels(existing, []config.CodexModel{
+		{Name: "gpt-5.4"},
+		{Name: "o3"},
+	})
+
+	if len(out) != 3 {
+		t.Fatalf("expected 3 models after dedupe append, got %d", len(out))
+	}
+	if out[2].Name != "o3" {
+		t.Fatalf("expected only new model to be appended, got %#v", out[2])
+	}
+}

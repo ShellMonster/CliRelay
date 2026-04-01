@@ -268,12 +268,42 @@ func appendToMatchingCodexEntries(entries []config.CodexKey, target codexSyncTar
 			continue
 		}
 		before := len(entry.Models)
-		entry.Models = append(entry.Models, target.modelsToAdd...)
+		entry.Models = appendMissingCodexModels(entry.Models, target.modelsToAdd)
 		if len(entry.Models) != before {
 			changed = true
 		}
 	}
 	return changed
+}
+
+func appendMissingCodexModels(existing []config.CodexModel, additions []config.CodexModel) []config.CodexModel {
+	if len(additions) == 0 {
+		return existing
+	}
+
+	seen := make(map[string]struct{}, len(existing))
+	for _, model := range existing {
+		name := strings.ToLower(strings.TrimSpace(model.Name))
+		if name == "" {
+			continue
+		}
+		seen[name] = struct{}{}
+	}
+
+	out := existing
+	for _, model := range additions {
+		name := strings.TrimSpace(model.Name)
+		if name == "" {
+			continue
+		}
+		key := strings.ToLower(name)
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, model)
+	}
+	return out
 }
 
 func sameCodexEntry(entry config.CodexKey, target codexSyncTarget) bool {
