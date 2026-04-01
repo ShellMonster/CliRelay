@@ -128,3 +128,20 @@ func TestBuildOpenAICompatTarget_FallsBackToLaterAPIKeyEntry(t *testing.T) {
 		t.Fatalf("expected synced models to include o3, got %#v", target.openai)
 	}
 }
+
+func TestBuildOpenAICompatTarget_SkipsWhenBaseURLMissing(t *testing.T) {
+	target, err := buildOpenAICompatTarget(context.Background(), config.OpenAICompatibility{
+		Name:           "kimi",
+		BaseURL:        "",
+		AutoSyncModels: true,
+		APIKeyEntries: []config.OpenAICompatibilityAPIKey{
+			{APIKey: "fake-key"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("expected missing base-url to be skipped without error, got %v", err)
+	}
+	if target != nil {
+		t.Fatalf("expected no sync target when base-url is missing, got %#v", target)
+	}
+}

@@ -75,7 +75,14 @@ const supportsAutoSyncModels = (
     | "copilot-compat"
     | "vertex"
     | "openai",
-) => provider === "codex" || provider === "codex-compat" || provider === "copilot-compat";
+) =>
+  provider === "gemini" ||
+  provider === "claude" ||
+  provider === "codex" ||
+  provider === "codex-compat" ||
+  provider === "copilot-compat" ||
+  provider === "vertex" ||
+  provider === "openai";
 
 const buildAutoSyncState = (
   provider:
@@ -1330,10 +1337,10 @@ export function ProvidersPage() {
                             {provider.autoSyncModels ? (
                               <span
                                 title={buildAutoSyncState("openai", provider.autoSyncModels).title}
-                                className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-500/15 dark:text-amber-200"
+                                className="inline-flex items-center gap-1 rounded-full bg-sky-600/10 px-2 py-0.5 text-[11px] font-medium text-sky-700 dark:bg-sky-500/15 dark:text-sky-200"
                               >
                                 <RefreshSyncIcon size={12} />
-                                <span>自动同步未生效</span>
+                                <span>自动同步</span>
                               </span>
                             ) : null}
                           </p>

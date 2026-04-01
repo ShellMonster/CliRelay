@@ -356,8 +356,12 @@ func fetchOpenAICompatibleModels(ctx context.Context, auth *coreauth.Auth) ([]*r
 	if apiKey == "" {
 		return nil, nil
 	}
+	modelsEndpoint, ok := normalizeModelsEndpoint(baseURL)
+	if !ok {
+		return nil, nil
+	}
 
-	req, err := http.NewRequestWithContext(fetchCtx, http.MethodGet, normalizeModelsEndpoint(baseURL), nil)
+	req, err := http.NewRequestWithContext(fetchCtx, http.MethodGet, modelsEndpoint, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -417,22 +421,22 @@ func proxyTransport(proxyURL string) *http.Transport {
 	return &http.Transport{Proxy: http.ProxyURL(parsed)}
 }
 
-func normalizeModelsEndpoint(baseURL string) string {
+func normalizeModelsEndpoint(baseURL string) (string, bool) {
 	trimmed := strings.TrimSpace(baseURL)
 	if trimmed == "" {
-		return "https://api.openai.com/v1/models"
+		return "", false
 	}
 
 	parsed, err := url.Parse(trimmed)
 	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
-		return "https://api.openai.com/v1/models"
+		return "", false
 	}
 
 	path := strings.TrimSuffix(parsed.Path, "/")
 	lowerPath := strings.ToLower(path)
 	switch {
 	case strings.HasSuffix(lowerPath, "/models"):
-		return parsed.String()
+		return parsed.String(), true
 	case strings.HasSuffix(lowerPath, "/v1"):
 		parsed.Path = path + "/models"
 	case path == "":
@@ -440,7 +444,7 @@ func normalizeModelsEndpoint(baseURL string) string {
 	default:
 		parsed.Path = path + "/models"
 	}
-	return parsed.String()
+	return parsed.String(), true
 }
 
 func parseModelsResponse(body []byte) ([]*registry.ModelInfo, error) {
