@@ -39,6 +39,9 @@ type VertexCompatKey struct {
 
 	// Models defines the model configurations including aliases for routing.
 	Models []VertexCompatModel `yaml:"models,omitempty" json:"models,omitempty"`
+
+	// AutoSyncModels enables background synchronization of upstream model listings into Models.
+	AutoSyncModels bool `yaml:"auto-sync-models,omitempty" json:"auto-sync-models,omitempty"`
 }
 
 func (k VertexCompatKey) GetAPIKey() string  { return k.APIKey }

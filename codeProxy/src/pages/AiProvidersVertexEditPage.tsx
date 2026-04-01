@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { HeaderInputList } from "@/components/ui/HeaderInputList";
 import { ModelInputList } from "@/components/ui/ModelInputList";
+import { ToggleSwitch } from "@/components/ui/ToggleSwitch";
 import { modelsToEntries } from "@/components/ui/modelInputListUtils";
 import { useEdgeSwipeBack } from "@/hooks/useEdgeSwipeBack";
 import { SecondaryScreenShell } from "@/components/common/SecondaryScreenShell";
@@ -23,6 +24,7 @@ const buildEmptyForm = (): VertexFormState => ({
   prefix: "",
   baseUrl: "",
   proxyUrl: "",
+  autoSyncModels: false,
   headers: [],
   models: [],
   modelEntries: [{ name: "", alias: "" }],
@@ -158,6 +160,7 @@ export function AiProvidersVertexEditPage() {
         prefix: form.prefix?.trim() || undefined,
         baseUrl,
         proxyUrl: form.proxyUrl?.trim() || undefined,
+        autoSyncModels: form.autoSyncModels ?? false,
         headers: buildHeaderObject(form.headers),
         models: form.modelEntries
           .map((entry) => {
@@ -276,6 +279,17 @@ export function AiProvidersVertexEditPage() {
               removeButtonAriaLabel={t("common.delete")}
               disabled={disableControls || saving}
             />
+            <div className="form-group">
+              <ToggleSwitch
+                label={t("ai_providers.auto_sync_models_label")}
+                checked={Boolean(form.autoSyncModels)}
+                onChange={(value) => setForm((prev) => ({ ...prev, autoSyncModels: value }))}
+                disabled={disableControls || saving}
+              />
+              <div className="hint">
+                {t("ai_providers.auto_sync_models_hint_pending", { provider: "Vertex" })}
+              </div>
+            </div>
             <div className="form-group">
               <label>{t("ai_providers.vertex_models_label")}</label>
               <ModelInputList

@@ -11,6 +11,7 @@ export interface OpenAIFormState {
   name: string;
   prefix: string;
   baseUrl: string;
+  autoSyncModels?: boolean;
   headers: HeaderEntry[];
   testModel?: string;
   modelEntries: ModelEntry[];

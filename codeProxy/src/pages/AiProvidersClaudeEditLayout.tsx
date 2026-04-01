@@ -48,6 +48,7 @@ const buildEmptyForm = (): ProviderFormState => ({
   prefix: "",
   baseUrl: "",
   proxyUrl: "",
+  autoSyncModels: false,
   headers: [],
   models: [],
   excludedModels: [],
@@ -302,6 +303,7 @@ export function AiProvidersClaudeEditLayout() {
         prefix: form.prefix?.trim() || undefined,
         baseUrl: (form.baseUrl ?? "").trim() || undefined,
         proxyUrl: form.proxyUrl?.trim() || undefined,
+        autoSyncModels: form.autoSyncModels ?? false,
         headers: buildHeaderObject(form.headers),
         models: form.modelEntries
           .map((entry) => {

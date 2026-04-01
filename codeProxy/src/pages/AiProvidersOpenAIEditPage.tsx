@@ -7,6 +7,7 @@ import { HeaderInputList } from "@/components/ui/HeaderInputList";
 import { Input } from "@/components/ui/Input";
 import { ModelInputList } from "@/components/ui/ModelInputList";
 import { Select } from "@/components/ui/Select";
+import { ToggleSwitch } from "@/components/ui/ToggleSwitch";
 import { SecondaryScreenShell } from "@/components/common/SecondaryScreenShell";
 import { useEdgeSwipeBack } from "@/hooks/useEdgeSwipeBack";
 import { useNotificationStore } from "@/stores";
@@ -570,6 +571,19 @@ export function AiProvidersOpenAIEditPage() {
               removeButtonAriaLabel={t("common.delete")}
               disabled={saving || disableControls || isTestingKeys}
             />
+            <div className="form-group">
+              <ToggleSwitch
+                label={t("ai_providers.auto_sync_models_label")}
+                checked={Boolean(form.autoSyncModels)}
+                onChange={(value) => setForm((prev) => ({ ...prev, autoSyncModels: value }))}
+                disabled={saving || disableControls || isTestingKeys}
+              />
+              <div className="hint">
+                {t("ai_providers.auto_sync_models_hint_pending", {
+                  provider: "OpenAI Compatible",
+                })}
+              </div>
+            </div>
 
             {/* 模型配置区域 - 统一布局 */}
             <div className={styles.modelConfigSection}>

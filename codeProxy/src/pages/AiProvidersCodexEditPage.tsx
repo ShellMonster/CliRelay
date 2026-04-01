@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { HeaderInputList } from "@/components/ui/HeaderInputList";
 import { ModelInputList } from "@/components/ui/ModelInputList";
+import { ToggleSwitch } from "@/components/ui/ToggleSwitch";
 import { useEdgeSwipeBack } from "@/hooks/useEdgeSwipeBack";
 import { SecondaryScreenShell } from "@/components/common/SecondaryScreenShell";
 import { modelsApi, providersApi } from "@/lib/http/apis";
@@ -27,6 +28,7 @@ const buildEmptyForm = (): ProviderFormState => ({
   prefix: "",
   baseUrl: "",
   proxyUrl: "",
+  autoSyncModels: false,
   headers: [],
   models: [],
   excludedModels: [],
@@ -208,6 +210,7 @@ export function AiProvidersCodexEditPage() {
         prefix: form.prefix?.trim() || undefined,
         baseUrl,
         proxyUrl: form.proxyUrl?.trim() || undefined,
+        autoSyncModels: form.autoSyncModels ?? false,
         headers: buildHeaderObject(form.headers),
         models: entriesToModels(form.modelEntries),
         excludedModels: parseExcludedModels(form.excludedText),
@@ -413,6 +416,15 @@ export function AiProvidersCodexEditPage() {
               removeButtonAriaLabel={t("common.delete")}
               disabled={disableControls || saving}
             />
+            <div className="form-group">
+              <ToggleSwitch
+                label={t("ai_providers.auto_sync_models_label")}
+                checked={Boolean(form.autoSyncModels)}
+                onChange={(value) => setForm((prev) => ({ ...prev, autoSyncModels: value }))}
+                disabled={disableControls || saving}
+              />
+              <div className="hint">{t("ai_providers.auto_sync_models_hint_codex")}</div>
+            </div>
             <div className={styles.modelConfigSection}>
               <div className={styles.modelConfigHeader}>
                 <label className={styles.modelConfigTitle}>

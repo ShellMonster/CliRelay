@@ -43,6 +43,9 @@ const serializeProviderKey = (config: ProviderKeyConfig) => {
   if (config.participateInDefaultRouting !== undefined) {
     payload["participate-in-default-routing"] = config.participateInDefaultRouting;
   }
+  if (config.autoSyncModels !== undefined) {
+    payload["auto-sync-models"] = config.autoSyncModels;
+  }
   const headers = serializeHeaders(config.headers);
   if (headers) payload.headers = headers;
   const models = serializeModelAliases(config.models);
@@ -59,6 +62,9 @@ const serializeVertexKey = (config: ProviderKeyConfig) => {
   if (config.proxyUrl) payload["proxy-url"] = config.proxyUrl;
   if (config.participateInDefaultRouting !== undefined) {
     payload["participate-in-default-routing"] = config.participateInDefaultRouting;
+  }
+  if (config.autoSyncModels !== undefined) {
+    payload["auto-sync-models"] = config.autoSyncModels;
   }
   const headers = serializeHeaders(config.headers);
   if (headers) payload.headers = headers;
@@ -85,6 +91,9 @@ const serializeGeminiKey = (config: GeminiKeyConfig) => {
   if (config.participateInDefaultRouting !== undefined) {
     payload["participate-in-default-routing"] = config.participateInDefaultRouting;
   }
+  if (config.autoSyncModels !== undefined) {
+    payload["auto-sync-models"] = config.autoSyncModels;
+  }
   const headers = serializeHeaders(config.headers);
   if (headers) payload.headers = headers;
   const models = serializeModelAliases(config.models);
@@ -110,6 +119,9 @@ const serializeOpenAIProvider = (provider: OpenAIProviderConfig) => {
   if (provider.prefix?.trim()) payload.prefix = provider.prefix.trim();
   if (provider.participateInDefaultRouting !== undefined) {
     payload["participate-in-default-routing"] = provider.participateInDefaultRouting;
+  }
+  if (provider.autoSyncModels !== undefined) {
+    payload["auto-sync-models"] = provider.autoSyncModels;
   }
   const headers = serializeHeaders(provider.headers);
   if (headers) payload.headers = headers;
@@ -259,6 +271,9 @@ export const providersApi = {
     const payload: Record<string, unknown> = {};
     if (value.models !== undefined) {
       payload.models = serializeModelAliases(value.models);
+    }
+    if (value.autoSyncModels !== undefined) {
+      payload["auto-sync-models"] = value.autoSyncModels;
     }
     if (value.excludedModels !== undefined) {
       payload["excluded-models"] = value.excludedModels;
