@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { Plus } from "lucide-react";
+import { Plus, RefreshCw } from "lucide-react";
 import type { ProviderSimpleConfig } from "@/lib/http/types";
 import { Button } from "@/modules/ui/Button";
 import { Card } from "@/modules/ui/Card";
@@ -25,6 +25,7 @@ export function ProviderKeyListCard({
   onToggleEnabled,
   getStats,
   getStatusBar,
+  getAutoSyncState,
 }: {
   icon: LucideIcon;
   title: string;
@@ -38,6 +39,9 @@ export function ProviderKeyListCard({
   onCopy?: (index: number) => void;
   getStats: (item: ProviderSimpleConfig) => KeyStatBucket;
   getStatusBar: (item: ProviderSimpleConfig) => StatusBarData;
+  getAutoSyncState?: (
+    item: ProviderSimpleConfig,
+  ) => { enabled: boolean; supported: boolean; label: string; title: string };
 }) {
   return (
     <Card
@@ -66,6 +70,7 @@ export function ProviderKeyListCard({
             const stats = getStats(item);
             const statusData = getStatusBar(item);
             const participateInDefaultRouting = item.participateInDefaultRouting !== false;
+            const autoSyncState = getAutoSyncState?.(item);
 
             return (
               <div
@@ -87,6 +92,20 @@ export function ProviderKeyListCard({
                       >
                         {participateInDefaultRouting ? "参与默认路由" : "仅显式路由"}
                       </span>
+                      {autoSyncState?.enabled ? (
+                        <span
+                          title={autoSyncState.title}
+                          className={[
+                            "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium",
+                            autoSyncState.supported
+                              ? "bg-sky-600/10 text-sky-700 dark:bg-sky-500/15 dark:text-sky-200"
+                              : "bg-amber-500/10 text-amber-700 dark:bg-amber-500/15 dark:text-amber-200",
+                          ].join(" ")}
+                        >
+                          <RefreshCw size={12} />
+                          <span>{autoSyncState.label}</span>
+                        </span>
+                      ) : null}
                     </p>
 
                     <div className="mt-1 space-y-1 text-xs text-slate-600 dark:text-white/65">

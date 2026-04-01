@@ -1,6 +1,9 @@
 package modelsync
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/config"
@@ -41,13 +44,15 @@ func TestApplySyncPlan_AppendsModelsWithoutOverwritingExistingAlias(t *testing.T
 	}
 
 	changed := applySyncPlan(cfg, &providerSyncPlan{
-		targets: []codexSyncTarget{{
-			kind:        "codex",
-			apiKey:      "k",
-			baseURL:     "https://api.example.com",
-			proxyURL:    "socks5://127.0.0.1:1080",
-			headers:     map[string]string{"X-Test": "1"},
-			modelsToAdd: []config.CodexModel{{Name: "gpt-5.4"}},
+		targets: []syncTarget{{
+			kind: "codex",
+			match: entryMatcher{
+				apiKey:   "k",
+				baseURL:  "https://api.example.com",
+				proxyURL: "socks5://127.0.0.1:1080",
+				headers:  map[string]string{"X-Test": "1"},
+			},
+			codex: []config.CodexModel{{Name: "gpt-5.4"}},
 		}},
 	})
 
@@ -78,5 +83,48 @@ func TestAppendMissingCodexModels_DedupesAgainstLiveEntries(t *testing.T) {
 	}
 	if out[2].Name != "o3" {
 		t.Fatalf("expected only new model to be appended, got %#v", out[2])
+	}
+}
+
+func TestBuildOpenAICompatTarget_FallsBackToLaterAPIKeyEntry(t *testing.T) {
+	var authHeaders []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authHeaders = append(authHeaders, r.Header.Get("Authorization"))
+		if got := r.Header.Get("Authorization"); got != "Bearer second-key" {
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"error":{"message":"forbidden"}}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"object":"list","data":[{"id":"o3","object":"model","created":1770000000,"owned_by":"test"}]}`))
+	}))
+	defer server.Close()
+
+	target, err := buildOpenAICompatTarget(context.Background(), config.OpenAICompatibility{
+		Name:           "test-openai-compat",
+		BaseURL:        server.URL + "/v1",
+		AutoSyncModels: true,
+		APIKeyEntries: []config.OpenAICompatibilityAPIKey{
+			{APIKey: "first-key"},
+			{APIKey: "second-key"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("expected fallback to second API key entry, got error: %v", err)
+	}
+	if target == nil {
+		t.Fatal("expected sync target when later API key entry succeeds")
+	}
+	if len(authHeaders) < 2 || authHeaders[0] != "Bearer first-key" || authHeaders[1] != "Bearer second-key" {
+		t.Fatalf("expected both API key entries to be attempted in order, got %#v", authHeaders)
+	}
+	found := false
+	for _, model := range target.openai {
+		if model.Name == "o3" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected synced models to include o3, got %#v", target.openai)
 	}
 }

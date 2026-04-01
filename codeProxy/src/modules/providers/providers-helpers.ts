@@ -99,6 +99,7 @@ export type ProviderKeyDraft = {
   baseUrl: string;
   proxyUrl: string;
   participateInDefaultRouting: boolean;
+  autoSyncModels: boolean;
   excludedModelsText: string;
   headersEntries: KeyValueEntry[];
   modelEntries: ModelEntryDraft[];
@@ -167,6 +168,7 @@ export const buildProviderKeyDraft = (input?: ProviderSimpleConfig | null): Prov
   baseUrl: asEditableString(input?.baseUrl),
   proxyUrl: asEditableString(input?.proxyUrl),
   participateInDefaultRouting: input?.participateInDefaultRouting !== false,
+  autoSyncModels: Boolean(input?.autoSyncModels),
   excludedModelsText: excludedModelsToText(input?.excludedModels),
   headersEntries: recordToKeyValueEntries(input?.headers),
   modelEntries: buildModelEntries(input?.models),
@@ -177,6 +179,7 @@ export type OpenAIDraft = {
   baseUrl: string;
   prefix: string;
   participateInDefaultRouting: boolean;
+  autoSyncModels: boolean;
   excludedModelsText: string;
   headersEntries: KeyValueEntry[];
   priorityText: string;
@@ -195,6 +198,7 @@ export const buildOpenAIDraft = (input?: OpenAIProvider | null): OpenAIDraft => 
   baseUrl: asEditableString(input?.baseUrl),
   prefix: asEditableString(input?.prefix),
   participateInDefaultRouting: input?.participateInDefaultRouting !== false,
+  autoSyncModels: Boolean(input?.autoSyncModels),
   excludedModelsText: excludedModelsToText(input?.excludedModels),
   headersEntries: recordToKeyValueEntries(input?.headers),
   priorityText: input?.priority !== undefined ? String(input.priority) : "",

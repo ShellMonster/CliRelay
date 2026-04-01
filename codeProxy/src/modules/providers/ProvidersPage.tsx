@@ -8,6 +8,7 @@ import {
   FileKey,
   Globe,
   Plus,
+  RefreshCw as RefreshSyncIcon,
   RefreshCw,
   Save,
   Settings2,
@@ -63,6 +64,40 @@ const formatDiscoveryEndpoints = (
 ) => {
   const endpoints = modelsApi.buildModelDiscoveryEndpoints(provider, baseUrl);
   return endpoints.length ? endpoints.join(" -> ") : "--";
+};
+
+const supportsAutoSyncModels = (
+  provider:
+    | "gemini"
+    | "claude"
+    | "codex"
+    | "codex-compat"
+    | "copilot-compat"
+    | "vertex"
+    | "openai",
+) => provider === "codex" || provider === "codex-compat" || provider === "copilot-compat";
+
+const buildAutoSyncState = (
+  provider:
+    | "gemini"
+    | "claude"
+    | "codex"
+    | "codex-compat"
+    | "copilot-compat"
+    | "vertex"
+    | "openai",
+  autoSyncModels?: boolean,
+) => {
+  const enabled = Boolean(autoSyncModels);
+  const supported = supportsAutoSyncModels(provider);
+  return {
+    enabled,
+    supported,
+    label: supported ? "自动同步" : "自动同步未生效",
+    title: supported
+      ? "已开启自动同步模型，服务端会按定时任务拉取最新模型。"
+      : "已开启自动同步模型，但当前后端暂未接通该 provider 的定时同步。",
+  };
 };
 
 export function ProvidersPage() {
@@ -360,6 +395,7 @@ export function ProvidersPage() {
       ...(current?.websockets !== undefined ? { websockets: current.websockets } : {}),
       ...(keyDraft.proxyUrl.trim() ? { proxyUrl: keyDraft.proxyUrl.trim() } : {}),
       participateInDefaultRouting: keyDraft.participateInDefaultRouting,
+      autoSyncModels: keyDraft.autoSyncModels,
       ...(headers ? { headers } : {}),
       ...(excludedModels ? { excludedModels } : {}),
       ...(modelCommit.models ? { models: modelCommit.models } : {}),
@@ -787,6 +823,7 @@ export function ProvidersPage() {
       baseUrl,
       ...(openaiDraft.prefix.trim() ? { prefix: openaiDraft.prefix.trim() } : {}),
       participateInDefaultRouting: openaiDraft.participateInDefaultRouting,
+      autoSyncModels: openaiDraft.autoSyncModels,
       ...(headers ? { headers } : {}),
       ...(excludedModels ? { excludedModels } : {}),
       ...(priority !== undefined ? { priority } : {}),
@@ -1143,6 +1180,7 @@ export function ProvidersPage() {
             onToggleEnabled={(idx, enabled) => void toggleKeyEnabled("gemini", idx, enabled)}
             getStats={getSimpleStats}
             getStatusBar={getSimpleStatusBar}
+            getAutoSyncState={(item) => buildAutoSyncState("gemini", item.autoSyncModels)}
           />
         </TabsContent>
 
@@ -1159,6 +1197,7 @@ export function ProvidersPage() {
             onToggleEnabled={(idx, enabled) => void toggleKeyEnabled("claude", idx, enabled)}
             getStats={getSimpleStats}
             getStatusBar={getSimpleStatusBar}
+            getAutoSyncState={(item) => buildAutoSyncState("claude", item.autoSyncModels)}
           />
         </TabsContent>
 
@@ -1175,6 +1214,7 @@ export function ProvidersPage() {
             onToggleEnabled={(idx, enabled) => void toggleKeyEnabled("codex", idx, enabled)}
             getStats={getSimpleStats}
             getStatusBar={getSimpleStatusBar}
+            getAutoSyncState={(item) => buildAutoSyncState("codex", item.autoSyncModels)}
           />
         </TabsContent>
 
@@ -1193,6 +1233,7 @@ export function ProvidersPage() {
             onToggleEnabled={(idx, enabled) => void toggleKeyEnabled("codex-compat", idx, enabled)}
             getStats={getSimpleStats}
             getStatusBar={getSimpleStatusBar}
+            getAutoSyncState={(item) => buildAutoSyncState("codex-compat", item.autoSyncModels)}
           />
         </TabsContent>
 
@@ -1213,6 +1254,9 @@ export function ProvidersPage() {
             }
             getStats={getSimpleStats}
             getStatusBar={getSimpleStatusBar}
+            getAutoSyncState={(item) =>
+              buildAutoSyncState("copilot-compat", item.autoSyncModels)
+            }
           />
         </TabsContent>
 
@@ -1228,6 +1272,7 @@ export function ProvidersPage() {
             onDelete={(idx) => setConfirm({ type: "deleteKey", keyType: "vertex", index: idx })}
             getStats={getSimpleStats}
             getStatusBar={getSimpleStatusBar}
+            getAutoSyncState={(item) => buildAutoSyncState("vertex", item.autoSyncModels)}
           />
         </TabsContent>
 
@@ -1282,6 +1327,15 @@ export function ProvidersPage() {
                             >
                               {participateInDefaultRouting ? "参与默认路由" : "仅显式路由"}
                             </span>
+                            {provider.autoSyncModels ? (
+                              <span
+                                title={buildAutoSyncState("openai", provider.autoSyncModels).title}
+                                className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-500/15 dark:text-amber-200"
+                              >
+                                <RefreshSyncIcon size={12} />
+                                <span>自动同步未生效</span>
+                              </span>
+                            ) : null}
                           </p>
                           {provider.prefix ? (
                             <p className="mt-1 truncate font-mono text-xs text-slate-700 dark:text-slate-200">
@@ -1640,6 +1694,26 @@ export function ProvidersPage() {
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white/70 p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-950/60">
+            <ToggleSwitch
+              label="自动同步模型"
+              description={
+                keyDraft.autoSyncModels
+                  ? "当前：已开启，服务端会按定时任务自动补充上游模型列表。"
+                  : "当前：关闭，仅保留手动维护或手动发现的模型。"
+              }
+              checked={keyDraft.autoSyncModels}
+              onCheckedChange={(next) =>
+                setKeyDraft((prev) => ({ ...prev, autoSyncModels: next }))
+              }
+            />
+            <p className="mt-2 text-xs text-slate-500 dark:text-white/55">
+              {supportsAutoSyncModels(editKeyType)
+                ? "当前后端已支持：Codex / Codex Compat / GitHub Copilot 会按定时任务同步新模型。"
+                : `当前后端暂未接通 ${editKeyTitle} 的自动同步；开关值会保存，但暂不会触发定时拉取。`}
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white/70 p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-950/60">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-sm font-semibold text-slate-900 dark:text-white">API Key</p>
               <span className="text-xs text-slate-500 dark:text-white/55">
@@ -1968,6 +2042,24 @@ export function ProvidersPage() {
             />
             <p className="mt-2 text-xs text-slate-500 dark:text-white/55">
               用于把这组 OpenAI 兼容提供商从默认轮询池里摘出来，但不影响显式路由场景。
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white/70 p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-950/60">
+            <ToggleSwitch
+              label="自动同步模型"
+              description={
+                openaiDraft.autoSyncModels
+                  ? "当前：已开启，服务端会按定时任务自动补充上游模型列表。"
+                  : "当前：关闭，仅保留手动维护或手动发现的模型。"
+              }
+              checked={openaiDraft.autoSyncModels}
+              onCheckedChange={(next) =>
+                setOpenaiDraft((prev) => ({ ...prev, autoSyncModels: next }))
+              }
+            />
+            <p className="mt-2 text-xs text-slate-500 dark:text-white/55">
+              当前后端暂未接通 OpenAI 兼容提供商的自动同步；开关值会保存，但暂不会触发定时拉取。
             </p>
           </div>
 
