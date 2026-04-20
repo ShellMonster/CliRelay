@@ -34,7 +34,11 @@ func multiQueryValues(c *gin.Context, key string) []string {
 }
 
 func (h *Handler) GetMonitorSummary(c *gin.Context) {
-	days := intQueryDefault(c, "days", 7)
+	days, err := parseManagementIntQuery(c, "days", 7, managementMaxDays, false)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 	apiKey := strings.TrimSpace(c.Query("api_key"))
 	model := strings.TrimSpace(c.Query("model"))
 	channelFilter, err := h.resolveMonitorChannelFilter(days, apiKey, multiQueryValues(c, "channel_name"))
@@ -51,8 +55,16 @@ func (h *Handler) GetMonitorSummary(c *gin.Context) {
 }
 
 func (h *Handler) GetMonitorModelDistribution(c *gin.Context) {
-	days := intQueryDefault(c, "days", 7)
-	limit := intQueryDefault(c, "limit", 10)
+	days, err := parseManagementIntQuery(c, "days", 7, managementMaxDays, false)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	limit, err := parseManagementIntQuery(c, "limit", 10, managementMaxLimit, true)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 	apiKey := strings.TrimSpace(c.Query("api_key"))
 	model := strings.TrimSpace(c.Query("model"))
 	channelFilter, err := h.resolveMonitorChannelFilter(days, apiKey, multiQueryValues(c, "channel_name"))
@@ -69,7 +81,11 @@ func (h *Handler) GetMonitorModelDistribution(c *gin.Context) {
 }
 
 func (h *Handler) GetMonitorDailyTrend(c *gin.Context) {
-	days := intQueryDefault(c, "days", 7)
+	days, err := parseManagementIntQuery(c, "days", 7, managementMaxDays, false)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 	apiKey := strings.TrimSpace(c.Query("api_key"))
 	model := strings.TrimSpace(c.Query("model"))
 	channelFilter, err := h.resolveMonitorChannelFilter(days, apiKey, multiQueryValues(c, "channel_name"))
@@ -86,7 +102,11 @@ func (h *Handler) GetMonitorDailyTrend(c *gin.Context) {
 }
 
 func (h *Handler) GetMonitorHourlySeries(c *gin.Context) {
-	hours := intQueryDefault(c, "hours", 24)
+	hours, err := parseManagementIntQuery(c, "hours", 24, managementMaxHours, true)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 	days := (hours + 23) / 24
 	apiKey := strings.TrimSpace(c.Query("api_key"))
 	model := strings.TrimSpace(c.Query("model"))
@@ -104,8 +124,16 @@ func (h *Handler) GetMonitorHourlySeries(c *gin.Context) {
 }
 
 func (h *Handler) GetMonitorChannelStats(c *gin.Context) {
-	days := intQueryDefault(c, "days", 7)
-	limit := intQueryDefault(c, "limit", 10)
+	days, err := parseManagementIntQuery(c, "days", 7, managementMaxDays, false)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	limit, err := parseManagementIntQuery(c, "limit", 10, managementMaxLimit, true)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 	apiKey := strings.TrimSpace(c.Query("api_key"))
 	model := strings.TrimSpace(c.Query("model"))
 	channelFilter, err := h.resolveMonitorChannelFilter(days, apiKey, multiQueryValues(c, "channel_name"))
@@ -126,8 +154,16 @@ func (h *Handler) GetMonitorChannelStats(c *gin.Context) {
 }
 
 func (h *Handler) GetMonitorFailureStats(c *gin.Context) {
-	days := intQueryDefault(c, "days", 7)
-	limit := intQueryDefault(c, "limit", 10)
+	days, err := parseManagementIntQuery(c, "days", 7, managementMaxDays, false)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	limit, err := parseManagementIntQuery(c, "limit", 10, managementMaxLimit, true)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 	apiKey := strings.TrimSpace(c.Query("api_key"))
 	model := strings.TrimSpace(c.Query("model"))
 	channelFilter, err := h.resolveMonitorChannelFilter(days, apiKey, multiQueryValues(c, "channel_name"))
@@ -148,7 +184,11 @@ func (h *Handler) GetMonitorFailureStats(c *gin.Context) {
 }
 
 func (h *Handler) GetMonitorFilters(c *gin.Context) {
-	days := intQueryDefault(c, "days", 7)
+	days, err := parseManagementIntQuery(c, "days", 7, managementMaxDays, false)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 	apiKey := strings.TrimSpace(c.Query("api_key"))
 	selectedChannels := multiQueryValues(c, "channel_name")
 	channelResolver, err := h.buildUsageChannelResolver(usage.LogQueryParams{

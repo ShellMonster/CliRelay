@@ -1,7 +1,6 @@
 package management
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -49,10 +48,10 @@ func (h *Handler) GetDashboardSummary(c *gin.Context) {
 	providerTotal := geminiCount + claudeCount + codexCount + codexCompatCount + copilotCompatCount + vertexCount + openaiCount
 
 	// ── Usage KPIs (time-filtered) ──
-	daysStr := c.DefaultQuery("days", "7")
-	days := 7
-	if v, err := parseNonNegativeInt(daysStr); err == nil {
-		days = v
+	days, err := parseManagementIntQuery(c, "days", 7, managementMaxDays, false)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
 	}
 
 	usageSummary, err := usage.QueryDashboardSummary(days, "", "", usage.ChannelFilter{})
@@ -88,10 +87,4 @@ func (h *Handler) GetDashboardSummary(c *gin.Context) {
 		},
 		"days": days,
 	})
-}
-
-func parseNonNegativeInt(s string) (int, error) {
-	var v int
-	_, err := fmt.Sscanf(s, "%d", &v)
-	return v, err
 }

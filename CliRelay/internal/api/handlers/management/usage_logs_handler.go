@@ -1,6 +1,7 @@
 package management
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -9,14 +10,36 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/usage"
 )
 
+const (
+	managementMaxDays  = 365
+	managementMaxLimit = 200
+	managementMaxHours = 24 * managementMaxDays
+)
+
 // GetUsageLogs returns paginated, filterable request log entries from SQLite.
 // It enriches each log item with resolved api_key_name and channel_name
 // from the in-memory config, eliminating the need for multiple frontend API calls.
 func (h *Handler) GetUsageLogs(c *gin.Context) {
+	page, err := parseManagementIntQuery(c, "page", 1, 0, true)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	size, err := parseManagementIntQuery(c, "size", 50, managementMaxLimit, true)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	days, err := parseManagementIntQuery(c, "days", 7, managementMaxDays, false)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
 	params := usage.LogQueryParams{
-		Page:   intQueryDefault(c, "page", 1),
-		Size:   intQueryDefault(c, "size", 50),
-		Days:   intQueryDefault(c, "days", 7),
+		Page:   page,
+		Size:   size,
+		Days:   days,
 		APIKey: strings.TrimSpace(c.Query("api_key")),
 		Model:  strings.TrimSpace(c.Query("model")),
 		Status: strings.TrimSpace(c.Query("status")),
@@ -171,6 +194,26 @@ func intQueryDefault(c *gin.Context, key string, def int) int {
 	return n
 }
 
+func parseManagementIntQuery(c *gin.Context, key string, def int, max int, zeroUsesDefault bool) (int, error) {
+	v := strings.TrimSpace(c.Query(key))
+	if v == "" {
+		return def, nil
+	}
+
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 0 {
+		return 0, fmt.Errorf("invalid %s parameter", key)
+	}
+	if max > 0 && n > max {
+		return 0, fmt.Errorf("invalid %s parameter", key)
+	}
+	if n == 0 && zeroUsesDefault {
+		return def, nil
+	}
+
+	return n, nil
+}
+
 // GetLogContent returns the stored request/response content for a single log entry.
 func (h *Handler) GetLogContent(c *gin.Context) {
 	idStr := c.Param("id")
@@ -204,10 +247,26 @@ func (h *Handler) GetPublicUsageLogs(c *gin.Context) {
 		return
 	}
 
+	page, err := parseManagementIntQuery(c, "page", 1, 0, true)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	size, err := parseManagementIntQuery(c, "size", 50, managementMaxLimit, true)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	days, err := parseManagementIntQuery(c, "days", 7, managementMaxDays, false)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
 	params := usage.LogQueryParams{
-		Page:   intQueryDefault(c, "page", 1),
-		Size:   intQueryDefault(c, "size", 50),
-		Days:   intQueryDefault(c, "days", 7),
+		Page:   page,
+		Size:   size,
+		Days:   days,
 		APIKey: apiKey,
 		Model:  strings.TrimSpace(c.Query("model")),
 		Status: strings.TrimSpace(c.Query("status")),
