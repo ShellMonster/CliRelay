@@ -35,6 +35,48 @@ const EMPTY_FILTER_OPTIONS: MonitorFiltersResponse["filters"] = {
   channel_options: [],
 };
 
+type MonitorSummaryResult = Awaited<ReturnType<typeof usageApi.getMonitorSummary>>;
+type MonitorDistributionResult = Awaited<ReturnType<typeof usageApi.getMonitorModelDistribution>>;
+type MonitorDailyResult = Awaited<ReturnType<typeof usageApi.getMonitorDailyTrend>>;
+type MonitorHourlyResult = Awaited<ReturnType<typeof usageApi.getMonitorHourly>>;
+
+const monitorAutoRequestCache = {
+  filters: new Map<string, Promise<MonitorFiltersResponse>>(),
+  summary: new Map<string, Promise<MonitorSummaryResult>>(),
+  charts: new Map<
+    string,
+    Promise<{
+      distributionRes: MonitorDistributionResult;
+      dailyRes: MonitorDailyResult;
+      hourlyRes: MonitorHourlyResult;
+    }>
+  >(),
+};
+
+function getCachedMonitorRequest<T>(
+  cache: Map<string, Promise<T>>,
+  key: string,
+  factory: () => Promise<T>,
+): Promise<T> {
+  const cached = cache.get(key);
+  if (cached) {
+    return cached;
+  }
+  const request = factory().finally(() => {
+    cache.delete(key);
+  });
+  cache.set(key, request);
+  return request;
+}
+
+function normalizeFilterValue(value: string) {
+  return value.trim();
+}
+
+function normalizeFilterList(values: string[]) {
+  return values.map((item) => item.trim()).filter(Boolean);
+}
+
 export function MonitorPage() {
   const { notify } = useToast();
   const {
@@ -72,10 +114,20 @@ export function MonitorPage() {
   const [tokenHourWindow, setTokenHourWindow] = useState<HourWindow>(24);
   const [modelMetric, setModelMetric] = useState<"requests" | "processed">("requests");
   const [error, setError] = useState<string | null>(null);
-  const [isRefreshing, setIsRefreshing] = useState(true);
+  const [isSummaryRefreshing, setIsSummaryRefreshing] = useState(true);
+  const [isChartsRefreshing, setIsChartsRefreshing] = useState(false);
   const [isPending, startTransition] = useTransition();
-  const refreshRequestIdRef = useRef(0);
+  const summaryRequestIdRef = useRef(0);
+  const chartRequestIdRef = useRef(0);
   const filterRequestIdRef = useRef(0);
+  const lastAutoSummaryKeyRef = useRef<string | null>(null);
+  const lastAutoChartKeyRef = useRef<string | null>(null);
+  const lastAutoFilterKeyRef = useRef<string | null>(null);
+  const [deferredChartsRequest, setDeferredChartsRequest] = useState<{
+    key: string;
+    nonce: number;
+    force: boolean;
+  } | null>(null);
   const [summary, setSummary] = useState({
     requestCount: 0,
     successCount: 0,
@@ -87,16 +139,9 @@ export function MonitorPage() {
     inputTokens: 0,
     outputTokens: 0,
   });
-  const [modelDistributionData, setModelDistributionData] = useState<
-    Array<{
-      name: string;
-      value: number;
-      requests: number;
-      totalTokens: number;
-      cachedTokens: number;
-      processedTokens: number;
-    }>
-  >([]);
+  const [modelDistributionItems, setModelDistributionItems] = useState<MonitorDistributionResult["items"]>(
+    [],
+  );
   const [dailySeries, setDailySeries] = useState<
     Array<{
       label: string;
@@ -126,21 +171,86 @@ export function MonitorPage() {
     tokenPoints: [],
   });
 
-  const refreshData = useCallback(async () => {
-    const requestId = refreshRequestIdRef.current + 1;
-    refreshRequestIdRef.current = requestId;
-    setIsRefreshing(true);
+  const normalizedPendingApiFilter = useMemo(
+    () => normalizeFilterValue(pendingApiFilter),
+    [pendingApiFilter],
+  );
+  const normalizedPendingChannelFilter = useMemo(
+    () => normalizeFilterList(pendingChannelFilter),
+    [pendingChannelFilter],
+  );
+  const normalizedApiFilter = useMemo(() => normalizeFilterValue(apiFilter), [apiFilter]);
+  const normalizedModelFilter = useMemo(() => normalizeFilterValue(modelFilter), [modelFilter]);
+  const normalizedChannelFilter = useMemo(() => normalizeFilterList(channelFilter), [channelFilter]);
+
+  const filterRequestKey = useMemo(
+    () =>
+      JSON.stringify({
+        days: timeRange,
+        apiKey: normalizedPendingApiFilter,
+        channels: normalizedPendingChannelFilter,
+      }),
+    [normalizedPendingApiFilter, normalizedPendingChannelFilter, timeRange],
+  );
+
+  const summaryRequestKey = useMemo(
+    () =>
+      JSON.stringify({
+        days: timeRange,
+        apiKey: normalizedApiFilter,
+        model: normalizedModelFilter,
+        channels: normalizedChannelFilter,
+      }),
+    [normalizedApiFilter, normalizedChannelFilter, normalizedModelFilter, timeRange],
+  );
+
+  const clearCharts = useCallback(() => {
+    setModelDistributionItems([]);
+    setDailySeries([]);
+    setHourlySeries({
+      modelKeys: [],
+      modelPoints: [],
+      tokenKeys: ["输入", "输出", "推理", "缓存"],
+      tokenPoints: [],
+    });
+  }, []);
+
+  const refreshSummary = useCallback(async ({ force = false }: { force?: boolean } = {}) => {
+    if (!force && lastAutoSummaryKeyRef.current === summaryRequestKey) {
+      return;
+    }
+
+    const requestId = summaryRequestIdRef.current + 1;
+    summaryRequestIdRef.current = requestId;
+    chartRequestIdRef.current += 1;
+    if (!force) {
+      lastAutoSummaryKeyRef.current = summaryRequestKey;
+    }
+
+    setIsSummaryRefreshing(true);
     setError(null);
+    setDeferredChartsRequest(null);
+    setIsChartsRefreshing(false);
     try {
-      const [summaryRes, distributionRes, dailyRes, hourlyRes] = await Promise.all([
-        usageApi.getMonitorSummary(timeRange, apiFilter, modelFilter, channelFilter),
-        usageApi.getMonitorModelDistribution(timeRange, 10, apiFilter, modelFilter, channelFilter),
-        usageApi.getMonitorDailyTrend(timeRange, apiFilter, modelFilter, channelFilter),
-        usageApi.getMonitorHourly(24, apiFilter, modelFilter, channelFilter),
-      ]);
-      if (requestId !== refreshRequestIdRef.current) {
+      const summaryRes = await (force
+        ? usageApi.getMonitorSummary(
+            timeRange,
+            normalizedApiFilter,
+            normalizedModelFilter,
+            normalizedChannelFilter,
+          )
+        : getCachedMonitorRequest(monitorAutoRequestCache.summary, summaryRequestKey, () =>
+            usageApi.getMonitorSummary(
+              timeRange,
+              normalizedApiFilter,
+              normalizedModelFilter,
+              normalizedChannelFilter,
+            ),
+          ));
+      if (requestId !== summaryRequestIdRef.current) {
         return;
       }
+
       startTransition(() => {
         setSummary({
           requestCount: summaryRes.summary.TotalRequests,
@@ -153,171 +263,269 @@ export function MonitorPage() {
           inputTokens: summaryRes.summary.InputTokens,
           outputTokens: summaryRes.summary.OutputTokens,
         });
-
-        const sortedModels = [...distributionRes.items].sort((left, right) => {
-          const leftValue = modelMetric === "requests" ? left.requests : left.processed_tokens;
-          const rightValue = modelMetric === "requests" ? right.requests : right.processed_tokens;
-          return rightValue - leftValue || left.model.localeCompare(right.model);
-        });
-        const top = sortedModels.slice(0, 10);
-        const otherValue = sortedModels.slice(10).reduce((acc, item) => {
-          return acc + (modelMetric === "requests" ? item.requests : item.processed_tokens);
-        }, 0);
-        const nextModelDistribution = top.map((item) => ({
-          name: item.model,
-          value: modelMetric === "requests" ? item.requests : item.processed_tokens,
-          requests: item.requests,
-          totalTokens: item.total_tokens,
-          cachedTokens: item.cached_tokens,
-          processedTokens: item.processed_tokens,
-        }));
-        if (otherValue > 0) {
-          nextModelDistribution.push({
-            name: "其他",
-            value: otherValue,
-            requests: 0,
-            totalTokens: 0,
-            cachedTokens: 0,
-            processedTokens: 0,
-          });
-        }
-        setModelDistributionData(nextModelDistribution);
-
-        setDailySeries(
-          dailyRes.items.map((item) => ({
-            label: formatMonthDay(new Date(`${item.day}T00:00:00`)),
-            requests: item.requests,
-            inputTokens: item.input_tokens,
-            outputTokens: item.output_tokens,
-            totalTokens: item.total_tokens,
-          })),
-        );
-
-        const hourWindow = 24;
-        const now = Date.now();
-        const endHour = Math.floor(now / 3_600_000);
-        const startHour = endHour - hourWindow + 1;
-        const hourLabels = Array.from({ length: hourWindow }).map((_, index) => {
-          const hour = startHour + index;
-          const date = new Date(hour * 3_600_000);
-          const label = `${String(date.getHours()).padStart(2, "0")}:00`;
-          return { hour, label };
-        });
-
-        const modelBuckets = new Map<number, Map<string, number>>();
-        const tokenBuckets = new Map<
-          number,
-          {
-            input: number;
-            output: number;
-            reasoning: number;
-            cached: number;
-            processed: number;
-          }
-        >();
-        hourlyRes.items.forEach((item) => {
-          const ts = new Date(item.hour).getTime();
-          if (!Number.isFinite(ts)) return;
-          const hour = Math.floor(ts / 3_600_000);
-          if (hour < startHour || hour > endHour) return;
-
-          const modelMap = modelBuckets.get(hour) ?? new Map<string, number>();
-          modelMap.set(item.model, (modelMap.get(item.model) ?? 0) + item.requests);
-          modelBuckets.set(hour, modelMap);
-
-          const tokens = tokenBuckets.get(hour) ?? {
-            input: 0,
-            output: 0,
-            reasoning: 0,
-            cached: 0,
-            processed: 0,
-          };
-          tokenBuckets.set(hour, {
-            input: tokens.input + item.input_tokens,
-            output: tokens.output + item.output_tokens,
-            reasoning: tokens.reasoning + item.reasoning_tokens,
-            cached: tokens.cached + item.cached_tokens,
-            processed: tokens.processed + item.processed_tokens,
-          });
-        });
-
-        const rankedModels = [...distributionRes.items]
-          .sort(
-            (left, right) =>
-              right.requests - left.requests || left.model.localeCompare(right.model),
-          )
-          .slice(0, 5)
-          .map((item) => item.model);
-        const modelKeys = [...rankedModels, "其他"];
-
-        const modelPoints = hourLabels.map(({ hour, label }) => {
-          const map = modelBuckets.get(hour) ?? new Map<string, number>();
-          const stacks = modelKeys.map((key) => {
-            if (key === "其他") {
-              const sum = [...map.entries()].reduce((acc, [model, value]) => {
-                return rankedModels.includes(model) ? acc : acc + value;
-              }, 0);
-              return { key, value: sum };
-            }
-            return { key, value: map.get(key) ?? 0 };
-          });
-          return { label, stacks, successRate: 0 };
-        });
-
-        const tokenPoints = hourLabels.map(({ hour, label }) => {
-          const totals = tokenBuckets.get(hour) ?? {
-            input: 0,
-            output: 0,
-            reasoning: 0,
-            cached: 0,
-            processed: 0,
-          };
-          return {
-            label,
-            total: totals.processed,
-            stacks: [
-              { key: "输入", value: totals.input },
-              { key: "输出", value: totals.output },
-              { key: "推理", value: totals.reasoning },
-              { key: "缓存", value: totals.cached },
-            ],
-          };
-        });
-
-        setHourlySeries({
-          modelKeys,
-          modelPoints,
-          tokenKeys: ["输入", "输出", "推理", "缓存"],
-          tokenPoints,
-        });
       });
+
+      if (summaryRes.summary.TotalRequests > 0) {
+        setDeferredChartsRequest({ key: summaryRequestKey, nonce: Date.now(), force });
+      } else {
+        clearCharts();
+      }
     } catch (requestError) {
-      if (requestId !== refreshRequestIdRef.current) {
+      if (requestId !== summaryRequestIdRef.current) {
         return;
       }
       const message = requestError instanceof Error ? requestError.message : "数据获取失败";
       setError(message);
     } finally {
-      if (requestId === refreshRequestIdRef.current) {
-        setIsRefreshing(false);
+      if (requestId === summaryRequestIdRef.current) {
+        setIsSummaryRefreshing(false);
       }
     }
-  }, [apiFilter, channelFilter, modelFilter, modelMetric, timeRange]);
+  }, [
+    clearCharts,
+    normalizedApiFilter,
+    normalizedChannelFilter,
+    normalizedModelFilter,
+    summaryRequestKey,
+    timeRange,
+  ]);
+
+  const refreshCharts = useCallback(
+    async ({ key, force = false }: { key: string; force?: boolean }) => {
+      if (!force && lastAutoChartKeyRef.current === key) {
+        return;
+      }
+
+      const requestId = chartRequestIdRef.current + 1;
+      chartRequestIdRef.current = requestId;
+      if (!force) {
+        lastAutoChartKeyRef.current = key;
+      }
+
+      setIsChartsRefreshing(true);
+      try {
+        const chartResponses = await (force
+          ? Promise.all([
+              usageApi.getMonitorModelDistribution(
+                timeRange,
+                10,
+                normalizedApiFilter,
+                normalizedModelFilter,
+                normalizedChannelFilter,
+              ),
+              usageApi.getMonitorDailyTrend(
+                timeRange,
+                normalizedApiFilter,
+                normalizedModelFilter,
+                normalizedChannelFilter,
+              ),
+              usageApi.getMonitorHourly(
+                24,
+                normalizedApiFilter,
+                normalizedModelFilter,
+                normalizedChannelFilter,
+              ),
+            ]).then(([distributionRes, dailyRes, hourlyRes]) => ({
+              distributionRes,
+              dailyRes,
+              hourlyRes,
+            }))
+          : getCachedMonitorRequest(monitorAutoRequestCache.charts, key, async () => {
+              const [distributionRes, dailyRes, hourlyRes] = await Promise.all([
+                usageApi.getMonitorModelDistribution(
+                  timeRange,
+                  10,
+                  normalizedApiFilter,
+                  normalizedModelFilter,
+                  normalizedChannelFilter,
+                ),
+                usageApi.getMonitorDailyTrend(
+                  timeRange,
+                  normalizedApiFilter,
+                  normalizedModelFilter,
+                  normalizedChannelFilter,
+                ),
+                usageApi.getMonitorHourly(
+                  24,
+                  normalizedApiFilter,
+                  normalizedModelFilter,
+                  normalizedChannelFilter,
+                ),
+              ]);
+              return { distributionRes, dailyRes, hourlyRes };
+            }));
+
+        if (requestId !== chartRequestIdRef.current) {
+          return;
+        }
+
+        const { distributionRes, dailyRes, hourlyRes } = chartResponses;
+
+        startTransition(() => {
+          setModelDistributionItems(distributionRes.items);
+
+          setDailySeries(
+            dailyRes.items.map((item) => ({
+              label: formatMonthDay(new Date(`${item.day}T00:00:00`)),
+              requests: item.requests,
+              inputTokens: item.input_tokens,
+              outputTokens: item.output_tokens,
+              totalTokens: item.total_tokens,
+            })),
+          );
+
+          const hourWindow = 24;
+          const now = Date.now();
+          const endHour = Math.floor(now / 3_600_000);
+          const startHour = endHour - hourWindow + 1;
+          const hourLabels = Array.from({ length: hourWindow }).map((_, index) => {
+            const hour = startHour + index;
+            const date = new Date(hour * 3_600_000);
+            const label = `${String(date.getHours()).padStart(2, "0")}:00`;
+            return { hour, label };
+          });
+
+          const modelBuckets = new Map<number, Map<string, number>>();
+          const tokenBuckets = new Map<
+            number,
+            {
+              input: number;
+              output: number;
+              reasoning: number;
+              cached: number;
+              processed: number;
+            }
+          >();
+          hourlyRes.items.forEach((item) => {
+            const ts = new Date(item.hour).getTime();
+            if (!Number.isFinite(ts)) return;
+            const hour = Math.floor(ts / 3_600_000);
+            if (hour < startHour || hour > endHour) return;
+
+            const modelMap = modelBuckets.get(hour) ?? new Map<string, number>();
+            modelMap.set(item.model, (modelMap.get(item.model) ?? 0) + item.requests);
+            modelBuckets.set(hour, modelMap);
+
+            const tokens = tokenBuckets.get(hour) ?? {
+              input: 0,
+              output: 0,
+              reasoning: 0,
+              cached: 0,
+              processed: 0,
+            };
+            tokenBuckets.set(hour, {
+              input: tokens.input + item.input_tokens,
+              output: tokens.output + item.output_tokens,
+              reasoning: tokens.reasoning + item.reasoning_tokens,
+              cached: tokens.cached + item.cached_tokens,
+              processed: tokens.processed + item.processed_tokens,
+            });
+          });
+
+          const rankedModels = [...distributionRes.items]
+            .sort(
+              (left, right) =>
+                right.requests - left.requests || left.model.localeCompare(right.model),
+            )
+            .slice(0, 5)
+            .map((item) => item.model);
+          const modelKeys = [...rankedModels, "其他"];
+
+          const modelPoints = hourLabels.map(({ hour, label }) => {
+            const map = modelBuckets.get(hour) ?? new Map<string, number>();
+            const stacks = modelKeys.map((key) => {
+              if (key === "其他") {
+                const sum = [...map.entries()].reduce((acc, [model, value]) => {
+                  return rankedModels.includes(model) ? acc : acc + value;
+                }, 0);
+                return { key, value: sum };
+              }
+              return { key, value: map.get(key) ?? 0 };
+            });
+            return { label, stacks, successRate: 0 };
+          });
+
+          const tokenPoints = hourLabels.map(({ hour, label }) => {
+            const totals = tokenBuckets.get(hour) ?? {
+              input: 0,
+              output: 0,
+              reasoning: 0,
+              cached: 0,
+              processed: 0,
+            };
+            return {
+              label,
+              total: totals.processed,
+              stacks: [
+                { key: "输入", value: totals.input },
+                { key: "输出", value: totals.output },
+                { key: "推理", value: totals.reasoning },
+                { key: "缓存", value: totals.cached },
+              ],
+            };
+          });
+
+          setHourlySeries({
+            modelKeys,
+            modelPoints,
+            tokenKeys: ["输入", "输出", "推理", "缓存"],
+            tokenPoints,
+          });
+        });
+      } catch (requestError) {
+        if (requestId !== chartRequestIdRef.current) {
+          return;
+        }
+        const message = requestError instanceof Error ? requestError.message : "图表数据获取失败";
+        setError(message);
+      } finally {
+        if (requestId === chartRequestIdRef.current) {
+          setIsChartsRefreshing(false);
+        }
+      }
+    },
+    [normalizedApiFilter, normalizedChannelFilter, normalizedModelFilter, timeRange],
+  );
+
+  const refreshData = useCallback(async () => {
+    await refreshSummary({ force: true });
+  }, [refreshSummary]);
+
+  useEffect(() => {
+    void refreshSummary();
+  }, [refreshSummary]);
+
+  useEffect(() => {
+    if (!deferredChartsRequest) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      void refreshCharts({ key: deferredChartsRequest.key, force: deferredChartsRequest.force });
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [deferredChartsRequest, refreshCharts]);
 
   const applyFilter = useCallback(() => {
-    setApiFilter(pendingApiFilter.trim());
-    setModelFilter(pendingModelFilter.trim());
-    setChannelFilter(pendingChannelFilter.map((item) => item.trim()).filter(Boolean));
-  }, [pendingApiFilter, pendingChannelFilter, pendingModelFilter]);
+    setApiFilter(normalizedPendingApiFilter);
+    setModelFilter(normalizeFilterValue(pendingModelFilter));
+    setChannelFilter(normalizedPendingChannelFilter);
+  }, [normalizedPendingApiFilter, normalizedPendingChannelFilter, pendingModelFilter]);
 
   const fetchFilterOptions = useCallback(async () => {
+    if (lastAutoFilterKeyRef.current === filterRequestKey) {
+      return;
+    }
+
     const requestId = filterRequestIdRef.current + 1;
     filterRequestIdRef.current = requestId;
+    lastAutoFilterKeyRef.current = filterRequestKey;
     try {
-      const response = await usageApi.getMonitorFilters(
-        timeRange,
-        pendingApiFilter || undefined,
-        pendingChannelFilter,
+      const response = await getCachedMonitorRequest(monitorAutoRequestCache.filters, filterRequestKey, () =>
+        usageApi.getMonitorFilters(timeRange, normalizedPendingApiFilter || undefined, normalizedPendingChannelFilter),
       );
       if (requestId !== filterRequestIdRef.current) {
         return;
@@ -332,15 +540,15 @@ export function MonitorPage() {
       if (!modelExists(pendingModelFilter)) {
         setPendingModelFilter("");
       }
-      const nextPendingChannelFilter = normalizeChannelSelection(pendingChannelFilter);
+      const nextPendingChannelFilter = normalizeChannelSelection(normalizedPendingChannelFilter);
       if (nextPendingChannelFilter.length !== pendingChannelFilter.length) {
         setPendingChannelFilter(nextPendingChannelFilter);
       }
-      if (pendingApiFilter.trim() === apiFilter.trim() && !modelExists(modelFilter)) {
+      if (normalizedPendingApiFilter === normalizedApiFilter && !modelExists(modelFilter)) {
         setModelFilter("");
       }
-      if (pendingApiFilter.trim() === apiFilter.trim()) {
-        const nextChannelFilter = normalizeChannelSelection(channelFilter);
+      if (normalizedPendingApiFilter === normalizedApiFilter) {
+        const nextChannelFilter = normalizeChannelSelection(normalizedChannelFilter);
         if (nextChannelFilter.length !== channelFilter.length) {
           setChannelFilter(nextChannelFilter);
         }
@@ -353,12 +561,14 @@ export function MonitorPage() {
       notify({ type: "error", message });
     }
   }, [
-    apiFilter,
-    channelFilter,
+    channelFilter.length,
+    filterRequestKey,
     modelFilter,
+    normalizedApiFilter,
+    normalizedChannelFilter,
+    normalizedPendingApiFilter,
+    normalizedPendingChannelFilter,
     notify,
-    pendingApiFilter,
-    pendingChannelFilter,
     pendingModelFilter,
     timeRange,
   ]);
@@ -386,22 +596,7 @@ export function MonitorPage() {
   }, []);
 
   const hasData = summary.requestCount > 0;
-  const isLoading = isRefreshing || isPending;
-
-  const downloadJson = (content: unknown, filename: string) => {
-    const text = JSON.stringify(content, null, 2);
-    const blob = new Blob([text], { type: "application/json;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = filename;
-    link.click();
-    window.setTimeout(() => URL.revokeObjectURL(url), 800);
-  };
-
-  useEffect(() => {
-    void refreshData();
-  }, [refreshData]);
+  const isLoading = isSummaryRefreshing || isChartsRefreshing || isPending;
 
   useEffect(() => {
     void fetchFilterOptions();
@@ -500,6 +695,37 @@ export function MonitorPage() {
       return next;
     });
   }, [hourlySeries.tokenKeys]);
+
+  const modelDistributionData = useMemo(() => {
+    const sortedModels = [...modelDistributionItems].sort((left, right) => {
+      const leftValue = modelMetric === "requests" ? left.requests : left.processed_tokens;
+      const rightValue = modelMetric === "requests" ? right.requests : right.processed_tokens;
+      return rightValue - leftValue || left.model.localeCompare(right.model);
+    });
+    const top = sortedModels.slice(0, 10);
+    const otherValue = sortedModels.slice(10).reduce((acc, item) => {
+      return acc + (modelMetric === "requests" ? item.requests : item.processed_tokens);
+    }, 0);
+    const nextModelDistribution = top.map((item) => ({
+      name: item.model,
+      value: modelMetric === "requests" ? item.requests : item.processed_tokens,
+      requests: item.requests,
+      totalTokens: item.total_tokens,
+      cachedTokens: item.cached_tokens,
+      processedTokens: item.processed_tokens,
+    }));
+    if (otherValue > 0) {
+      nextModelDistribution.push({
+        name: "其他",
+        value: otherValue,
+        requests: 0,
+        totalTokens: 0,
+        cachedTokens: 0,
+        processedTokens: 0,
+      });
+    }
+    return nextModelDistribution;
+  }, [modelDistributionItems, modelMetric]);
 
   const modelDistributionOption = useMemo(
     () => createModelDistributionOption({ isDark, data: modelDistributionData }),
@@ -746,7 +972,7 @@ export function MonitorPage() {
                 title="模型用量分布"
                 description={`最近 ${timeRange} 天 · 按${modelMetric === "requests" ? "请求数" : "处理量 Token"} · Top10`}
                 actions={modelActions}
-                loading={isRefreshing}
+                loading={isChartsRefreshing}
               >
                 <div className="grid h-72 grid-cols-[minmax(0,1fr)_220px] gap-4">
                   <EChart option={modelDistributionOption} className="h-72 min-w-0" />
@@ -779,7 +1005,7 @@ export function MonitorPage() {
               <Card
                 title="每日用量趋势"
                 description={`最近 ${timeRange} 天 · 请求数与 Token 用量趋势`}
-                loading={isRefreshing}
+                loading={isChartsRefreshing}
               >
                 <div className="flex h-72 min-w-0 flex-col overflow-hidden">
                   <EChart
@@ -831,12 +1057,12 @@ export function MonitorPage() {
           </Reveal>
 
           <Reveal>
-            <Card
-              title="每小时模型请求分布"
-              description="按小时聚合（Top5 模型 + 其他）"
-              actions={<HourWindowSelector value={modelHourWindow} onChange={setModelHourWindow} />}
-              loading={isRefreshing}
-            >
+              <Card
+                title="每小时模型请求分布"
+                description="按小时聚合（Top5 模型 + 其他）"
+                actions={<HourWindowSelector value={modelHourWindow} onChange={setModelHourWindow} />}
+                loading={isChartsRefreshing}
+              >
               <div className="flex h-72 flex-col overflow-hidden">
                 <EChart
                   option={hourlyModelOption}
@@ -867,12 +1093,12 @@ export function MonitorPage() {
           </Reveal>
 
           <Reveal>
-            <Card
-              title="每小时 Token 用量"
-              description="按小时聚合（输入 / 输出 / 推理 / 缓存，处理量按 provider 口径归一）"
-              actions={<HourWindowSelector value={tokenHourWindow} onChange={setTokenHourWindow} />}
-              loading={isRefreshing}
-            >
+              <Card
+                title="每小时 Token 用量"
+                description="按小时聚合（输入 / 输出 / 推理 / 缓存，处理量按 provider 口径归一）"
+                actions={<HourWindowSelector value={tokenHourWindow} onChange={setTokenHourWindow} />}
+                loading={isChartsRefreshing}
+              >
               <div className="flex h-72 flex-col overflow-hidden">
                 <EChart
                   option={hourlyTokenOption}
