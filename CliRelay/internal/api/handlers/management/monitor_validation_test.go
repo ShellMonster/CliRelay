@@ -13,6 +13,7 @@ import (
 func TestMonitorModelDistributionMissingParamsUseDefaults(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
+	// nil usage service is safe: validation rejects bad params before reaching usage calls.
 	handler := NewHandler(&config.Config{}, "", nil)
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
