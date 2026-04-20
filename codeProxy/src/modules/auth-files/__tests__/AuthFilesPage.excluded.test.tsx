@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { describe, expect, test, vi } from "vitest";
+import { ThemeProvider } from "@/modules/ui/ThemeProvider";
 import { ToastProvider } from "@/modules/ui/ToastProvider";
 import { AuthFilesPage } from "@/modules/auth-files/AuthFilesPage";
 
@@ -24,11 +25,13 @@ describe("AuthFilesPage OAuth excluded models", () => {
   test("does not refetch endlessly when excluded models map is empty", async () => {
     render(
       <MemoryRouter initialEntries={["/auth-files?tab=excluded"]}>
-        <ToastProvider>
-          <Routes>
-            <Route path="/auth-files" element={<AuthFilesPage />} />
-          </Routes>
-        </ToastProvider>
+        <ThemeProvider>
+          <ToastProvider>
+            <Routes>
+              <Route path="/auth-files" element={<AuthFilesPage />} />
+            </Routes>
+          </ToastProvider>
+        </ThemeProvider>
       </MemoryRouter>,
     );
 
