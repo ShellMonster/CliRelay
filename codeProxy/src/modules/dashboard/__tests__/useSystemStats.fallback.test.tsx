@@ -85,10 +85,11 @@ describe("useSystemStats fallback failure", () => {
 
   test("should clear the error and render latest stats after a later HTTP fallback recovery", async () => {
     let scheduledPoll: (() => void) | undefined;
-    const intervalSpy = vi.spyOn(globalThis, "setInterval").mockImplementationOnce(((fn: TimerHandler) => {
-      scheduledPoll = fn as () => void;
-      return 1 as unknown as ReturnType<typeof setInterval>;
-    }) as typeof setInterval);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const intervalSpy = vi.spyOn(globalThis, "setInterval" as any).mockImplementationOnce(((fn: () => void) => {
+      scheduledPoll = fn;
+      return 1;
+    }) as any);
 
     mocks.apiGet.mockRejectedValueOnce(new Error("http fallback failed")).mockResolvedValueOnce(recoveredStats);
 
