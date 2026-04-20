@@ -85,7 +85,7 @@ describe("useSystemStats fallback failure", () => {
 
   test("should clear the error and render latest stats after a later HTTP fallback recovery", async () => {
     let scheduledPoll: (() => void) | undefined;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // Fragile: depends on setInterval — will break if implementation switches to setTimeout recursion
     const intervalSpy = vi.spyOn(globalThis, "setInterval" as any).mockImplementationOnce(((fn: () => void) => {
       scheduledPoll = fn;
       return 1;
