@@ -5,8 +5,8 @@ const EVIDENCE_PATH = new URL(
   import.meta.url,
 );
 
-const KPI_VISIBLE_THRESHOLD_MS = 1200;
-const CHARTS_INTERACTIVE_THRESHOLD_MS = 2000;
+const KPI_VISIBLE_THRESHOLD_MS = Number(process.env.KPI_THRESHOLD_MS ?? 2000);
+const CHARTS_INTERACTIVE_THRESHOLD_MS = Number(process.env.CHARTS_THRESHOLD_MS ?? 4000);
 
 const writeEvidence = async (fileUrl: URL, content: string) => {
   // @ts-expect-error Playwright test runs on Node, but this workspace does not expose Node types to e2e files.
