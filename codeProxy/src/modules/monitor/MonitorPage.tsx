@@ -290,6 +290,31 @@ export function MonitorPage() {
     timeRange,
   ]);
 
+  const fetchChartApis = useCallback(async () => {
+    const [distributionRes, dailyRes, hourlyRes] = await Promise.all([
+      usageApi.getMonitorModelDistribution(
+        timeRange,
+        10,
+        normalizedApiFilter,
+        normalizedModelFilter,
+        normalizedChannelFilter,
+      ),
+      usageApi.getMonitorDailyTrend(
+        timeRange,
+        normalizedApiFilter,
+        normalizedModelFilter,
+        normalizedChannelFilter,
+      ),
+      usageApi.getMonitorHourly(
+        24,
+        normalizedApiFilter,
+        normalizedModelFilter,
+        normalizedChannelFilter,
+      ),
+    ]);
+    return { distributionRes, dailyRes, hourlyRes };
+  }, [timeRange, normalizedApiFilter, normalizedModelFilter, normalizedChannelFilter]);
+
   const refreshCharts = useCallback(
     async ({ key, force = false }: { key: string; force?: boolean }) => {
       if (!force && lastAutoChartKeyRef.current === key) {
@@ -305,55 +330,8 @@ export function MonitorPage() {
       setIsChartsRefreshing(true);
       try {
         const chartResponses = await (force
-          ? Promise.all([
-              usageApi.getMonitorModelDistribution(
-                timeRange,
-                10,
-                normalizedApiFilter,
-                normalizedModelFilter,
-                normalizedChannelFilter,
-              ),
-              usageApi.getMonitorDailyTrend(
-                timeRange,
-                normalizedApiFilter,
-                normalizedModelFilter,
-                normalizedChannelFilter,
-              ),
-              usageApi.getMonitorHourly(
-                24,
-                normalizedApiFilter,
-                normalizedModelFilter,
-                normalizedChannelFilter,
-              ),
-            ]).then(([distributionRes, dailyRes, hourlyRes]) => ({
-              distributionRes,
-              dailyRes,
-              hourlyRes,
-            }))
-          : getCachedMonitorRequest(monitorAutoRequestCache.charts, key, async () => {
-              const [distributionRes, dailyRes, hourlyRes] = await Promise.all([
-                usageApi.getMonitorModelDistribution(
-                  timeRange,
-                  10,
-                  normalizedApiFilter,
-                  normalizedModelFilter,
-                  normalizedChannelFilter,
-                ),
-                usageApi.getMonitorDailyTrend(
-                  timeRange,
-                  normalizedApiFilter,
-                  normalizedModelFilter,
-                  normalizedChannelFilter,
-                ),
-                usageApi.getMonitorHourly(
-                  24,
-                  normalizedApiFilter,
-                  normalizedModelFilter,
-                  normalizedChannelFilter,
-                ),
-              ]);
-              return { distributionRes, dailyRes, hourlyRes };
-            }));
+          ? fetchChartApis()
+          : getCachedMonitorRequest(monitorAutoRequestCache.charts, key, fetchChartApis));
 
         if (requestId !== chartRequestIdRef.current) {
           return;
