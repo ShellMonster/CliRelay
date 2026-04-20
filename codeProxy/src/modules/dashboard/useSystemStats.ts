@@ -108,6 +108,8 @@ export function useSystemStats(interval = 3): {
   const startHttpFallback = useCallback(() => {
     // Only start if WebSocket is not connected
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
+    // Prevent leaked intervals on repeated WS→HTTP transitions
+    stopHttpFallback();
     if (!statsRef.current) {
       setStatus("loading");
     }
