@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Activity, RefreshCw, Sigma, TriangleAlert } from "lucide-react";
 import { usageApi, type DashboardSummary } from "@/lib/http/apis/usage";
 import { KpiCard } from "@/modules/monitor/MonitorPagePieces";
@@ -30,18 +30,39 @@ export function DashboardPage() {
   const [range, setRange] = useState<DashboardRange>(7);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const requestIdRef = useRef(0);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const refresh = useCallback(async (days: DashboardRange) => {
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
+
     setLoading(true);
     setError(null);
+
     try {
       const data = await usageApi.getDashboardSummary(days);
+
+      if (!mountedRef.current || requestId !== requestIdRef.current) {
+        return;
+      }
+
       setSummary(data);
+      setLoading(false);
     } catch (err: unknown) {
+      if (!mountedRef.current || requestId !== requestIdRef.current) {
+        return;
+      }
+
       const message = err instanceof Error ? err.message : "数据获取失败";
       setError(message);
       notify({ type: "error", message });
-    } finally {
       setLoading(false);
     }
   }, [notify]);
