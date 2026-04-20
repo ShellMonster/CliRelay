@@ -30,6 +30,8 @@ export interface ChannelLatency {
   avg_ms: number;
 }
 
+export type SystemStatsStatus = "loading" | "ready" | "error";
+
 /** Build WebSocket URL from auth context */
 function buildWsUrl(apiBase: string, managementKey: string): string | null {
   const httpBase = computeManagementApiBase(apiBase);
@@ -51,6 +53,7 @@ export function useSystemStats(interval = 3): {
   stats: SystemStats | null;
   connected: boolean;
   error: string | null;
+  status: SystemStatsStatus;
 } {
   const {
     state: { apiBase, managementKey },
@@ -58,24 +61,56 @@ export function useSystemStats(interval = 3): {
   const [stats, setStats] = useState<SystemStats | null>(null);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<SystemStatsStatus>("loading");
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const httpFallbackTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const mountedRef = useRef(true);
+  const statsRef = useRef<SystemStats | null>(null);
+  const httpRequestIdRef = useRef(0);
+  const connectionIdRef = useRef(0);
+
+  const applyStats = useCallback((data: SystemStats) => {
+    if (!mountedRef.current) return;
+    statsRef.current = data;
+    setStats(data);
+    setStatus("ready");
+    setError(null);
+  }, []);
+
+  const applyFetchFailure = useCallback((message: string) => {
+    if (!mountedRef.current) return;
+
+    if (statsRef.current) {
+      setError(message);
+      setStatus("ready");
+      return;
+    }
+
+    setError(message);
+    setStatus("error");
+  }, []);
 
   // --- HTTP fallback: poll if WebSocket fails ---
   const fetchHttp = useCallback(async () => {
+    const requestId = ++httpRequestIdRef.current;
+
     try {
       const data = await apiClient.get<SystemStats>("/system-stats");
-      if (mountedRef.current) setStats(data);
+      if (!mountedRef.current || requestId !== httpRequestIdRef.current) return;
+      applyStats(data);
     } catch {
-      // silently ignore
+      if (!mountedRef.current || requestId !== httpRequestIdRef.current) return;
+      applyFetchFailure("系统监控加载失败，请稍后重试");
     }
-  }, []);
+  }, [applyFetchFailure, applyStats]);
 
   const startHttpFallback = useCallback(() => {
     // Only start if WebSocket is not connected
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
+    if (!statsRef.current) {
+      setStatus("loading");
+    }
     void fetchHttp();
     httpFallbackTimer.current = setInterval(
       () => void fetchHttp(),
@@ -92,9 +127,12 @@ export function useSystemStats(interval = 3): {
 
   // --- WebSocket connection ---
   const connect = useCallback(() => {
+    const connectionId = ++connectionIdRef.current;
     const url = buildWsUrl(apiBase, managementKey);
     if (!url) {
       // No WebSocket URL — use HTTP polling instead
+      setConnected(false);
+      setError(null);
       startHttpFallback();
       return;
     }
@@ -104,7 +142,7 @@ export function useSystemStats(interval = 3): {
       wsRef.current = ws;
 
       ws.onopen = () => {
-        if (!mountedRef.current) return;
+        if (!mountedRef.current || connectionId !== connectionIdRef.current) return;
         setConnected(true);
         setError(null);
         stopHttpFallback();
@@ -112,22 +150,22 @@ export function useSystemStats(interval = 3): {
       };
 
       ws.onmessage = (ev) => {
-        if (!mountedRef.current) return;
+        if (!mountedRef.current || connectionId !== connectionIdRef.current) return;
         try {
           const data = JSON.parse(ev.data as string) as SystemStats;
-          setStats(data);
+          applyStats(data);
         } catch {
           // ignore
         }
       };
 
       ws.onerror = () => {
-        if (!mountedRef.current) return;
-        setError("WebSocket 连接错误");
+        if (!mountedRef.current || connectionId !== connectionIdRef.current) return;
+        setError("实时连接失败，正在切换为轮询更新");
       };
 
       ws.onclose = () => {
-        if (!mountedRef.current) return;
+        if (!mountedRef.current || connectionId !== connectionIdRef.current) return;
         setConnected(false);
         wsRef.current = null;
         // Fall back to HTTP, then retry WebSocket in 5s
@@ -139,15 +177,18 @@ export function useSystemStats(interval = 3): {
       };
     } catch {
       // WebSocket creation failed, use HTTP polling
+      setConnected(false);
+      setError("实时连接失败，正在切换为轮询更新");
       startHttpFallback();
     }
-  }, [apiBase, managementKey, interval, startHttpFallback, stopHttpFallback]);
+  }, [apiBase, managementKey, interval, startHttpFallback, stopHttpFallback, applyStats]);
 
   useEffect(() => {
     mountedRef.current = true;
     connect();
     return () => {
       mountedRef.current = false;
+      connectionIdRef.current += 1;
       clearTimeout(reconnectTimer.current);
       stopHttpFallback();
       if (wsRef.current) {
@@ -157,5 +198,5 @@ export function useSystemStats(interval = 3): {
     };
   }, [connect, stopHttpFallback]);
 
-  return { stats, connected, error };
+  return { stats, connected, error, status };
 }

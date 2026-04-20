@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   Cpu,
   Database,
@@ -12,7 +11,6 @@ import {
   Activity,
   AlertTriangle,
   Zap,
-  RefreshCw,
 } from "lucide-react";
 import { useSystemStats, type SystemStats, type ChannelLatency } from "./useSystemStats";
 
@@ -357,9 +355,9 @@ function SkeletonLayout() {
    ═══════════════════════════════════════════════════════════ */
 
 export function SystemMonitorSection() {
-  const { stats, connected } = useSystemStats(3);
+  const { stats, connected, error, status } = useSystemStats(3);
 
-  if (!stats) {
+  if (status === "loading" && !stats) {
     return (
       <section className="rounded-2xl border border-slate-200 bg-white/50 p-5 shadow-sm backdrop-blur dark:border-neutral-800 dark:bg-neutral-950/50">
         <div className="flex items-center justify-between mb-4">
@@ -375,6 +373,39 @@ export function SystemMonitorSection() {
         <SkeletonLayout />
       </section>
     );
+  }
+
+  if (status === "error" && !stats) {
+    return (
+      <section className="rounded-2xl border border-slate-200 bg-white/50 p-5 shadow-sm backdrop-blur dark:border-neutral-800 dark:bg-neutral-950/50">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Activity size={16} className="text-slate-600 dark:text-white" />
+            <span className="text-sm font-semibold text-slate-900 dark:text-white">运维监控</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-xs text-red-500 dark:text-red-400">
+            <span className="inline-block h-2 w-2 rounded-full bg-red-500" />
+            加载失败
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-red-200 bg-red-50/80 p-4 dark:border-red-500/20 dark:bg-red-500/10">
+          <div className="flex items-start gap-3">
+            <AlertTriangle size={18} className="mt-0.5 shrink-0 text-red-500" />
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-red-600 dark:text-red-300">加载失败</p>
+              <p className="text-sm text-red-600/80 dark:text-red-200/80">
+                {error ?? "系统监控暂时不可用，请稍后重试。"}
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  if (!stats) {
+    return null;
   }
 
   const health = computeHealthScore(stats);
@@ -397,6 +428,13 @@ export function SystemMonitorSection() {
           {connected ? "实时" : "轮询"}
         </div>
       </div>
+
+      {error ? (
+        <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
+          <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+          <span>{error}</span>
+        </div>
+      ) : null}
 
       <div className="space-y-4">
         {/* ── Row 1: Health Gauge (left) + Core KPIs (right) ── */}
